@@ -1,0 +1,24 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": {
+      "*": "ask",
+      "git status*": "allow",
+      "git diff*": "allow",
+      "git log*": "allow",
+      "ls *": "allow",
+      "aseqdump*": "allow",
+      "aseqnet*": "allow",
+      "aconnect*": "allow",
+      "python3 *": "allow",
+      "amidi*": "allow",
+      "rm -rf *": "deny",
+      "sudo *": "deny",
+      "dd *": "deny",
+      "mkfs*": "deny",
+      "/tmp/*": "deny",
+      "*/ai/tmp/*": "allow",
+      "* /tmp/*": "deny"
+    }
+  }
+}

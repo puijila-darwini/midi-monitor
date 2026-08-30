@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Keyboard Monitor</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='14' fill='%23101418'/><rect x='20' y='30' width='60' height='40' rx='4' fill='%23f4f4f2'/><rect x='42' y='30' width='16' height='22' rx='2' fill='%2316181b'/><rect x='20' y='48' width='60' height='3' fill='%234c9aff'/></svg>">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header>
+    <h1>Key&middot;Monitor</h1>
+    <div id="status" class="status offline">keyboard offline</div>
+    <div id="instrument" class="instrument">instrument: &mdash;</div>
+    <div id="tempo" class="tempo">tempo: &mdash; BPM</div>
+  </header>
+
+  <div class="main-grid">
+    <!-- Left sidebar: Note stream feed -->
+    <aside id="feed-sidebar" class="feed-sidebar">
+      <div class="feed-header">
+        <span class="feed-label">note stream</span>
+        <button id="feed-clear" class="key-reset" type="button" title="Clear note stream">clear</button>
+      </div>
+      <ul id="feed-list" class="feed-list"></ul>
+    </aside>
+
+    <!-- Right main area -->
+    <main id="main-area" class="main-area">
+      <section id="piano-wrap">
+        <div id="piano"></div>
+      </section>
+
+      <section id="key" class="keysec">
+        <div class="keysec-head">
+          <span class="keysec-title">intended key</span>
+        </div>
+        <div class="keysec-controls">
+          <label>
+            <span>key:</span>
+            <select id="intended-key">
+              <option value="auto">auto (no signature)</option>
+              <optgroup label="Major">
+                <option value="C">C major</option>
+                <option value="G">G major</option>
+                <option value="D">D major</option>
+                <option value="A">A major</option>
+                <option value="E">E major</option>
+                <option value="B">B major</option>
+                <option value="F#">F# major</option>
+                <option value="C#">C# major</option>
+                <option value="F">F major</option>
+                <option value="Bb">Bb major</option>
+                <option value="Eb">Eb major</option>
+                <option value="Ab">Ab major</option>
+                <option value="Db">Db major</option>
+                <option value="Gb">Gb major</option>
+                <option value="Cb">Cb major</option>
+              </optgroup>
+              <optgroup label="Minor">
+                <option value="Am">A minor</option>
+                <option value="Em">E minor</option>
+                <option value="Bm">B minor</option>
+                <option value="F#m">F# minor</option>
+                <option value="C#m">C# minor</option>
+                <option value="G#m">G# minor</option>
+                <option value="D#m">D# minor</option>
+                <option value="A#m">A# minor</option>
+                <option value="Dm">D minor</option>
+                <option value="Gm">G minor</option>
+                <option value="Cm">C minor</option>
+                <option value="Fm">F minor</option>
+                <option value="Bbm">Bb minor</option>
+                <option value="Ebm">Eb minor</option>
+                <option value="Abm">Ab minor</option>
+              </optgroup>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <section id="stave-wrap" class="stave-wrap">
+        <div class="stave-head">
+          <span class="stave-title">notation</span>
+          <div class="stave-controls">
+            <label><input type="checkbox" id="show-intervals"> intervals</label>
+            <button id="stave-clear" class="key-reset" type="button" title="Clear notation">clear</button>
+          </div>
+        </div>
+        <div id="stave" class="stave"></div>
+      </section>
+
+      <section id="mini-stave-wrap" class="mini-stave-wrap">
+        <div class="mini-stave-head">
+          <span class="mini-stave-title">last chord / interval</span>
+        </div>
+        <div id="mini-stave" class="mini-stave"></div>
+        <div id="mini-stave-label" class="mini-stave-label"></div>
+      </section>
+
+      <section id="flash" class="flash"></section>
+    </main>
+  </div>
+
+  <script src="{{ url_for('static', filename='vendor/vexflow.js') }}"></script>
+  <script src="{{ url_for('static', filename='stave.js') }}"></script>
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

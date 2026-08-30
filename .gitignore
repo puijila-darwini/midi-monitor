@@ -1,0 +1,25 @@
+# Python bytecode & cache files
+__pycache__/
+*.py[cod]
+*$py.class
+.Python/
+
+# Runtime data (exclude logs, pidfiles)
+monitor.log		# Main server log in ~/ai/tmp/keymon/
+*~			# Backup files (*.file~)
+
+# Local AI security config (not part of source code)
+opencode.json		# Bash permission wall at root
+
+# Exclude IDE / editor artifacts (prevent accidental commits)
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS-specific cache on Mac/Linux
+.DS_Store
+Thumbs.db
+
+# Logs in general — exclude runtime logs from any parent dir (*log)
+*.log
