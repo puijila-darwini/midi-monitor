@@ -310,15 +310,16 @@ function addAccidentals(staveNote, midiNotes) {
     return beams;
   }
 
-  // Measures (bars) per stave line. When a tempo is known (so bar boundaries
-  // are computable), notes are grouped into measures of `numer` beats each and
-  // each line shows this many measures side by side with real bar lines.
-  var MEASURES_PER_LINE = 4;
-
   // Current time signature ("4/4", "3/4", ...). Kept in sync with the header
-  // selector; used for measure width and the bar count per measure.
+  // selector; used for measure width (bar duration in seconds) and the bar
+  // count per measure.
   var tsNumer = 4;
   var tsDenom = 4;
+
+  // Notes (noteheads) per stave line before wrapping. With measure barlines
+  // the actual wrap is on whole-bar boundaries, but this keeps a line from
+  // getting over-full / too many bars on one row.
+  var NOTES_PER_LINE = 16;
 
   // Called from app.js when the user changes the time signature selector.
   function setTimeSignature(numer, denom) {
@@ -327,59 +328,64 @@ function addAccidentals(staveNote, midiNotes) {
     redraw();
   }
 
-  // Turn the raw displayEvents into a list of measures (when a tempo exists)
-  // or fall back to the old count-based packing (no tempo yet).
-  // Each measure: { notes: StaveNote[], eventIds: [] , bar: <index> }
-  function packMeasures(displayEvents) {
+  // Compute each display event's bar index from its onset time relative to the
+  // first buffered event (bar duration = (60/tempo)*numer seconds). With no
+  // tempo yet, fall back to count-based pseudo-measures.
+  function assignBars(displayEvents) {
     var t0 = displayEvents.length ? (displayEvents[0].time || 0) : 0;
     var bpm = window.tempoBpm > 0 ? window.tempoBpm : 0;
     var barSeconds = 0;
     if (bpm > 0) barSeconds = (60.0 / bpm) * tsNumer;
-    var EVENTS_PER_LINE = 16;
-
-    var measures = [];
-    var curNotes = [];
-    var curIds = [];
-    var curBar = 0;
-
-    function flushMeasure() {
-      if (curNotes.length) {
-        measures.push({ notes: curNotes, eventIds: curIds, bar: curBar });
-        curNotes = [];
-        curIds = [];
-      }
-    }
-
-    for (var i = 0; i < displayEvents.length; i++) {
-      var ev = displayEvents[i];
-      var staveNotes = buildStaveNotes(ev);
-
+    return displayEvents.map(function (ev, i) {
       var bar = 0;
       if (barSeconds > 0) {
         var t = (typeof ev.time === "number") ? ev.time : t0;
         bar = Math.floor((t - t0) / barSeconds);
         if (bar < 0) bar = 0;
       } else {
-        // No tempo yet: fall back to count-based packing (16 notes per line).
-        bar = Math.floor(i / EVENTS_PER_LINE);
+        bar = Math.floor(i / NOTES_PER_LINE);
       }
+      return bar;
+    });
+  }
 
-      // When the bar index advances, close the current measure and start a new
-      // one (always flush on the boundary, even for the very first bar).
-      if (bar !== curBar) {
-        flushMeasure();
-        curBar = bar;
+  // Group displayEvents into stave lines. Each line is a list of measures;
+  // each measure is { notes:[StaveNote...], eventIds:[...] }. Lines break on
+  // whole-bar boundaries once a line's note count would exceed NOTES_PER_LINE.
+  function packLines(displayEvents) {
+    var bars = assignBars(displayEvents);
+
+    // Assemble contiguous same-bar runs into measures.
+    var measures = [];
+    var curNotes = [];
+    var curIds = [];
+    var curBar = null;
+    for (var i = 0; i < displayEvents.length; i++) {
+      if (curBar !== null && bars[i] !== curBar) {
+        if (curNotes.length) measures.push({ notes: curNotes, eventIds: curIds, bar: curBar });
+        curNotes = [];
+        curIds = [];
       }
-      curNotes.push.apply(curNotes, staveNotes);
-      curIds.push(ev.id);
+      curNotes = curNotes.concat(buildStaveNotes(displayEvents[i]));
+      curIds.push(displayEvents[i].id);
+      curBar = bars[i];
     }
-    flushMeasure();
+    if (curNotes.length) measures.push({ notes: curNotes, eventIds: curIds, bar: curBar });
 
-    // Group measures into lines of MEASURES_PER_LINE.
+    // Pack whole measures into lines (never split a bar across a line wrap).
     var staveLines = [];
-    for (var m = 0; m < measures.length; m += MEASURES_PER_LINE) {
-      staveLines.push(measures.slice(m, m + MEASURES_PER_LINE));
+    var line = [];
+    var count = 0;
+    for (var m = 0; m < measures.length; m++) {
+      if (line.length && count + measures[m].notes.length > NOTES_PER_LINE) {
+        staveLines.push(line);
+        line = [];
+        count = 0;
+      }
+      line.push(measures[m]);
+      count += measures[m].notes.length;
     }
+    if (line.length) staveLines.push(line);
     return staveLines;
   }
 
@@ -394,73 +400,63 @@ function addAccidentals(staveNote, midiNotes) {
     var displayEvents = showIntervals ? events : events.filter(function(e) { return e.kind !== "interval"; });
     if (!displayEvents.length) { div.innerHTML = ""; return; }
 
-    var staveLines = packMeasures(displayEvents);
+    var staveLines = packLines(displayEvents);
     var lastId = displayEvents[displayEvents.length - 1].id;
-
     var ts = tsNumer + "/" + tsDenom;
-    var beatValue = tsDenom;
-    // VexFlow's num_beats is a tick/capacity hint; we disable strict anyway.
-    var numBeatsPerBar = tsNumer;
 
     var y = Y_START;
     var totalHeight = Y_START;
 
-    // Each stave line: a row of up to MEASURES_PER_LINE measure staves.
     for (var si = 0; si < staveLines.length; si++) {
       var line = staveLines[si];
-      var lineMeasures = line.length;
-      var mw = STAVE_W / MEASURES_PER_LINE;
-      var baseX = X_START;
 
-      for (var mi = 0; mi < lineMeasures; mi++) {
+      // One continuous voice per line: the line's notes with a VexFlow BarNote
+      // (barlines) inserted between measures. VexFlow lays these out with real
+      // bar lines at the measure boundaries (the idiomatic VexFlow approach).
+      var tickables = [];
+      var allNotes = [];
+      var allBeams = [];
+      var lastMeasureIdx = line.length - 1;
+
+      for (var mi = 0; mi < line.length; mi++) {
         var measure = line[mi];
-        var stave = new VF.Stave(baseX + mi * mw, y, mw);
-        // Real sheet music: clef + key signature + time signature on the FIRST
-        // measure of each line only; later measures get a plain single barline.
-        if (mi === 0) {
-          stave.addClef("treble");
-          if (currentKeySig) stave.addKeySignature(currentKeySig);
-          stave.addTimeSignature(ts);
-        }
-        // Barline types: single between measures, final (end) bar on the last
-        // measure of the last line.
-        var endBar = VF.Barline.SINGLE;
-        if (mi === lineMeasures - 1) endBar = VF.Barline.END;
-        stave.setEndBarType(endBar);
-        stave.setContext(context);
-        stave.draw();
+        // A BarNote draws a single barline BEFORE every measure after the first
+        // on the line (the line's own leading barline is the stave's begin bar).
+        if (mi > 0) tickables.push(new VF.BarNote(VF.Barline.SINGLE));
+        tickables = tickables.concat(measure.notes);
+        // Beams are computed per measure so they never cross a barline.
+        allNotes = allNotes.concat(measure.notes);
+        allBeams = allBeams.concat(buildBeams(measure.notes));
+      }
 
-        var voice = new VF.Voice({ num_beats: numBeatsPerBar, beat_value: beatValue });
-        voice.setStrict(false);
-        voice.addTickables(measure.notes);
+      var stave = new VF.Stave(X_START, y, STAVE_W);
+      stave.addClef("treble");
+      if (currentKeySig) stave.addKeySignature(currentKeySig);
+      stave.addTimeSignature(ts);
+      stave.setEndBarType(VF.Barline.END);
+      stave.setContext(context);
+      stave.draw();
 
-        var beams = buildBeams(measure.notes);
+      var voice = new VF.Voice({ num_beats: tsNumer, beat_value: tsDenom });
+      voice.setStrict(false);
+      voice.addTickables(tickables);
 
-        var formatter = new VF.Formatter();
-        formatter.joinVoices([voice]);
-        formatter.format([voice], stave.getNoteEndX());
-        voice.draw(context, stave);
+      var formatter = new VF.Formatter();
+      formatter.joinVoices([voice]);
+      formatter.format([voice], stave.getNoteEndX());
+      voice.draw(context, stave);
 
-        for (var bi = 0; bi < beams.length; bi++) {
-          beams[bi].setContext(context).draw();
-        }
+      for (var bi = 0; bi < allBeams.length; bi++) {
+        allBeams[bi].setContext(context).draw();
+      }
 
-        // Highlight the most recent event's notes (the measure that holds it).
-        if (measure.eventIds.indexOf(lastId) >= 0) {
-          var svg = div.querySelector('svg');
-          if (svg) {
-            var staves = svg.querySelectorAll('g.vf-stave');
-            var target = staves[si * MEASURES_PER_LINE + mi];
-            if (!target) target = staves[staves.length - 1];
-            if (target) {
-              var heads = target.querySelectorAll('.vf-notehead');
-              heads.forEach(function (h) {
-                h.setAttribute('fill', '#4c9aff');
-                h.setAttribute('stroke', '#4c9aff');
-              });
-            }
-          }
-        }
+      // Highlight the most recent line's notes (older notes stay dark).
+      // Noteheads render flat in the SVG in this VexFlow build, so colour the
+      // trailing `noteCount` notehead groups (the last line was drawn last).
+      var lastNoteCount = 0;
+      for (var n2 = 0; n2 < line.length; n2++) lastNoteCount += line[n2].notes.length;
+      if (line.some(function (m) { return m.eventIds.indexOf(lastId) >= 0; })) {
+        highlightLastNoteheads(lastNoteCount);
       }
 
       y += STAVE_H;
@@ -473,6 +469,19 @@ function addAccidentals(staveNote, midiNotes) {
     var staveWrap = document.getElementById('stave-wrap');
     if (staveWrap) {
       staveWrap.scrollTop = staveWrap.scrollHeight;
+    }
+  }
+
+  // Colour the trailing `count` notehead groups (the most recent line's notes).
+  function highlightLastNoteheads(count) {
+    var svg = div.querySelector('svg');
+    if (!svg || count <= 0) return;
+    var heads = svg.querySelectorAll('g.vf-notehead');
+    if (!heads.length) return;
+    var start = Math.max(0, heads.length - count);
+    for (var i = start; i < heads.length; i++) {
+      heads[i].setAttribute('fill', '#4c9aff');
+      heads[i].setAttribute('stroke', '#4c9aff');
     }
   }
 

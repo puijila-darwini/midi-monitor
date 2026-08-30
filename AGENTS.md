@@ -409,3 +409,27 @@ Superseded by the `monitor/` web app, kept for reference:
     the bar-change flush was gated on `measures.length` being non-zero; rewrote to flush whenever `bar !== curBar`.
     Committed agent:, pushed. Server restarted after edits.
 
+- Ver 35b bugfix: MEASURE RENDERING REWORK ("doesn't move on to the next bar properly").
+    The first Ver 35 implementation rendered EACH measure as its own fixed-width VF.Stave
+    (STAVE_W / MEASURES_PER_LINE), each with its own voice. In this VexFlow 5 build
+    voice.draw() renders note groups as SIBLINGS of the stave groups (not descendants of
+    the g.vf-stave they were drawn on), so all the measures' notes piled up detached from
+    their bar staves and looked like they never advanced to the next bar. Root cause:
+    per-measure VF.Stave composition is not the right pattern here. Fix: idiomatic VexFlow
+    measure rendering — ONE continuous VF.Stave per LINE with a single voice, inserting a
+    `new VF.BarNote(VF.Barline.SINGLE)` tickable at each measure boundary inside the voice,
+    `stave.setEndBarType(VF.Barline.END)` on the final bar, and building beams per-measure
+    so they never cross a barline. Clef + key signature + time signature are drawn once per
+    line (each new line re-draws them, like real sheet music). Line wrap stays bar-atomic:
+    whole measures are packed per line up to NOTES_PER_LINE=16 noteheads (NEVER split a bar
+    across a line). Removed the unused MEASURES_PER_LINE. Highlight of the newest line now
+    colours the trailing noteheads by count (noteheads render flat in this build, so there
+    is no per-measure group to query). Verified deterministically in-browser (setTimeSignature +
+    StavePanel.push, tempo forced): 4/4, 8 quarters @0.5s -> 1 line, 8 noteheads, a barline
+    cleanly between note 4 (x~688) and note 5 (x~859); 3/4, 9 notes -> barlines after every
+    3rd note (x~652, 933); 40 sixteenths -> 3 lines each re-drawing clef+timesig, 5 barlines;
+    time-sig selector change still persists + restores; zero JS errors. Live keyboard at
+    100 BPM 4/4 rendered 119 noteheads across 6 lines with 16 barlines. Committed agent:,
+    pushed. Lesson: for VexFlow 5 measure rendering use BarNote tickables in one voice, not
+    multiple fixed-width VF.Stave boxes — separate-stave composition detaches notes from bars
+    in this build.
