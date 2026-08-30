@@ -1,6 +1,7 @@
 """Live musical state: held notes, recent events, melody and connectivity."""
 import time
 import statistics
+import threading
 
 
 class State:
@@ -48,9 +49,113 @@ class State:
         # Quantized note data
         self.quantized_notes = []  # list of quantized note events
         self.max_quantized_notes = 500
-        # Previous note's grid-snapped onset, used to derive each note's value
-        # from inter-onset spacing (the rhythmic gap) rather than held duration.
-        self._last_qon = None
+        # Pending-onset based note value derivation (TIME-TO-NEXT-ONSET).
+        #
+        # Why: the "gap since the previous onset" model marks a metronome-guided
+        # quarter note as an 8th/dotted-8th whenever the PLAYER'S OWN jitter makes
+        # the gap to the previous onset short (observed: 0.45s = 3 grid steps from
+        # a note that was clearly meant as a quarter). Note value should be "until
+        # the NEXT onset": if you strike a quarter, the next strike comes a beat
+        # later, so the note renders as a quarter regardless of when the previous
+        # note happened to land. This makes human playing with normal timing jitter
+        # notate as the intended values instead of punishing a slightly-short gap.
+        # Cost (accepted): each note is finalized and emitted one onset late, and a
+        # note with no following onset is flushed by a background timer instead.
+        #
+        # self._pending is the "currently open" note's group: {qon, notes:[(note,v)]}.
+        # A chord member (same grid tick) joins the group; a new tick finalizes the
+        # previous group with duration = gap (in grid steps) to this onset.
+        self._pending = None
+        self._emit_queue = []  # finalized quantized notes waiting for app.py to emit
+        self._emit_lock = threading.RLock()  # guard _emit_queue/_pending across threads
+        self._flush_daemon = None
+        self._flush_stop = threading.Event()
+
+    def _start_flush_daemon(self):
+        """Daemon that flushes the trailing pending note so the last note of a
+        phrase is not stuck un-rendered forever (no next onset to finalize it).
+
+        It finalizes a pending group once no new onset has arrived within a
+        grace period that scales with the tempo (so slow tempos are not flushed
+        prematurely). The flushed value falls back to a robust local estimate of
+        the beat gap (recent quantized durations) so the trailing note still gets
+        its musically-expected value, then the note_off held-duration only if
+        nothing is known yet.
+        """
+        def _run():
+            while not self._flush_stop.wait(0.4):
+                try:
+                    self._flush_stale_pending()
+                except Exception:
+                    pass
+        if self._flush_daemon is None or not self._flush_daemon.is_alive():
+            self._flush_stop.clear()
+            self._flush_daemon = threading.Thread(
+                target=_run, name="quant-flush", daemon=True)
+            self._flush_daemon.start()
+
+    def _flush_stale_pending(self):
+        with self._emit_lock:
+            p = self._pending
+            if p is None:
+                return
+            if self.tempo_bpm <= 0:
+                return
+            beat = 60.0 / self.tempo_bpm
+            grace = 2.0 * beat + 0.5
+            if time.time() - p["qon"] < grace:
+                return
+            fallback = self._robust_gap_duration()
+            self._finalize_pending(fallback)
+
+    def _robust_gap_duration(self):
+        """A musically-plausible duration for flushing the trailing pending note:
+        the median of recent quantized durations (the player's local beat), or the
+        snapped held duration if nothing is known yet."""
+        if self.quantized_notes:
+            recent = [n["duration"] for n in self.quantized_notes[-8:]]
+            med = statistics.median(recent)
+            beat = 60.0 / self.tempo_bpm
+            grid = beat / max(1, self.quantization_divisions)
+            if grid > 0:
+                steps = max(1, int(round(med / grid)))
+                return steps * grid
+        return None
+
+    def _finalize_pending(self, duration):
+        """Append quantized notes for the pending group with the given duration,
+        push them to the emit queue, and clear the pending group.
+        duration == None -> fall back to the snapped held duration of the group's
+        first note (purely for the degenerate no-tempo case)."""
+        p = self._pending
+        if p is None:
+            return []
+        self._pending = None
+        if duration is None:
+            return []
+        new = []
+        for note, vel in p["notes"]:
+            off = p["qon"] + duration
+            qn = {
+                "note": note,
+                "on_time": p["qon"],
+                "off_time": off,
+                "velocity": vel,
+                "duration": off - p["qon"],
+            }
+            self.quantized_notes.append(qn)
+            new.append(qn)
+        if len(self.quantized_notes) > self.max_quantized_notes:
+            self.quantized_notes = self.quantized_notes[-self.max_quantized_notes:]
+        with self._emit_lock:
+            self._emit_queue.extend(new)
+        return new
+
+    def take_quantized_events(self):
+        """Drain and return the finalized quantized notes not yet emitted via SSE."""
+        with self._emit_lock:
+            out, self._emit_queue = self._emit_queue, []
+        return out
     
     @property
     def up_time(self):
@@ -180,8 +285,8 @@ class State:
         Pass 0 / None / 'auto' to clear the override and revert to the live
         detected estimate. A fixed tempo stops the flapping that made note
         values change mid-recording; the detected value remains available as a
-        suggestion (detected_bpm). Resets the onset anchor since the grid size
-        changed.
+        suggestion (detected_bpm). Resets the pending-onset anchor since the
+        grid size changed.
         """
         if not bpm or bpm <= 0:
             self.user_tempo_bpm = 0.0
@@ -189,82 +294,64 @@ class State:
         else:
             self.user_tempo_bpm = float(bpm)
             self.tempo_bpm = float(bpm)
-        self._last_qon = None
+        self._pending = None
         self.version += 1
+
+    def _onset_grid(self, on_time, now):
+        """Snap a note onset to the rhythm grid, returning (quantized_on, grid_step)."""
+        if self.tempo_bpm <= 0:
+            return on_time, 0.0
+        beat_duration = 60.0 / self.tempo_bpm
+        grid_step = beat_duration / max(1, self.quantization_divisions)
+        relative_time = on_time - self._start
+        quantized_relative = round(relative_time / grid_step) * grid_step
+        quantized_time = self._start + quantized_relative
+        if quantized_time > now:
+            quantized_time = now
+        return quantized_time, grid_step
+
+    def _on_note_on(self, event, now):
+        """Time-to-next-onset: a note's value is the gap until the NEXT onset.
+
+        The pending group (self._pending) holds the currently-open onset. On a
+        new onset:
+          - same grid tick  -> chord member, join the group (no finalize)
+          - later grid tick -> finalize the group with duration = gap (in grid
+            steps) between the two snapped onsets, then open a new group.
+        The pending note is only emitted one onset later (the accepted cost of
+        this derivation), and the trailing note is flushed by a daemon.
+        """
+        qon, grid_step = self._onset_grid(event["time"], now)
+        with self._emit_lock:
+            finalize = None
+            if self._pending is not None:
+                if qon > self._pending["qon"]:
+                    # A genuinely later onset: finalize the previous group with the
+                    # gap. With a grid we use the snapped gap (in grid steps); with
+                    # no tempo yet (grid_step==0) the raw gap is still a sensible
+                    # duration (the frontend renders it as a default quarter anyway).
+                    if grid_step > 0:
+                        gap_steps = round((qon - self._pending["qon"]) / grid_step)
+                        finalize = max(1, gap_steps) * grid_step
+                    else:
+                        finalize = qon - self._pending["qon"]
+                else:
+                    # Simultaneous onset (chord member, or a clock-skew tie): join the
+                    # group. The whole group's duration is set when the NEXT distinct
+                    # onset arrives.
+                    self._pending["notes"].append((event["note"], event["velocity"]))
+                    return
+            if finalize is not None:
+                self._finalize_pending(finalize)
+            self._pending = {
+                "qon": qon,
+                "notes": [(event["note"], event["velocity"])],
+            }
 
     def _quantize_time(self, time_value, now):
         """Quantize a time value to the nearest grid position based on current tempo."""
-        if self.tempo_bpm <= 0:
-            return time_value  # no tempo info, return as-is
-        
-        # Calculate beat duration (quarter note duration in seconds)
-        beat_duration = 60.0 / self.tempo_bpm
-        
-        # Quantization grid: divide beat into quantization_divisions
-        grid_step = beat_duration / max(1, self.quantization_divisions)
-        
-        # Quantize relative to the start of the performance
-        relative_time = time_value - self._start
-        quantized_relative = round(relative_time / grid_step) * grid_step
-        quantized_time = self._start + quantized_relative
-        
-        # Don't quantize to future (only past or present)
-        if quantized_time > now:
-            quantized_time = now
-        
-        return quantized_time
-
-    def _add_quantized_note(self, note, on_time, off_time, velocity, now):
-        """Add a quantized note to the quantized notes list.
-
-        The note's ONSET is snapped to the rhythm grid so positions line up, and
-        the note VALUE (duration) is driven by the RHYTHMIC SPACING between
-        onsets (the gap since the previous note's onset), NOT by how long the
-        key is held. On a piano you strike a quarter note briefly and release
-        quickly, so held duration is a noisy proxy for musical value — it made
-        steady melody collapse into 8ths/16ths that all got beamed together.
-        Inter-onset spacing is the cleaner signal: steady quarter playing gives
-        a gap ~= one beat, so every note renders as a quarter. Spacings are
-        taken on the snapped grid so positions and durations stay coherent. The
-        first note (no preceding onset) falls back to its snapped held duration.
-        """
-        quantized_on = self._quantize_time(on_time, now)
-
-        if self.tempo_bpm > 0:
-            beat_duration = 60.0 / self.tempo_bpm
-            grid_step = beat_duration / max(1, self.quantization_divisions)
-            prev_qon = self._last_qon
-            if prev_qon is not None and quantized_on > prev_qon:
-                # Musical value = gap since the previous note's onset.
-                spacing = quantized_on - prev_qon
-                steps = max(1, int(round(spacing / grid_step)))
-                quantized_duration = steps * grid_step
-            else:
-                # First note (or degenerate overlap): fall back to held duration.
-                raw_duration = off_time - on_time
-                if raw_duration <= 0:
-                    raw_duration = grid_step
-                steps = max(1, int(round(raw_duration / grid_step)))
-                quantized_duration = steps * grid_step
-        else:
-            quantized_duration = off_time - on_time
-            if quantized_duration <= 0:
-                quantized_duration = 0.01
-
-        self._last_qon = quantized_on
-        quantized_off = quantized_on + quantized_duration
-
-        self.quantized_notes.append({
-            "note": note,
-            "on_time": quantized_on,
-            "off_time": quantized_off,
-            "velocity": velocity,
-            "duration": quantized_off - quantized_on,
-        })
-
-        # Keep list size manageable
-        if len(self.quantized_notes) > self.max_quantized_notes:
-            self.quantized_notes = self.quantized_notes[-self.max_quantized_notes:]
+        qon, _ = self._onset_grid(time_value, now)
+        return qon
 
     def handle(self, event):
         self._bump()
@@ -287,6 +374,10 @@ class State:
             
             # Update tempo estimate
             self._estimate_tempo(now)
+            # Time-to-next-onset: finalize the previous note using the gap to
+            # this onset (emitting it one onset late), open a new pending group.
+            self._on_note_on(event, now)
+            self._start_flush_daemon()
         elif etype == "note_off":
             prev = self.held.pop(event["note"], None)
             self.recent.append(
@@ -297,8 +388,6 @@ class State:
                 self.melody.append(
                     (prev["on_time"], duration, event["note"])
                 )
-                # Add quantized note
-                self._add_quantized_note(event["note"], prev["on_time"], event["time"], prev["velocity"], now)
         elif etype == "program_change":
             self.program = event["program"]
             self.bank = event.get("bank", 0)
@@ -322,7 +411,7 @@ class State:
         """
         old = self.quantization_divisions
         self.quantization_divisions = max(1, int(divisions))
-        self._last_qon = None
+        self._pending = None
         if old != self.quantization_divisions:
             self.version += 1
 

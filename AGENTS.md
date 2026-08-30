@@ -349,4 +349,26 @@ Superseded by the `monitor/` web app, kept for reference:
     accent styling in style.css. Stops on page visibility-hidden; won't start with no tempo (tempoBpm<=0). Verified in
     browser: with fixed 100 BPM, clicking starts it (button '♫ stop', beat LED accent-pulsing, no JS errors).
 
+- Ver 34: NOTE VALUE = TIME-TO-NEXT-ONSET (deferred emission), fixing unfair quarter->eighth/dotted-eighth demotion.
+    Symptom (user: "unfairly marking some of my quarter notes as eighths -- check the rounding here"): a metronome-
+    guided quarter scale at fixed 100 BPM produced 0.450s (dotted-8) notes. Root cause: Ver 30 derived note value from
+    the gap SINCE the previous onset; when the PLAYER'S OWN timing jitter makes that look-behind gap short (~3/4 beat),
+    an intended quarter is demoted to dotted-8. Data showed 0.45/0.75 complementary pairs = a single onset landing off
+    its regular grid position. User explicitly chose "time-to-next onset" (over a median-smoothed gap), accepting that
+    each note is emitted one onset LATE (and the final note needs a flush).
+    Implementation (state.py): removed _last_qon and _add_quantized_note; added a pending-onset group self._pending
+    {qon, notes:[(note,vel)]}. On note_on: (a) same snapped grid tick as pending -> chord member, join group no finalize;
+    (b) later tick -> _finalize_pending(gap = snapped difference in grid steps), then open new pending; (c) no tempo yet
+    (grid_step==0) -> raw gap. First note of a phrase is now finalized by the SECOND onset's arrival (no more held-duration
+    fallback for note 1). _finalize_pending appends one quantized_note per group member (same on/dur -> VexFlow chord) and
+    pushes them to _emit_queue. FLUSH DAEMON: a background thread (40Hz, RLock-guarded with the capture thread) finalizes a
+    pending note once no new onset arrives within grace = 2*beat+0.5s, using _robust_gap_duration() (median of recent
+    quantized durations -> snapped) so the trailing note still renders with a sensible value. app.py: quantized_note is now
+    published from a loop-end drain of state.take_quantized_events() (fires on note_on and on the keyboard's periodic
+    Clock/Active-sensing events), NOT on note_off. Verified: synthetic 100-BPM quarter scales with +-50ms jitter -> 13-17/17
+    quarters (dot-8 only where a true adjacent gap is short); trailing-note flush works; server restarts clean, page loads
+    w/o JS errors. NOTE: still not a silver bullet — a single onset that lands genuinely off-grid shadows either its
+    look-behind (old model) or its look-ahead (this model); both demote one note. Real rhythm variation (e.g. an actual
+    0.45s anticipation) still reads as dotted-8, which is correct notation.
+
 

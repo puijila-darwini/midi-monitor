@@ -121,15 +121,6 @@ def _run_capture():
             hub.publish({"type": "noteoff", "note": event["note"],
                          "name": _note_name(event["note"]),
                          "time": t, "held": sorted(state.held)})
-            # Send quantized note data if available
-            if state.quantized_notes:
-                qn = state.quantized_notes[-1]
-                hub.publish({"type": "quantized_note", "note": qn["note"],
-                             "on_time": qn["on_time"], "off_time": qn["off_time"],
-                             "duration": qn["duration"], "velocity": qn["velocity"],
-                             "tempo": state.tempo_bpm,
-                             "detected_bpm": state.detected_bpm,
-                             "user_tempo_bpm": state.user_tempo_bpm})
         elif etype == "program_change":
             state.handle(event)
             hub.publish({"type": "program_change", "program": event["program"],
@@ -143,6 +134,17 @@ def _run_capture():
         elif etype == "online":
             state.handle(event)
             hub.publish({"type": "status", "online": True, "time": t})
+
+        # Publish any quantized notes produced by the trailing-note flush daemon
+        # (idle keyboard still lets Queued = clock/active-sensing events through,
+        # so a flushed note reaches SSE without waiting for the next note_on).
+        for qn in state.take_quantized_events():
+            hub.publish({"type": "quantized_note", "note": qn["note"],
+                         "on_time": qn["on_time"], "off_time": qn["off_time"],
+                         "duration": qn["duration"], "velocity": qn["velocity"],
+                         "tempo": state.tempo_bpm,
+                         "detected_bpm": state.detected_bpm,
+                         "user_tempo_bpm": state.user_tempo_bpm})
 
 
 @app.route("/")
