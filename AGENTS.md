@@ -279,3 +279,17 @@ Superseded by the `monitor/` web app, kept for reference:
     Cleanup: removed 4 orphaned aseqdump processes accumulated from stale sessions (only the monitor's own
     aseqdump should ever be running; check with `pgrep -af aseqdump`). Lesson: restart the server after any
     code edit so it isn't running pre-fix Python; the supervisor now babysits this.
+
+- Ver 29: PSS-A50 VOICE NAMES (NOT GM, GM-COMPATIBLE NUMBERING). The app previously labelled instruments with full General MIDI
+    names — wrong for this keyboard. The PSS-A50 is NOT full GM: it has exactly 42 presets (40 normal voices + 2 drum kits = Standard
+    Kit, Dance Kit). FIRST ATTEMPT (consecutive voice# = program-1) WAS WRONG and made many real voices show "Unknown". Root cause
+    (Owner's Manual "Voice List"): normal voices use GM1-compatible program numbers (Bank MSB 0) at their GM positions; the 2 drum
+    kits use XG/XGlite numbering with Bank MSB 127. So program 82 = Gemini (the "fat supersaw" the user heard — GM calliope at 82 was
+    wrong), 84 = Punchy Chordz, 88 = New Age Pad, 61 = Brass Section, 68 = Oboe, 48 = Strings, 16 = Drawbar Organ. Fix: Capture
+    .VOICE_BY_PROGRAM dict keyed (bank MSB, program)->name, 42 entries (40 @ bank0 at GM positions; drums Standard=127/0,
+    Dance=127/27). Capture now tracks CC#0 Bank Select MSB (_bank); control_change CC#0 updates it; program_change events carry
+    "bank". get_program_name() resolves via (bank,program). app.py publishes program_change with resolved name + bank. state.py
+    tracks bank (exposed in /api/state). app.js adds PSSA50_VOICES map + resolves initial-state name instead of "Program N".
+    Verified: all 42 entries; live-captured programs (0,16,24,32,48,61,68,82,84,88) resolve to correct Yamaha names; out-of-range ->
+    Unknown; server restarted clean; page loads w/ no JS errors; banner "instrument: Grand Piano (prog 0)". NOTE: manual PC numbers
+    are 1-128; subtract 1 for the real program byte. Committed agent: prefix, pushed.
