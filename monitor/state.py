@@ -14,10 +14,15 @@ class State:
     - tempo_bpm: estimated tempo in BPM
     """
 
-    # Quantization grid settings
-    QUANTIZATION_DIVISIONS = 4  # 4 = 16th notes, 3 = 8th triplets, 6 = 32nd notes
-
-    def __init__(self, recent_keep=120, melody_keep=400):
+    # Quantization grid settings.
+    # Divisions = how finely each beat (quarter note) is subdivided into grid
+    # steps. This doubles as the "strictness"/coarseness control for the stave:
+    #   - loose   (2) = 8th-note grid  -> fewer tiny beamed notes, quarters easy
+    #   - normal  (4) = 16th-note grid (default)
+    #   - tight   (8) = 32nd-note grid -> captures fast passages in detail
+    # Tunable live from the UI via State.set_quantization().
+    def __init__(self, recent_keep=120, melody_keep=400, quantization_divisions=4):
+        self.quantization_divisions = quantization_divisions
         self.recent_keep = recent_keep
         self.melody_keep = melody_keep
         self.held = {}
@@ -38,6 +43,9 @@ class State:
         # Quantized note data
         self.quantized_notes = []  # list of quantized note events
         self.max_quantized_notes = 500
+        # Previous note's grid-snapped onset, used to derive each note's value
+        # from inter-onset spacing (the rhythmic gap) rather than held duration.
+        self._last_qon = None
     
     @property
     def up_time(self):
@@ -164,8 +172,8 @@ class State:
         # Calculate beat duration (quarter note duration in seconds)
         beat_duration = 60.0 / self.tempo_bpm
         
-        # Quantization grid: divide beat into QUANTIZATION_DIVISIONS
-        grid_step = beat_duration / self.QUANTIZATION_DIVISIONS
+        # Quantization grid: divide beat into quantization_divisions
+        grid_step = beat_duration / max(1, self.quantization_divisions)
         
         # Quantize relative to the start of the performance
         relative_time = time_value - self._start
@@ -181,30 +189,41 @@ class State:
     def _add_quantized_note(self, note, on_time, off_time, velocity, now):
         """Add a quantized note to the quantized notes list.
 
-        Quantize the note's *onset* to the rhythm grid, then snap the *held
-        duration* to the nearest grid duration (not both endpoints
-        independently). Quantizing on and off separately produces artificial
-        duration jitter (e.g. quarter notes interspersed with 16ths for an
-        evenly played scale), because a note straddling a beat boundary gets
-        pushed to wildly different lengths. Derive off from the snapped onset
-        + snapped duration instead.
+        The note's ONSET is snapped to the rhythm grid so positions line up, and
+        the note VALUE (duration) is driven by the RHYTHMIC SPACING between
+        onsets (the gap since the previous note's onset), NOT by how long the
+        key is held. On a piano you strike a quarter note briefly and release
+        quickly, so held duration is a noisy proxy for musical value — it made
+        steady melody collapse into 8ths/16ths that all got beamed together.
+        Inter-onset spacing is the cleaner signal: steady quarter playing gives
+        a gap ~= one beat, so every note renders as a quarter. Spacings are
+        taken on the snapped grid so positions and durations stay coherent. The
+        first note (no preceding onset) falls back to its snapped held duration.
         """
         quantized_on = self._quantize_time(on_time, now)
 
-        # Raw held duration (not position-quantized)
-        raw_duration = off_time - on_time
-        if raw_duration <= 0:
-            raw_duration = 0.01
-
         if self.tempo_bpm > 0:
             beat_duration = 60.0 / self.tempo_bpm
-            grid_step = beat_duration / self.QUANTIZATION_DIVISIONS
-            # Snap duration to nearest grid multiple (minimum one step)
-            steps = max(1, int(round(raw_duration / grid_step)))
-            quantized_duration = steps * grid_step
+            grid_step = beat_duration / max(1, self.quantization_divisions)
+            prev_qon = self._last_qon
+            if prev_qon is not None and quantized_on > prev_qon:
+                # Musical value = gap since the previous note's onset.
+                spacing = quantized_on - prev_qon
+                steps = max(1, int(round(spacing / grid_step)))
+                quantized_duration = steps * grid_step
+            else:
+                # First note (or degenerate overlap): fall back to held duration.
+                raw_duration = off_time - on_time
+                if raw_duration <= 0:
+                    raw_duration = grid_step
+                steps = max(1, int(round(raw_duration / grid_step)))
+                quantized_duration = steps * grid_step
         else:
-            quantized_duration = raw_duration
+            quantized_duration = off_time - on_time
+            if quantized_duration <= 0:
+                quantized_duration = 0.01
 
+        self._last_qon = quantized_on
         quantized_off = quantized_on + quantized_duration
 
         self.quantized_notes.append({
@@ -266,6 +285,19 @@ class State:
             self.online = True
             self.recent.append({"type": "online", "time": event["time"]})
 
+    def set_quantization(self, divisions):
+        """Set the quantization grid's fineness (divisions per beat).
+
+        Loose (2) = 8th-note grid, Normal (4) = 16th grid, Tight (8) = 32nd grid.
+        Resets the pending-onset anchor so the next note is treated as a fresh
+        phrase after the grid changes.
+        """
+        old = self.quantization_divisions
+        self.quantization_divisions = max(1, int(divisions))
+        self._last_qon = None
+        if old != self.quantization_divisions:
+            self.version += 1
+
     def snapshot(self):
         return {
             "online": self.online,
@@ -277,5 +309,6 @@ class State:
             "program": self.program,
             "bank": self.bank,
             "tempo_bpm": round(self.tempo_bpm, 1) if self.tempo_bpm > 0 else 0,
+            "quantization_divisions": self.quantization_divisions,
             "quantized_notes": self.quantized_notes[-100:],  # last 100 quantized notes
         }

@@ -85,6 +85,13 @@
         <div class="stave-head">
           <span class="stave-title">notation</span>
           <div class="stave-controls">
+            <label class="quant-label"><span>quant:</span>
+              <select id="quantization">
+                <option value="2">loose</option>
+                <option value="4" selected>normal</option>
+                <option value="8">tight</option>
+              </select>
+            </label>
             <label><input type="checkbox" id="show-intervals"> intervals</label>
             <button id="stave-clear" class="key-reset" type="button" title="Clear notation">clear</button>
           </div>

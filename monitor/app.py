@@ -6,7 +6,7 @@ import threading
 import time
 import traceback
 
-from flask import Flask, jsonify, render_template, Response
+from flask import Flask, jsonify, render_template, request, Response
 
 from .capture import Capture
 from .state import State
@@ -159,6 +159,18 @@ def api_state():
 def api_key_reset():
     analyser.reset_key()
     return jsonify({"ok": True})
+
+
+@app.route("/api/quant", methods=["POST"])
+def api_quant():
+    """Set the quantization grid fineness (divisions per beat)."""
+    try:
+        body = request.get_json(silent=True) or {}
+        divisions = int(body.get("divisions", 4))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "divisions must be an int"}), 400
+    state.set_quantization(divisions)
+    return jsonify({"ok": True, "divisions": state.quantization_divisions})
 
 
 @app.route("/events")

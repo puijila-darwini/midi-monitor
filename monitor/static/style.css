@@ -274,6 +274,14 @@ header h1 {
 .stave-controls input[type="checkbox"] {
   accent-color: #4c9aff;
 }
+.stave-controls select {
+  font-size: 11px;
+  padding: 1px 4px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: inherit;
+}
 .keysec-head {
   display: flex;
   align-items: center;

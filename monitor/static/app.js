@@ -255,6 +255,24 @@ window.tempoBpm = 0;  // expose on window for durationToVexFlow
     });
   })();
 
+  // Quantization strictness selector (grid fineness)
+  (function () {
+    var sel = document.getElementById("quantization");
+    if (!sel) return;
+    sel.addEventListener("change", function () {
+      var divs = parseInt(sel.value, 10);
+      fetch("/api/quant", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ divisions: divs })
+      }).then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (window.StavePanel) window.StavePanel.clear();
+        })
+        .catch(function () { /* ignore transient */ });
+    });
+  })();
+
   // initial state
   fetch("/api/state")
     .then(function (r) { return r.json(); })
@@ -267,6 +285,12 @@ window.tempoBpm = 0;  // expose on window for durationToVexFlow
       if (typeof s.tempo_bpm !== "undefined" && s.tempo_bpm > 0) {
         tempoBpm = s.tempo_bpm;
         window.tempoBpm = s.tempo_bpm;
+      }
+      if (typeof s.quantization_divisions !== "undefined") {
+        var qsel = document.getElementById("quantization");
+        if (qsel && qsel.querySelector('option[value="' + s.quantization_divisions + '"]')) {
+          qsel.value = String(s.quantization_divisions);
+        }
       }
       seedHeld(s.held || []);
     })

@@ -293,3 +293,32 @@ Superseded by the `monitor/` web app, kept for reference:
     Verified: all 42 entries; live-captured programs (0,16,24,32,48,61,68,82,84,88) resolve to correct Yamaha names; out-of-range ->
     Unknown; server restarted clean; page loads w/ no JS errors; banner "instrument: Grand Piano (prog 0)". NOTE: manual PC numbers
     are 1-128; subtract 1 for the real program byte. Committed agent: prefix, pushed.
+
+- Ver 30: STAVE NOTE VALUE = INTER-ONSET SPACING (not held duration). Symptom: "too many notes joined together,
+    impossible to get a quarter note" — playing steady melody produced stave full of beamed 8ths/16ths. Root cause:
+    State._add_quantized_note computed each note's value from the HELD duration (off-on). On a piano you strike a
+    quarter briefly and release fast, so held duration is short and noisy; every melody note collapsed to 8th/16th
+    and got beamed. Fix: note VALUE now = the RHYTHMIC GAP since the previous note's ONSET (saved as self._last_qon,
+    the previous grid-snapped onset), snapped to the grid. Steady quarter playing -> every note a quarter regardless
+    of how briefly struck; steady 8ths still beam correctly. First note of a phrase (no prior onset) falls back to
+    snapped held duration (so it may be short; acceptable). Verified via synthetic drive (steady 8ths->8ths,
+    quarters->quarters) and LIVE capture: 99 quantized notes now show a real mix (quarters, 8ths, halves, dotted)
+    matching actual playing instead of all 16ths. Note: this is "gap since previous onset", not "until next onset",
+    so it needs no one-note-late render; identical result for even rhythm.
+
+- Ver 31: QUANTIZATION STRICTNESS CONTROL IN UX. The stave sanded into 8ths/16ths partly because the grid was fixed
+    at QUANTIZATION_DIVISIONS=4 (16th notes). Added a user-facing "quant:" dropdown (loose/normal/tight) in the
+    stave-controls header. It maps to grid fineness (divisions per beat), a.k.a. how "strict"/coarse quantization is:
+    - loose (2)  = 8th-note grid: smallest unit is an 8th, so you can't get 16ths -> fewer tiny beamed notes,
+                   quarters appear easily. Good when you don't want fast detail.
+    - normal (4) = 16th grid (default, prior behavior).
+    - tight (8)  = 32nd grid: captures fast passages in detail.
+    Implementation: state.py QUANTIZATION_DIVISIONS class-const -> instance attr self.quantization_divisions (default 4),
+    grid_step = beat / max(1,self.quantization_divisions) in _quantize_time and _add_quantized_note; new
+    State.set_quantization(divs) (resets _last_qon so grid change starts a fresh phrase, bumps version) + exposed as
+    quantization_divisions in snapshot(). app.py: new POST /api/quant {"divisions":N} sets it. index.html: quant select
+    (loose/normal/tight values 2/4/8). app.js: change handler POSTs to /api/quant and clears the stave (old durations
+    no longer valid under new grid); initial /api/state fetch sets the select to the server's current value.
+    style.css: .stave-controls select styling. Verified end-to-end: selectors drives server (loose=2, normal=4, tight=8),
+    server default 4, no JS errors, python -m py_compile clean, server restarted. Committed agent:, pushed.
+
