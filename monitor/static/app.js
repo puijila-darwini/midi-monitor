@@ -148,7 +148,23 @@ window.tempoBpm = 0;  // expose on window for durationToVexFlow
         }
         if (window.StavePanel) StavePanel.push("note", [ev.note], ev.off_time, null, ev.duration);
         break;
+      case "capture_error":
+        showCaptureError(ev.message, ev.restarts);
+        break;
     }
+  }
+
+  // Show a transient strip indicating the capture loop crashed + is restarting.
+  function showCaptureError(message, restarts) {
+    var el = document.getElementById("capture-error");
+    if (!el) return;
+    el.textContent = "capture hiccup (" + (restarts || 1) + "x): " + message +
+      " — retrying…";
+    el.classList.add("visible");
+    clearTimeout(el._t);
+    el._t = setTimeout(function () {
+      el.classList.remove("visible");
+    }, 8000);
   }
 
   // render held keys from initial snapshot

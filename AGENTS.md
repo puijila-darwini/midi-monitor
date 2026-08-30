@@ -254,3 +254,28 @@ Superseded by the `monitor/` web app, kept for reference:
     your email. Workflow: (1) git add . ; (2) commit -m "agent: ..."; (3) push origin master. Before major
     updates: pull --rebase origin master; handle conflicts if any. Git hooks reject commits without proper
     prefix. Runtime data excluded: __pycache__/*.pyc, *.log files, monitor.log, opencode.json (security config).
+
+- Ver 28: CAPTURE RESILIENCE (WATCHDOG + SUPERVISOR + UI SURFACING). We hit a real failure: a server
+    started on pre-Ver-21 code kept its capture thread crashing with `AttributeError: type object 'Capture'
+    has no attribute 'GM_PROGRAMS'`, so the HTTP server stayed "up" while no notes flowed (silently deaf),
+    plus zombie aseqdump processes accumulated. Fixed with 3 layers:
+    (a) IN-PROCESS WATCHDOG (app.py): `_run_capture()` is now driven by `_run_capture_supervised()`, an
+        infinite retry loop with exponential backoff (1s -> 30s cap). Any exception in the capture loop is
+        caught, health is recorded, a `capture_error` SSE event is published, the loop sleeps and restarts.
+        Health lives in module-level `_capture_health` (alive/error/restarts/last_error_time, guarded by
+        `_capture_lock`) and is merged into `/api/state` under `capture: {...}`. `events()` now uses the
+        imported `json` (was `__import__('json')`).
+    (b) FRONTEND SURFACING: new `#capture-error` banner element in index.html (between header and grid), a
+        `capture_error` SSE case in app.js that calls `showCaptureError()` to show a transient amber strip
+        ("capture hiccup (Nx): <msg> — retrying…"), styled in style.css (`.capture-error`, `.visible`).
+    (c) SUPERVISOR (monitor/supervisor.py): a second line of defense. Stdlib-only (urllib/json/subprocess)
+        health-checker that polls /api/state every 5s; if the server is unreachable OR `capture.alive` is
+        false with an error for 3 consecutive polls (~15s), it restarts the whole server via
+        `bash monitor.sh restart`. Spawned by monitor.sh `start` (pid in supervisor.pid); `stop` kills it
+        too so an intentional stop isn't auto-restarted. Restart verified live: killed server pid, supervisor
+        restarted it after ~15s, fresh pid serving 200 on /api/state. Note supervisor.log lives in
+        ~/ai/tmp/keymon/. (supervisor also cures the "page wedges / SSE flaps" symptom by recycling the
+        whole server when capture stays dead.)
+    Cleanup: removed 4 orphaned aseqdump processes accumulated from stale sessions (only the monitor's own
+    aseqdump should ever be running; check with `pgrep -af aseqdump`). Lesson: restart the server after any
+    code edit so it isn't running pre-fix Python; the supervisor now babysits this.

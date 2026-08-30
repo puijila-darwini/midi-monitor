@@ -1,8 +1,10 @@
 """Flask web app serving the live keyboard monitor on :5050."""
 import itertools
+import json
 import queue
 import threading
 import time
+import traceback
 
 from flask import Flask, jsonify, render_template, Response
 
@@ -16,6 +18,24 @@ app.config["TEMPLATES_AUTO_RELOAD"] = True
 
 PORT = 5050
 FULL_KEYBOARD = False
+
+# --- Capture watchdog / health ---
+# The capture thread runs an infinite stream loop. If it ever throws (a bug,
+# unexpected MIDI input, a crash inside a handler), the thread used to die
+# silently while the HTTP server kept serving -- making the app look "up"
+# while no notes flow. This supervised wrapper restarts the loop with
+# exponential backoff and exposes the health via /api/state + SSE so failures
+# are visible and self-healing.
+CAPTURE_BASE_DELAY = 1.0     # seconds before first retry
+CAPTURE_MAX_DELAY = 30.0     # capped backoff between restarts
+
+_capture_lock = threading.Lock()
+_capture_health = {
+    "alive": False,
+    "error": None,        # last error message (None when healthy/restarting)
+    "restarts": 0,        # cumulative capture-loop restarts
+    "last_error_time": None,
+}
 
 
 # buffer of recent events/flashes for late-joining SSE clients
@@ -127,7 +147,9 @@ def index():
 
 @app.route("/api/state")
 def api_state():
-    return jsonify(state.snapshot())
+    snap = state.snapshot()
+    snap["capture"] = capture_health_snapshot()
+    return jsonify(snap)
 
 
 @app.route("/api/key/reset", methods=["POST"])
@@ -145,7 +167,7 @@ def events():
             # heartbeat so the connection stays alive
             try:
                 item = q.get(timeout=15)
-                yield f"data: {__import__('json').dumps(item)}\n\n"
+                yield f"data: {json.dumps(item)}\n\n"
             except queue.Empty:
                 yield ": keepalive\n\n"
     resp = Response(gen(), mimetype="text/event-stream")
@@ -154,8 +176,57 @@ def events():
     return resp
 
 
+def capture_health_snapshot():
+    """Copy for /api/state so the supervisor + UI can see capture health."""
+    with _capture_lock:
+        return dict(_capture_health)
+
+
+def _run_capture_supervised():
+    """Run the capture loop forever, restarting it after any crash.
+
+    The inner _run_capture() drives `for event in Capture():` which is an
+    infinite stream that already self-heals around keyboard disconnects. If it
+    throws, we record the error, surface it on SSE, back off, and restart so
+    a single bug never leaves the app silently deaf.
+    """
+    delay = CAPTURE_BASE_DELAY
+    while True:
+        with _capture_lock:
+            _capture_health["error"] = None
+            _capture_health["alive"] = True
+        try:
+            _run_capture()
+        except BaseException as exc:  # noqa: BLE001 - deliberate full restart
+            # Mark dead and surface immediately so the UI isn't left guessing.
+            with _capture_lock:
+                _capture_health["alive"] = False
+                _capture_health["error"] = f"{type(exc).__name__}: {exc}"
+                _capture_health["last_error_time"] = time.time()
+                _capture_health["restarts"] += 1
+            traceback.print_exc()
+            try:
+                hub.publish({"type": "capture_error",
+                             "message": _capture_health["error"],
+                             "restarts": _capture_health["restarts"],
+                             "time": time.time()})
+            except Exception:
+                pass
+            time.sleep(delay)
+            delay = min(delay * 2, CAPTURE_MAX_DELAY)
+            continue
+        else:
+            # Loop returned cleanly (shouldn't happen for an infinite stream);
+            # treat as a dead capture too and restart without error noise.
+            with _capture_lock:
+                _capture_health["alive"] = False
+                _capture_health["restarts"] += 1
+            time.sleep(delay)
+            delay = min(delay * 2, CAPTURE_MAX_DELAY)
+
+
 def start_capture_thread():
-    t = threading.Thread(target=_run_capture, daemon=True)
+    t = threading.Thread(target=_run_capture_supervised, daemon=True)
     t.start()
 
 
