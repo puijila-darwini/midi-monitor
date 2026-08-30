@@ -34,9 +34,14 @@ class State:
         self._start = time.time()
         self.version = 0
         
-        # Tempo detection
+        # Tempo. tempo_bpm is the EFFECTIVE grid tempo used for quantization.
+        # detected_bpm is the live on-the-fly estimate (a suggestion/guide).
+        # If the user fixes a tempo, tempo_bpm is locked to that value and no
+        # longer tracks detected_bpm, so note values stop flapping mid-take.
         self.note_onsets = []  # list of (time, note) for tempo detection
         self.tempo_bpm = 0.0
+        self.detected_bpm = 0.0   # live estimate (suggestion)
+        self.user_tempo_bpm = 0.0  # 0 = auto (use detected); >0 = fixed by user
         self.last_tempo_update = 0
         self.tempo_update_interval = 2.0  # update tempo every 2 seconds
         
@@ -161,8 +166,31 @@ class State:
                 
                 # Only update if confident
                 if max_weight > 0.1 and match_ratio >= 0.5:
-                    self.tempo_bpm = best_bpm
+                    self.detected_bpm = best_bpm
                     self.last_tempo_update = now
+                    # Mirror into the effective tempo only when the user has NOT
+                    # fixed a tempo. A user-defined tempo locks tempo_bpm so the
+                    # grid (and the note values derived from it) stay stable.
+                    if self.user_tempo_bpm <= 0:
+                        self.tempo_bpm = best_bpm
+
+    def set_user_tempo(self, bpm):
+        """Fix the effective (quantization) tempo to a user value in BPM.
+
+        Pass 0 / None / 'auto' to clear the override and revert to the live
+        detected estimate. A fixed tempo stops the flapping that made note
+        values change mid-recording; the detected value remains available as a
+        suggestion (detected_bpm). Resets the onset anchor since the grid size
+        changed.
+        """
+        if not bpm or bpm <= 0:
+            self.user_tempo_bpm = 0.0
+            self.tempo_bpm = self.detected_bpm
+        else:
+            self.user_tempo_bpm = float(bpm)
+            self.tempo_bpm = float(bpm)
+        self._last_qon = None
+        self.version += 1
 
     def _quantize_time(self, time_value, now):
         """Quantize a time value to the nearest grid position based on current tempo."""
@@ -309,6 +337,8 @@ class State:
             "program": self.program,
             "bank": self.bank,
             "tempo_bpm": round(self.tempo_bpm, 1) if self.tempo_bpm > 0 else 0,
+            "detected_bpm": round(self.detected_bpm, 1) if self.detected_bpm > 0 else 0,
+            "user_tempo_bpm": round(self.user_tempo_bpm, 1) if self.user_tempo_bpm > 0 else 0,
             "quantization_divisions": self.quantization_divisions,
             "quantized_notes": self.quantized_notes[-100:],  # last 100 quantized notes
         }

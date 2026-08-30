@@ -12,7 +12,15 @@
     <h1>Key&middot;Monitor</h1>
     <div id="status" class="status offline">keyboard offline</div>
     <div id="instrument" class="instrument">instrument: &mdash;</div>
-    <div id="tempo" class="tempo">tempo: &mdash; BPM</div>
+    <div id="tempo" class="tempo">
+      <span>tempo:</span>
+      <input type="number" id="tempo-input" class="tempo-input" min="30" max="300" step="1"
+             placeholder="auto" title="Set a fixed tempo (BPM) to lock quantization; blank = auto-detect">
+      <span id="tempo-tag" class="tempo-tag">auto</span>
+      <span id="tempo-detected" class="tempo-detected"></span>
+      <button id="metronome-btn" class="metro-btn" type="button" title="Click at the tempo">&#9835; metronome</button>
+      <span id="metro-beat" class="metro-beat" aria-hidden="true"></span>
+    </div>
   </header>
 
   <div id="capture-error" class="capture-error" role="alert"></div>

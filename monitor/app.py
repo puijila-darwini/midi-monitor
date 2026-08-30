@@ -127,7 +127,9 @@ def _run_capture():
                 hub.publish({"type": "quantized_note", "note": qn["note"],
                              "on_time": qn["on_time"], "off_time": qn["off_time"],
                              "duration": qn["duration"], "velocity": qn["velocity"],
-                             "tempo": state.tempo_bpm})
+                             "tempo": state.tempo_bpm,
+                             "detected_bpm": state.detected_bpm,
+                             "user_tempo_bpm": state.user_tempo_bpm})
         elif etype == "program_change":
             state.handle(event)
             hub.publish({"type": "program_change", "program": event["program"],
@@ -171,6 +173,27 @@ def api_quant():
         return jsonify({"ok": False, "error": "divisions must be an int"}), 400
     state.set_quantization(divisions)
     return jsonify({"ok": True, "divisions": state.quantization_divisions})
+
+
+@app.route("/api/tempo", methods=["POST"])
+def api_tempo():
+    """Set (or clear) the user-fixed tempo used for quantization.
+
+    Body: {"bpm": <number>}. 0 / null clears the override so quantization
+    reverts to the live detected estimate (which stays as a suggestion).
+    """
+    body = request.get_json(silent=True) or {}
+    raw = body.get("bpm", 0)
+    try:
+        bpm = float(raw)
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "bpm must be a number"}), 400
+    if bpm < 0 or bpm > 400:
+        return jsonify({"ok": False, "error": "bpm out of range"}), 400
+    state.set_user_tempo(bpm)
+    return jsonify({"ok": True, "bpm": state.user_tempo_bpm,
+                    "effective": state.tempo_bpm})
+
 
 
 @app.route("/events")

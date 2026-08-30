@@ -322,3 +322,31 @@ Superseded by the `monitor/` web app, kept for reference:
     style.css: .stave-controls select styling. Verified end-to-end: selectors drives server (loose=2, normal=4, tight=8),
     server default 4, no JS errors, python -m py_compile clean, server restarted. Committed agent:, pushed.
 
+- Ver 32: USER-DEFINED TEMPO (FIXED AT RECORDING START, detected as suggestion). Symptom: "estimated tempo going up and
+    down; it needs to be fixed at the beginning of a recording" — the auto tempo re-ran a rolling histogram on every
+    note (State._estimate_tempo) and overwrote tempo_bpm, so the quantization grid (and derived note values) kept
+    changing mid-take. Solution (per user: "detected tempo provided as just a suggestion + guide to how actual detected
+    playing compares to user-defined"): the user can FIX a tempo; that becomes the stable quantization tempo, while the
+    live estimate is kept separately as a suggestion/guide.
+    Backend state.py: split tempo into three fields — tempo_bpm (EFFECTIVE, the grid tempo quantization uses),
+    detected_bpm (live estimate), user_tempo_bpm (0 = auto). _estimate_tempo now writes to detected_bpm, and mirrors
+    into tempo_bpm ONLY when user_tempo_bpm<=0 (so a fixed tempo locks the grid). New State.set_user_tempo(bpm):
+    0/None = auto (revert effective to detected); else freeze effective = bpm; resets _last_qon (grid changed) + bumps
+    version. snapshot() exposes tempo_bpm/detected_bpm/user_tempo_bpm. app.py: new POST /api/tempo {"bpm":N} (0 clears;
+    val range 0-400), returns {bpm,effective}; quantized_note SSE event now also carries detected_bpm + user_tempo_bpm.
+    Frontend: REMOVED the client-side noisy tempo estimator (updateTempo() computed rough BPM from a 2s rolling onset
+    window and wrote to #tempo — one source of flapping). Header #tempo is now a control: number input (#tempo-input,
+    blank=auto) + #tempo-tag ("auto <eff> BPM" / "fixed <eff> BPM") + #tempo-detected ("detected ~N BPM" as guide).
+    renderTempo(eff,det,user) renders from /api/state (initial) and each quantized_note; input change/Enter POSTs to
+    /api/tempo and clears the stave. Verified: unit test (auto->effective follows detected; set 94 locks effective even
+    as detected drifts 110->149; clear reverts), live endpoint (set 96, auto, invalid 9999 rejected), browser (type
+    tempo+Enter locks effective, tag "fixed 100 BPM" + "detected ~86 BPM", no JS errors).
+
+- Ver 33: METRONOME (click at the effective tempo). New '♫ metronome' toggle button in the header tempo control +
+    a beat LED (#metro-beat). Uses Web Audio API (square-wave click via 2 oscillators + gain envelope) at the EFFECTIVE
+    tempo (tempoBpm): accent on the downbeat (beat 0 of 4/4, ~1800Hz) then offbeats (~1200Hz); button toggles to
+    '♫ stop' while active; click immediately on start (no dead first beat). .metro-btn/.metro-beat/.metro-pulse/.metro-
+    accent styling in style.css. Stops on page visibility-hidden; won't start with no tempo (tempoBpm<=0). Verified in
+    browser: with fixed 100 BPM, clicking starts it (button '♫ stop', beat LED accent-pulsing, no JS errors).
+
+

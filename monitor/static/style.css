@@ -143,10 +143,58 @@ header h1 {
   letter-spacing: 0.3px;
 }
 #tempo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 13px;
   color: #ffcc80;
   font-weight: 500;
   letter-spacing: 0.3px;
+}
+.tempo-input {
+  width: 56px;
+  font-size: 12px;
+  padding: 1px 5px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: inherit;
+}
+.tempo-tag {
+  color: #ffcc80;
+}
+.tempo-detected {
+  color: var(--dim);
+  font-weight: 400;
+  font-size: 11px;
+}
+.metro-btn {
+  font-size: 11px;
+  padding: 2px 8px;
+  margin-left: 4px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: inherit;
+  cursor: pointer;
+}
+.metro-btn.active {
+  background: #4c9aff;
+  color: #0c0f14;
+  border-color: #4c9aff;
+}
+.metro-beat {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: none;
+  border: 1px solid var(--border);
+}
+.metro-pulse {
+  background: #4c9aff;
+}
+.metro-accent {
+  background: #ffcc80;
 }
 
 /* ---- piano ---- */

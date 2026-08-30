@@ -21,8 +21,6 @@
 
   var keyEls = {};
   var held = new Set();
-  var noteOnTimes = [];  // for tempo calculation
-  var lastTempo = 0;
   var tempoBpm = 0;  // global tempo for quantization
 window.tempoBpm = 0;  // expose on window for durationToVexFlow
 
@@ -123,7 +121,6 @@ window.tempoBpm = 0;  // expose on window for durationToVexFlow
         // NOTE: do NOT push to stave here. The quantized_note event for the
         // same note adds it to the stave (with its proper duration). Pushing
         // here too renders each note twice (duplicate notes on the stave).
-        updateTempo(ev.time);
         break;
       case "noteoff":
         deactivate(ev.note);
@@ -160,6 +157,7 @@ window.tempoBpm = 0;  // expose on window for durationToVexFlow
           tempoBpm = ev.tempo;
           window.tempoBpm = ev.tempo;
         }
+        renderTempo(ev.tempo, ev.detected_bpm || 0, ev.user_tempo_bpm || 0);
         if (window.StavePanel) StavePanel.push("note", [ev.note], ev.off_time, null, ev.duration);
         break;
       case "capture_error":
@@ -197,26 +195,31 @@ window.tempoBpm = 0;  // expose on window for durationToVexFlow
     if (el) el.textContent = "instrument: " + name + " (prog " + program + ")";
   }
 
-  function updateTempo(time) {
-    // Track note-on times for tempo calculation
-    noteOnTimes.push(time);
-    // Keep only last 2 seconds of note onsets
-    var cutoff = time - 2.0;
-    noteOnTimes = noteOnTimes.filter(function(t) { return t > cutoff; });
-    if (noteOnTimes.length >= 2) {
-      var intervals = [];
-      for (var i = 1; i < noteOnTimes.length; i++) {
-        intervals.push(noteOnTimes[i] - noteOnTimes[i-1]);
+  // Render the tempo control from backend state.
+  // effective = the BPM quantization actually uses (user-fixed or detected);
+  // detected  = the live estimate, shown as a guide when a user tempo is set;
+  // user      = the user-fixed value (0 = auto).
+  function renderTempo(effective, detected, user) {
+    var el = document.getElementById("tempo");
+    if (!el) return;
+    var input = document.getElementById("tempo-input");
+    var tag = document.getElementById("tempo-tag");
+    var det = document.getElementById("tempo-detected");
+
+    if (input) {
+      // Don't clobber what the user is typing.
+      if (document.activeElement !== input) {
+        input.value = user > 0 ? String(Math.round(user)) : "";
       }
-      var avgInterval = intervals.reduce(function(a, b) { return a + b; }, 0) / intervals.length;
-      if (avgInterval > 0) {
-        var bpm = Math.round(60 / avgInterval);
-        if (bpm !== lastTempo && bpm >= 30 && bpm <= 300) {
-          lastTempo = bpm;
-          var el = document.getElementById("tempo");
-          if (el) el.textContent = "tempo: " + bpm + " BPM";
-        }
-      }
+    }
+    if (tag) {
+      tag.textContent = (user > 0 ? "fixed " : "auto ") +
+        (effective > 0 ? Math.round(effective) + " BPM" : "\u2014");
+    }
+    if (det) {
+      det.textContent = detected > 0
+        ? "detected ~" + Math.round(detected) + " BPM"
+        : "";
     }
   }
 
@@ -273,6 +276,127 @@ window.tempoBpm = 0;  // expose on window for durationToVexFlow
     });
   })();
 
+  // Tempo control: enter a BPM to fix the quantization tempo; clear to auto.
+  (function () {
+    var input = document.getElementById("tempo-input");
+    if (!input) return;
+    function apply() {
+      var raw = input.value.trim();
+      if (raw === "") {
+        fetch("/api/tempo", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ bpm: 0 })
+        }).then(function (r) { return r.json(); })
+          .then(function (res) {
+            if (window.StavePanel) window.StavePanel.clear();
+          })
+          .catch(function () {});
+        return;
+      }
+      var bpm = parseInt(raw, 10);
+      if (!isNaN(bpm) && bpm >= 30 && bpm <= 300) {
+        fetch("/api/tempo", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ bpm: bpm })
+        }).then(function (r) { return r.json(); })
+          .then(function (res) {
+            if (window.StavePanel) window.StavePanel.clear();
+          })
+          .catch(function () {});
+      }
+    }
+    input.addEventListener("change", apply);
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") { input.blur(); apply(); }
+    });
+  })();
+
+  // Metronome: clicks at the effective tempo (tempoBpm) via Web Audio.
+  (function () {
+    var btn = document.getElementById("metronome-btn");
+    var beatEl = document.getElementById("metro-beat");
+    if (!btn) return;
+    var ctx = null;
+    var timer = null;
+    var running = false;
+    var beat = 0; // 0 = downbeat (accent), 1+ = offbeats
+
+    function ensureCtx() {
+      if (!ctx) {
+        try { ctx = new (window.AudioContext || window.webkitAudioContext)(); }
+        catch (e) { return null; }
+      }
+      if (ctx.state === "suspended") { ctx.resume().catch(function(){}); }
+      return ctx;
+    }
+
+    function click(accent) {
+      var c = ensureCtx();
+      if (!c) return;
+      var now = c.currentTime;
+      // two short oscillators for a percussive click; accent = higher pitch
+      var freq = accent ? 1800 : 1200;
+      for (var i = 0; i < 2; i++) {
+        var osc = c.createOscillator();
+        var gain = c.createGain();
+        osc.type = "square";
+        osc.frequency.value = i === 0 ? freq : freq * 0.5;
+        gain.gain.setValueAtTime(i === 0 ? 0.7 : 0.5, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.03);
+        osc.connect(gain);
+        gain.connect(c.destination);
+        osc.start(now);
+        osc.stop(now + 0.04);
+      }
+      if (beatEl) {
+        beatEl.classList.remove("metro-accent", "metro-pulse");
+        void beatEl.offsetWidth; // restart animation
+        beatEl.classList.add(accent ? "metro-accent" : "metro-pulse");
+      }
+      beat = (beat + 1) % 4; // count in 4/4; accent every 4 downbeats
+    }
+
+    function start() {
+      var bpm = tempoBpm > 0 ? tempoBpm : 0;
+      if (bpm <= 0) return; // no tempo yet
+      stop();
+      beat = 0;
+      var intervalMs = 60000 / bpm;
+      timer = setInterval(function () {
+        click(beat === 0);
+      }, intervalMs);
+      running = true;
+      btn.classList.add("active");
+      btn.textContent = "\u266b stop";
+      // click immediately on start so there's no dead wait
+      click(true);
+    }
+
+    function stop() {
+      if (timer) { clearInterval(timer); timer = null; }
+      running = false;
+      if (btn) {
+        btn.classList.remove("active");
+        btn.textContent = "\u266b metronome";
+      }
+      if (beatEl) { beatEl.classList.remove("metro-accent", "metro-pulse"); }
+    }
+
+    btn.addEventListener("click", function () {
+      if (running) { stop(); }
+      else { start(); }
+    });
+
+    window.__metro = { stop: stop };
+
+    // Tidy up if the effective tempo disappears or the page hides.
+    document.addEventListener("visibilitychange", function () {
+      if (document.hidden) stop();
+    });
+  })();
+
   // initial state
   fetch("/api/state")
     .then(function (r) { return r.json(); })
@@ -286,6 +410,7 @@ window.tempoBpm = 0;  // expose on window for durationToVexFlow
         tempoBpm = s.tempo_bpm;
         window.tempoBpm = s.tempo_bpm;
       }
+      renderTempo(s.tempo_bpm || 0, s.detected_bpm || 0, s.user_tempo_bpm || 0);
       if (typeof s.quantization_divisions !== "undefined") {
         var qsel = document.getElementById("quantization");
         if (qsel && qsel.querySelector('option[value="' + s.quantization_divisions + '"]')) {
