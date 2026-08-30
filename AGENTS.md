@@ -371,4 +371,18 @@ Superseded by the `monitor/` web app, kept for reference:
     look-behind (old model) or its look-ahead (this model); both demote one note. Real rhythm variation (e.g. an actual
     0.45s anticipation) still reads as dotted-8, which is correct notation.
 
+- Ver 34b bugfix: TIME-BASE BUG IN FLUSH DAEMON ("clean eighths at ANY speed"). First live test after Ver 34
+    showed EVERY note as an 8th even when the player slowed to ~1.2s gaps. Only ONE note_on per key reached
+    state (no channel-dup problem), and quantized durations were a constant ~0.30s = 2 grid steps regardless of
+    the real 1.2s gaps (which should have been 8-step half notes). Root cause: state.py _flush_stale_pending()
+    aged the pending note with `time.time() - p["qon"]` — but capture._now() returns SECONDS SINCE CAPTURE START
+    (~350), while time.time() is EPOCH seconds (~1.8e9). The age check was therefore ALWAYS > grace, so EVERY
+    pending note was flushed ~0.4s after its onset with _robust_gap_duration()=median of recent durations, which
+    self-sustained at ~0.30s 8ths forever. The synthetic test passed earlier because it only flushed at the END
+    (after real next-onset finalization), never exercising the daemon's age math between notes. Fix: pending now
+    stores `wall_t = time.time()` (epoch, same base) in addition to qon (capture-relative); the flush ages against
+    wall_t. Re-verified: driven half-speed scale (1.2s gaps) now yields 8-step HALF notes with zero 1-2-step
+    artifacts; quarter tests unchanged; server restarted. Lesson: when a golden-path test passes but live behavior
+    is uniformly wrong, check that background/lazy paths use the same TIME BASE as the values they compare.
+
 

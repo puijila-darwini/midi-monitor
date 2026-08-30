@@ -103,7 +103,9 @@ class State:
                 return
             beat = 60.0 / self.tempo_bpm
             grace = 2.0 * beat + 0.5
-            if time.time() - p["qon"] < grace:
+            # wall_t is stored in the SAME time base as time.time() (epoch), so
+            # this age check is correct. p["qon"] is in capture-relative time.
+            if time.time() - p["wall_t"] < grace:
                 return
             fallback = self._robust_gap_duration()
             self._finalize_pending(fallback)
@@ -345,6 +347,10 @@ class State:
                 self._finalize_pending(finalize)
             self._pending = {
                 "qon": qon,
+                # wall_t in epoch seconds; qon in capture-relative seconds. The
+                # flush daemon needs the same time base as time.time() to age the
+                # note correctly (capture-relative qon would ALWAYS look ancient).
+                "wall_t": time.time(),
                 "notes": [(event["note"], event["velocity"])],
             }
 
