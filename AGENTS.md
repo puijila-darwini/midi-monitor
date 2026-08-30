@@ -246,3 +246,11 @@ Superseded by the `monitor/` web app, kept for reference:
     key signature (only Cb major, a 7-flat edge case that maps to enharmonic B, shows none); G major,
     Dm->F, Am->C signatures correct; "auto" shows none; no JS errors. Dead CSS (.key-row, .key-reset,
     #key-toggle, .keysec.collapsed) removed.
+
+- Ver 27: GIT/AUTH METHODS — Version control uses git init in ~/ai/midi/ with ssh://git@github.com/puijila-darwini/midi-monitor.git remote.
+    Agents push via SSH (no auth tokens required if ssh keys configured). All commits prefixed "agent:" to
+    distinguish AI-made changes; use `git commit -m "agent: <desc>"` before pushing. Remote URL set via
+    `ssh://git@github.com/<username>/<repo>.git`. Local identity: git config user.name "opencode-agent" plus
+    your email. Workflow: (1) git add . ; (2) commit -m "agent: ..."; (3) push origin master. Before major
+    updates: pull --rebase origin master; handle conflicts if any. Git hooks reject commits without proper
+    prefix. Runtime data excluded: __pycache__/*.pyc, *.log files, monitor.log, opencode.json (security config).
