@@ -32,6 +32,10 @@ class State:
         self.online = False
         self.program = 0  # current MIDI program (0-127)
         self.bank = 0     # current bank select MSB (0 = normal, 127 = drums)
+        # Time signature (numerator/denominator beats per measure). User-set via
+        # set_time_signature; drives measure (bar-line) rendering on the stave
+        # and the metronome's accent grouping (accent every `numer` beats).
+        self.time_signature = "4/4"
         self._start = time.time()
         self.version = 0
         
@@ -299,6 +303,34 @@ class State:
         self._pending = None
         self.version += 1
 
+    def set_time_signature(self, numer, denom):
+        """Set the user time signature (beats per measure / beat unit).
+
+        Accepts common denominators (1, 2, 4, 8, 16). Resets the pending-onset
+        anchor so measure/bar boundaries shift cleanly to the new meter.
+        """
+        denom = int(denom) if denom is not None else 4
+        try:
+            numer = int(numer)
+        except (TypeError, ValueError):
+            return False
+        if numer < 1 or numer > 16:
+            return False
+        if denom not in (1, 2, 4, 8, 16):
+            return False
+        self.time_signature = "%d/%d" % (numer, denom)
+        self._pending = None
+        self.version += 1
+        return True
+
+    @property
+    def time_sig_numer(self):
+        return int(self.time_signature.split("/")[0])
+
+    @property
+    def time_sig_denom(self):
+        return int(self.time_signature.split("/")[1])
+
     def _onset_grid(self, on_time, now):
         """Snap a note onset to the rhythm grid, returning (quantized_on, grid_step)."""
         if self.tempo_bpm <= 0:
@@ -435,5 +467,6 @@ class State:
             "detected_bpm": round(self.detected_bpm, 1) if self.detected_bpm > 0 else 0,
             "user_tempo_bpm": round(self.user_tempo_bpm, 1) if self.user_tempo_bpm > 0 else 0,
             "quantization_divisions": self.quantization_divisions,
+            "time_signature": self.time_signature,
             "quantized_notes": self.quantized_notes[-100:],  # last 100 quantized notes
         }

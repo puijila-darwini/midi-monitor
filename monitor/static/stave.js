@@ -310,6 +310,79 @@ function addAccidentals(staveNote, midiNotes) {
     return beams;
   }
 
+  // Measures (bars) per stave line. When a tempo is known (so bar boundaries
+  // are computable), notes are grouped into measures of `numer` beats each and
+  // each line shows this many measures side by side with real bar lines.
+  var MEASURES_PER_LINE = 4;
+
+  // Current time signature ("4/4", "3/4", ...). Kept in sync with the header
+  // selector; used for measure width and the bar count per measure.
+  var tsNumer = 4;
+  var tsDenom = 4;
+
+  // Called from app.js when the user changes the time signature selector.
+  function setTimeSignature(numer, denom) {
+    tsNumer = numer || 4;
+    tsDenom = denom || 4;
+    redraw();
+  }
+
+  // Turn the raw displayEvents into a list of measures (when a tempo exists)
+  // or fall back to the old count-based packing (no tempo yet).
+  // Each measure: { notes: StaveNote[], eventIds: [] , bar: <index> }
+  function packMeasures(displayEvents) {
+    var t0 = displayEvents.length ? (displayEvents[0].time || 0) : 0;
+    var bpm = window.tempoBpm > 0 ? window.tempoBpm : 0;
+    var barSeconds = 0;
+    if (bpm > 0) barSeconds = (60.0 / bpm) * tsNumer;
+    var EVENTS_PER_LINE = 16;
+
+    var measures = [];
+    var curNotes = [];
+    var curIds = [];
+    var curBar = 0;
+
+    function flushMeasure() {
+      if (curNotes.length) {
+        measures.push({ notes: curNotes, eventIds: curIds, bar: curBar });
+        curNotes = [];
+        curIds = [];
+      }
+    }
+
+    for (var i = 0; i < displayEvents.length; i++) {
+      var ev = displayEvents[i];
+      var staveNotes = buildStaveNotes(ev);
+
+      var bar = 0;
+      if (barSeconds > 0) {
+        var t = (typeof ev.time === "number") ? ev.time : t0;
+        bar = Math.floor((t - t0) / barSeconds);
+        if (bar < 0) bar = 0;
+      } else {
+        // No tempo yet: fall back to count-based packing (16 notes per line).
+        bar = Math.floor(i / EVENTS_PER_LINE);
+      }
+
+      // When the bar index advances, close the current measure and start a new
+      // one (always flush on the boundary, even for the very first bar).
+      if (bar !== curBar) {
+        flushMeasure();
+        curBar = bar;
+      }
+      curNotes.push.apply(curNotes, staveNotes);
+      curIds.push(ev.id);
+    }
+    flushMeasure();
+
+    // Group measures into lines of MEASURES_PER_LINE.
+    var staveLines = [];
+    for (var m = 0; m < measures.length; m += MEASURES_PER_LINE) {
+      staveLines.push(measures.slice(m, m + MEASURES_PER_LINE));
+    }
+    return staveLines;
+  }
+
   function redraw() {
     if (!div) return;
     if (!events.length) { div.innerHTML = ""; return; }
@@ -321,77 +394,80 @@ function addAccidentals(staveNote, midiNotes) {
     var displayEvents = showIntervals ? events : events.filter(function(e) { return e.kind !== "interval"; });
     if (!displayEvents.length) { div.innerHTML = ""; return; }
 
-    // Pack events into stave lines - simple count-based packing
-    var staveLines = [];  // each: {notes: StaveNote[], eventIds: []}
-    var currentNotes = [];
-    var currentIds = [];
-    var EVENTS_PER_LINE = 16;  // quarter notes are compact, fit more per line
-
-    for (var i = 0; i < displayEvents.length; i++) {
-      var ev = displayEvents[i];
-      var staveNotes = buildStaveNotes(ev);
-
-      if (currentNotes.length + staveNotes.length > EVENTS_PER_LINE && currentNotes.length > 0) {
-        staveLines.push({ notes: currentNotes, eventIds: currentIds });
-        currentNotes = [];
-        currentIds = [];
-      }
-      currentNotes.push.apply(currentNotes, staveNotes);
-      currentIds.push(ev.id);
-    }
-    if (currentNotes.length > 0) {
-      staveLines.push({ notes: currentNotes, eventIds: currentIds });
-    }
-
-    // Render each stave line
-    var y = Y_START;
+    var staveLines = packMeasures(displayEvents);
     var lastId = displayEvents[displayEvents.length - 1].id;
 
+    var ts = tsNumer + "/" + tsDenom;
+    var beatValue = tsDenom;
+    // VexFlow's num_beats is a tick/capacity hint; we disable strict anyway.
+    var numBeatsPerBar = tsNumer;
+
+    var y = Y_START;
+    var totalHeight = Y_START;
+
+    // Each stave line: a row of up to MEASURES_PER_LINE measure staves.
     for (var si = 0; si < staveLines.length; si++) {
       var line = staveLines[si];
-      var stave = new VF.Stave(X_START, y, STAVE_W);
-      stave.addClef("treble");
-      if (currentKeySig) stave.addKeySignature(currentKeySig);
-      stave.addTimeSignature("4/4");
-      stave.setContext(context);
-      stave.draw();
+      var lineMeasures = line.length;
+      var mw = STAVE_W / MEASURES_PER_LINE;
+      var baseX = X_START;
 
-      var voice = new VF.Voice({ num_beats: 4, beat_value: 4 });
-      voice.setStrict(false);
-      voice.addTickables(line.notes);
+      for (var mi = 0; mi < lineMeasures; mi++) {
+        var measure = line[mi];
+        var stave = new VF.Stave(baseX + mi * mw, y, mw);
+        // Real sheet music: clef + key signature + time signature on the FIRST
+        // measure of each line only; later measures get a plain single barline.
+        if (mi === 0) {
+          stave.addClef("treble");
+          if (currentKeySig) stave.addKeySignature(currentKeySig);
+          stave.addTimeSignature(ts);
+        }
+        // Barline types: single between measures, final (end) bar on the last
+        // measure of the last line.
+        var endBar = VF.Barline.SINGLE;
+        if (mi === lineMeasures - 1) endBar = VF.Barline.END;
+        stave.setEndBarType(endBar);
+        stave.setContext(context);
+        stave.draw();
 
-      // Beam eligible consecutive notes (8ths/16ths that can be joined)
-      var beams = buildBeams(line.notes);
+        var voice = new VF.Voice({ num_beats: numBeatsPerBar, beat_value: beatValue });
+        voice.setStrict(false);
+        voice.addTickables(measure.notes);
 
-      var formatter = new VF.Formatter();
-      formatter.joinVoices([voice]);
-      formatter.format([voice], stave.getNoteEndX());
-      voice.draw(context, stave);
+        var beams = buildBeams(measure.notes);
 
-      // Draw beams after notes so they overlay correctly
-      for (var bi = 0; bi < beams.length; bi++) {
-        beams[bi].setContext(context).draw();
-      }
+        var formatter = new VF.Formatter();
+        formatter.joinVoices([voice]);
+        formatter.format([voice], stave.getNoteEndX());
+        voice.draw(context, stave);
 
-      // Highlight most recent event's notes
-      if (line.eventIds.indexOf(lastId) >= 0) {
-        var svg = div.querySelector('svg');
-        if (svg) {
-          var voiceGroups = svg.querySelectorAll('g > g.vf-voice');
-          if (voiceGroups[si]) {
-            var heads = voiceGroups[si].querySelectorAll('.vf-notehead');
-            heads.forEach(function(h) {
-              h.setAttribute('fill', '#4c9aff');
-              h.setAttribute('stroke', '#4c9aff');
-            });
+        for (var bi = 0; bi < beams.length; bi++) {
+          beams[bi].setContext(context).draw();
+        }
+
+        // Highlight the most recent event's notes (the measure that holds it).
+        if (measure.eventIds.indexOf(lastId) >= 0) {
+          var svg = div.querySelector('svg');
+          if (svg) {
+            var staves = svg.querySelectorAll('g.vf-stave');
+            var target = staves[si * MEASURES_PER_LINE + mi];
+            if (!target) target = staves[staves.length - 1];
+            if (target) {
+              var heads = target.querySelectorAll('.vf-notehead');
+              heads.forEach(function (h) {
+                h.setAttribute('fill', '#4c9aff');
+                h.setAttribute('stroke', '#4c9aff');
+              });
+            }
           }
         }
       }
 
       y += STAVE_H;
+      totalHeight = y;
     }
 
-    if (renderer) renderer.resize(800, y + 40);
+    if (renderer) renderer.resize(800, totalHeight + 40);
 
     // Auto-scroll stave-wrap to bottom
     var staveWrap = document.getElementById('stave-wrap');
@@ -502,6 +578,7 @@ function addAccidentals(staveNote, midiNotes) {
     setSpellingKey: setSpellingKey,
     setShowIntervals: setShowIntervals,
     setKey: setKey,
+    setTimeSignature: setTimeSignature,
     backspace: backspace,
   };
 

@@ -385,4 +385,27 @@ Superseded by the `monitor/` web app, kept for reference:
     artifacts; quarter tests unchanged; server restarted. Lesson: when a golden-path test passes but live behavior
     is uniformly wrong, check that background/lazy paths use the same TIME BASE as the values they compare.
 
+- Ver 35: USER-DEFINED TIME SIGNATURE + MEASURE (BAR) LINES ON THE STAVE. Previously the stave drew a
+    "4/4" time signature and packed notes ~by count (16/line) with no barlines. Now the user can set the
+    meter and the notation shows real measures (bar lines) that subdivide each line, like sheet music.
+    Backend state.py: new `time_signature` (default "4/4"), `set_time_signature(numer, denom)` validating
+    numer 1-16 and denom in {1,2,4,8,16} (resets _pending + bumps version), convenience props
+    `time_sig_numer`/`time_sig_denom`, and `time_signature` exposed in snapshot(). app.py: new
+    `POST /api/timesig {"numer":N,"denom":M}` (invalid -> 400, persists via state). Frontend index.html:
+    new "time:" select `#timesig` (2/4,3/4,4/4,5/4,6/8,7/8,9/8,12/8) in the header next to tempo. app.js:
+    `window.timesig {numer,denom}` global + `setTimesig()` helper; change handler POSTs /api/timesig and
+    clears the stave (old bar boundaries invalid); initial /api/state sync sets selector + window.timesig;
+    metronome accent now wraps at `timesig.numer` beats (was hardcoded 4/4). stave.js: `StavePanel.setTimeSignature`
+    export; `redraw()` rewritten to `packMeasures()`: when a tempo exists (window.tempoBpm>0) each event's bar
+    index = floor((ev.time - t0)/barSeconds) where barSeconds = (60/bpm)*numer; events packed per measure, then
+    grouped MEASURES_PER_LINE=4 staves per line; each line's first measure draws clef + key sig + time sig, all
+    measures get real bar lines (setEndBarType SINGLE between, END on the last of a line); each new line re-draws
+    clef/keysig/timesig; beams are now per-measure (don't cross barlines). No tempo yet -> falls back to the old
+    count-based packing (16/line). Verified in-browser (Playwright setTimeSignature + StavePanel.push, no live
+    keyboard needed): 3/4 with 6 notes @0.5s = 2 measures (2 staves) with 1 clef + 1 time sig + real barlines;
+    4/4 12/16/20 notes -> 3/4/5 staves; count of clefs == number of stave lines (each new line re-draws clef);
+    selector change persisted server-side, initial-state sync restores it; metronome starts/stops clean under 3/4;
+    zero JS errors throughout. Fixed during dev: first measure was merging with the second (off-by-one) because
+    the bar-change flush was gated on `measures.length` being non-zero; rewrote to flush whenever `bar !== curBar`.
+    Committed agent:, pushed. Server restarted after edits.
 

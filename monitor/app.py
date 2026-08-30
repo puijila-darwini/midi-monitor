@@ -197,6 +197,20 @@ def api_tempo():
                     "effective": state.tempo_bpm})
 
 
+@app.route("/api/timesig", methods=["POST"])
+def api_timesig():
+    """Set the user time signature for measure (bar) rendering on the stave.
+
+    Body: {"numer": <num>, "denom": <den>}. Resets bar boundaries so the new
+    meter takes effect immediately.
+    """
+    body = request.get_json(silent=True) or {}
+    if state.set_time_signature(body.get("numer"), body.get("denom")):
+        return jsonify({"ok": True, "time_signature": state.time_signature})
+    return jsonify({"ok": False,
+                    "error": "invalid time signature"}, 400)
+
+
 
 @app.route("/events")
 def events():

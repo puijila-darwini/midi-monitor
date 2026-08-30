@@ -23,6 +23,16 @@
   var held = new Set();
   var tempoBpm = 0;  // global tempo for quantization
 window.tempoBpm = 0;  // expose on window for durationToVexFlow
+  // Time signature (beats per measure). Exposed on window for stave (measure
+  // rendering) and metronome (accent grouping). Stays at 4/4 until user changes.
+  var timesig = { numer: 4, denom: 4 };
+  window.timesig = timesig;
+
+  function setTimesig(numer, denom) {
+    timesig.numer = numer;
+    timesig.denom = denom;
+    window.timesig = timesig;
+  }
 
   function isBlack(note) { return BLACK[note % 12] === 1; }
   function octLabel(note) {
@@ -276,6 +286,28 @@ window.tempoBpm = 0;  // expose on window for durationToVexFlow
     });
   })();
 
+  // Time-signature selector (beats per measure) for stave + metronome.
+  (function () {
+    var sel = document.getElementById("timesig");
+    if (!sel) return;
+    sel.addEventListener("change", function () {
+      var parts = sel.value.split("/");
+      var numer = parseInt(parts[0], 10);
+      var denom = parseInt(parts[1], 10);
+      setTimesig(numer, denom);
+      if (window.StavePanel) window.StavePanel.setTimeSignature(numer, denom);
+      fetch("/api/timesig", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ numer: numer, denom: denom })
+      }).then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (window.StavePanel) window.StavePanel.clear();
+        })
+        .catch(function () { /* ignore transient */ });
+    });
+  })();
+
   // Tempo control: enter a BPM to fix the quantization tempo; clear to auto.
   (function () {
     var input = document.getElementById("tempo-input");
@@ -355,7 +387,9 @@ window.tempoBpm = 0;  // expose on window for durationToVexFlow
         void beatEl.offsetWidth; // restart animation
         beatEl.classList.add(accent ? "metro-accent" : "metro-pulse");
       }
-      beat = (beat + 1) % 4; // count in 4/4; accent every 4 downbeats
+      // count in the current meter; accent every `numer` beats (downbeat)
+      var beatsPerBar = timesig.numer > 0 ? timesig.numer : 4;
+      beat = (beat + 1) % beatsPerBar;
     }
 
     function start() {
@@ -415,6 +449,15 @@ window.tempoBpm = 0;  // expose on window for durationToVexFlow
         var qsel = document.getElementById("quantization");
         if (qsel && qsel.querySelector('option[value="' + s.quantization_divisions + '"]')) {
           qsel.value = String(s.quantization_divisions);
+        }
+      }
+      if (typeof s.time_signature === "string" && s.time_signature.indexOf("/") > 0) {
+        var tp = s.time_signature.split("/");
+        setTimesig(parseInt(tp[0], 10), parseInt(tp[1], 10));
+        if (window.StavePanel) window.StavePanel.setTimeSignature(parseInt(tp[0], 10), parseInt(tp[1], 10));
+        var tsel = document.getElementById("timesig");
+        if (tsel && tsel.querySelector('option[value="' + s.time_signature + '"]')) {
+          tsel.value = s.time_signature;
         }
       }
       seedHeld(s.held || []);
