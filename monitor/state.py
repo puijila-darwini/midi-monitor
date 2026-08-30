@@ -25,6 +25,7 @@ class State:
         self.melody = []
         self.online = False
         self.program = 0  # current MIDI program (0-127)
+        self.bank = 0     # current bank select MSB (0 = normal, 127 = drums)
         self._start = time.time()
         self.version = 0
         
@@ -253,9 +254,10 @@ class State:
                 self._add_quantized_note(event["note"], prev["on_time"], event["time"], prev["velocity"], now)
         elif etype == "program_change":
             self.program = event["program"]
+            self.bank = event.get("bank", 0)
             self.recent.append(
                 {"type": "program_change", "program": event["program"],
-                 "channel": event.get("channel", 0), "time": event["time"]}
+                 "bank": self.bank, "channel": event.get("channel", 0), "time": event["time"]}
             )
         elif etype == "offline":
             self.online = False
@@ -273,6 +275,7 @@ class State:
             "up_time": round(self.up_time, 1),
             "version": self.version,
             "program": self.program,
+            "bank": self.bank,
             "tempo_bpm": round(self.tempo_bpm, 1) if self.tempo_bpm > 0 else 0,
             "quantized_notes": self.quantized_notes[-100:],  # last 100 quantized notes
         }

@@ -76,23 +76,59 @@ class Capture:
         {"type": "online",   "time": float}
     """
 
-    # Yamaha PSS-A50 voice names (program 0-41).
-    # The PSS-A50 is NOT full GM: it has exactly 42 presets (40 normal voices + 2
-    # drum kits). Voice #N (1-indexed, per the manual) = MIDI program N-1 (0-indexed).
-    # Program 38 = Standard Kit, 39 = Dance Kit. Beyond 41 nothing is defined.
-    GM_PROGRAMS = [
-        "Grand Piano", "Electric Piano 1", "Electric Piano 2", "Electric Grand Piano",
-        "Drawbar Organ", "Rock Organ", "Accordion", "Harmonica",
-        "Nylon Guitar", "Steel Guitar", "Jazz Guitar", "Clean Guitar",
-        "Overdriven Guitar", "Acoustic Bass", "Finger Bass",
-        "Slap Bass", "Synth Bass", "Strings", "Pizzicato Strings",
-        "Violin", "Cello", "Orchestral Harp", "Oboe",
-        "Clarinet", "Flute", "Tenor Sax", "Brass Section",
-        "Trumpet", "Trombone", "French Horn", "Synth Brass",
-        "Gemini", "Punchy Chordz", "Square Lead", "Sawtooth Lead",
-        "New Age Pad", "Warm Pad", "Brightness", "Standard Kit",
-        "Dance Kit", "Vibraphone", "Marimba",
-    ]
+    # Yamaha PSS-A50 voice list, keyed by (bank select MSB, program) -> name.
+    # The PSS-A50 is NOT full GM: it has exactly 42 presets (40 normal voices +
+    # 2 drum kits). Normal voices use GM1-compatible program numbers (Bank MSB 0);
+    # the two drum kits use XG/XGlite numbering with Bank MSB 127 (Standard Kit,
+    # Dance Kit). Program bytes below are 0-indexed (the Owner's Manual lists
+    # 1-128; subtract 1). Source: PSS-A50 Owner's Manual "Voice List".
+    VOICE_BY_PROGRAM = {
+        (0, 0): "Grand Piano",          # voice 1  (PC 1  -> 0)
+        (0, 4): "Electric Piano 1",     # voice 2  (PC 5  -> 4)
+        (0, 5): "Electric Piano 2",     # voice 3  (PC 6  -> 5)
+        (0, 2): "Electric Grand Piano", # voice 4  (PC 3  -> 2)
+        (0, 16): "Drawbar Organ",       # voice 5  (PC 17 -> 16)
+        (0, 18): "Rock Organ",          # voice 6  (PC 19 -> 18)
+        (0, 21): "Accordion",           # voice 7  (PC 22 -> 21)
+        (0, 22): "Harmonica",           # voice 8  (PC 23 -> 22)
+        (0, 24): "Nylon Guitar",        # voice 9  (PC 25 -> 24)
+        (0, 25): "Steel Guitar",        # voice 10 (PC 26 -> 25)
+        (0, 26): "Jazz Guitar",         # voice 11 (PC 27 -> 26)
+        (0, 27): "Clean Guitar",        # voice 12 (PC 28 -> 27)
+        (0, 29): "Overdriven Guitar",   # voice 13 (PC 30 -> 29)
+        (0, 32): "Acoustic Bass",       # voice 14 (PC 33 -> 32)
+        (0, 33): "Finger Bass",         # voice 15 (PC 34 -> 33)
+        (0, 36): "Slap Bass",           # voice 16 (PC 37 -> 36)
+        (0, 38): "Synth Bass",          # voice 17 (PC 39 -> 38)
+        (0, 48): "Strings",             # voice 18 (PC 49 -> 48)
+        (0, 45): "Pizzicato Strings",   # voice 19 (PC 46 -> 45)
+        (0, 40): "Violin",              # voice 20 (PC 41 -> 40)
+        (0, 42): "Cello",               # voice 21 (PC 43 -> 42)
+        (0, 46): "Orchestral Harp",     # voice 22 (PC 47 -> 46)
+        (0, 68): "Oboe",                # voice 23 (PC 69 -> 68)
+        (0, 71): "Clarinet",            # voice 24 (PC 72 -> 71)
+        (0, 73): "Flute",               # voice 25 (PC 74 -> 73)
+        (0, 66): "Tenor Sax",           # voice 26 (PC 67 -> 66)
+        (0, 61): "Brass Section",       # voice 27 (PC 62 -> 61)
+        (0, 56): "Trumpet",             # voice 28 (PC 57 -> 56)
+        (0, 57): "Trombone",            # voice 29 (PC 58 -> 57)
+        (0, 60): "French Horn",         # voice 30 (PC 61 -> 60)
+        (0, 62): "Synth Brass",         # voice 31 (PC 63 -> 62)
+        (0, 82): "Gemini",              # voice 32 (PC 83 -> 82)  <- the "fat supersaw"
+        (0, 84): "Punchy Chordz",       # voice 33 (PC 85 -> 84)
+        (0, 80): "Square Lead",         # voice 34 (PC 81 -> 80)
+        (0, 81): "Sawtooth Lead",       # voice 35 (PC 82 -> 81)
+        (0, 88): "New Age Pad",         # voice 36 (PC 89 -> 88)
+        (0, 89): "Warm Pad",            # voice 37 (PC 90 -> 89)
+        (0, 100): "Brightness",         # voice 38 (PC 101 -> 100)
+        (127, 0): "Standard Kit",       # voice 39 (MSB 127, PC 1  -> 0)
+        (127, 27): "Dance Kit",         # voice 40 (MSB 127, PC 28 -> 27)
+        (0, 11): "Vibraphone",          # voice 41 (PC 12 -> 11)
+        (0, 12): "Marimba",             # voice 42 (PC 13 -> 12)
+    }
+
+    # Kept for backward compatibility: program -> name for bank 0 (normal voices).
+    GM_PROGRAMS = {pc: name for (bank, pc), name in VOICE_BY_PROGRAM.items() if bank == 0}
 
     # Common CC names for readability
     CC_NAMES = {
@@ -125,6 +161,7 @@ class Capture:
         self._start = time.time()
         self._online = False
         self._program = 0  # current program number (0-127)
+        self._bank = 0     # current bank select MSB (0 = normal, 127 = drums)
 
     def _now(self):
         return time.time() - self._start
@@ -170,10 +207,8 @@ class Capture:
         return self._program
 
     def get_program_name(self):
-        """Return the PSS-A50 voice name for the current program (0-41)."""
-        if 0 <= self._program < len(self.GM_PROGRAMS):
-            return self.GM_PROGRAMS[self._program]
-        return "Unknown"
+        """Return the PSS-A50 voice name for the current (bank, program)."""
+        return self.VOICE_BY_PROGRAM.get((self._bank, self._program), "Unknown")
 
     def __iter__(self):
         self._reported_online = False
@@ -222,10 +257,15 @@ class Capture:
                 continue
             cc = _CTRL_CHANGE.search(line)
             if cc:
+                controller = int(cc.group(2))
+                value = int(cc.group(3))
+                # Track Bank Select MSB (CC#0): 0 = normal voices, 127 = drums.
+                if controller == 0:
+                    self._bank = value
                 yield {
                     "type": "control_change",
-                    "controller": int(cc.group(2)),
-                    "value": int(cc.group(3)),
+                    "controller": controller,
+                    "value": value,
                     "channel": int(cc.group(1)),
                     "time": now,
                 }
@@ -236,6 +276,7 @@ class Capture:
                 yield {
                     "type": "program_change",
                     "program": self._program,
+                    "bank": self._bank,
                     "channel": int(pc.group(1)),
                     "time": now,
                 }

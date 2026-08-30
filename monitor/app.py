@@ -131,7 +131,10 @@ def _run_capture():
         elif etype == "program_change":
             state.handle(event)
             hub.publish({"type": "program_change", "program": event["program"],
-                         "channel": event["channel"], "name": Capture.GM_PROGRAMS[event["program"]] if event["program"] < len(Capture.GM_PROGRAMS) else "Unknown", "time": t})
+                         "bank": event.get("bank", 0),
+                         "channel": event["channel"],
+                         "name": Capture.VOICE_BY_PROGRAM.get((event.get("bank", 0), event["program"]), "Unknown"),
+                         "time": t})
         elif etype == "offline":
             state.handle(event)
             hub.publish({"type": "status", "online": False, "time": t})

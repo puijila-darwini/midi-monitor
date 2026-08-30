@@ -5,6 +5,20 @@
   var HIGH = 108;    // C8
   var BLACK = {1:1, 3:1, 6:1, 8:1, 10:1};  // pc -> is black
 
+  // PSS-A50 voices keyed by "bank:program" (mirrors Capture.VOICE_BY_PROGRAM).
+  var PSSA50_VOICES = {
+    "0:0":"Grand Piano","0:4":"Electric Piano 1","0:5":"Electric Piano 2","0:2":"Electric Grand Piano",
+    "0:16":"Drawbar Organ","0:18":"Rock Organ","0:21":"Accordion","0:22":"Harmonica",
+    "0:24":"Nylon Guitar","0:25":"Steel Guitar","0:26":"Jazz Guitar","0:27":"Clean Guitar","0:29":"Overdriven Guitar",
+    "0:32":"Acoustic Bass","0:33":"Finger Bass","0:36":"Slap Bass","0:38":"Synth Bass",
+    "0:48":"Strings","0:45":"Pizzicato Strings","0:40":"Violin","0:42":"Cello","0:46":"Orchestral Harp",
+    "0:68":"Oboe","0:71":"Clarinet","0:73":"Flute","0:66":"Tenor Sax",
+    "0:61":"Brass Section","0:56":"Trumpet","0:57":"Trombone","0:60":"French Horn","0:62":"Synth Brass",
+    "0:82":"Gemini","0:84":"Punchy Chordz","0:80":"Square Lead","0:81":"Sawtooth Lead",
+    "0:88":"New Age Pad","0:89":"Warm Pad","0:100":"Brightness",
+    "127:0":"Standard Kit","127:27":"Dance Kit","0:11":"Vibraphone","0:12":"Marimba"
+  };
+
   var keyEls = {};
   var held = new Set();
   var noteOnTimes = [];  // for tempo calculation
@@ -247,7 +261,8 @@ window.tempoBpm = 0;  // expose on window for durationToVexFlow
     .then(function (s) {
       setStatus(s.online);
       if (typeof s.program !== "undefined") {
-        setInstrument(s.program, "Program " + s.program);
+        var pname = PSSA50_VOICES[(s.bank || 0) + ":" + s.program] || "Unknown";
+        setInstrument(s.program, pname);
       }
       if (typeof s.tempo_bpm !== "undefined" && s.tempo_bpm > 0) {
         tempoBpm = s.tempo_bpm;
