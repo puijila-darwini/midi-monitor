@@ -311,7 +311,7 @@ window.tempoBpm = 0;  // expose on window for durationToVexFlow
           if (catchBuffer.indexOf(ev.note % 12) < 0) catchBuffer.push(ev.note % 12);
           catchLastAt = ev.time;
           if (catchTimer) clearTimeout(catchTimer);
-          catchTimer = setTimeout(resolveCatchBuffer, 900);
+          catchTimer = setTimeout(resolveCatchBuffer, 350);
         }
         // NOTE: do NOT push to stave here. The quantized_note event for the
         // same note adds it to the stave (with its proper duration). Pushing
