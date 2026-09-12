@@ -98,10 +98,30 @@
   }
 
   var MAX_EVENTS = 200;
-  var STAVE_W = 720;
   var STAVE_H = 90;
   var X_START = 30;
   var Y_START = 40;
+
+  // The notation extends to the same width as the on-screen keyboard above it:
+// canvasWidth() sizes the renderer from the #piano keybed (falling back to the
+// stave container, then 800). staveWidth() is the drawn line length minus the
+// leading clef/keysig offset + right pad.
+  function canvasWidth() {
+    var piano = document.getElementById("piano");
+    if (piano && piano.getBoundingClientRect().width > 200) {
+      return Math.round(piano.getBoundingClientRect().width) + X_START + 20;
+    }
+    if (div && div.clientWidth > 200) return div.clientWidth;
+    return 800;
+  }
+  function staveWidth() {
+    return canvasWidth() - X_START - 20;
+  }
+  // Notes per stave line, scaled so a wider stave holds more notes instead of
+  // wrapping early with big gaps. ~45px per notehead.
+  function notesPerLine() {
+    return Math.max(16, Math.round(staveWidth() / 45));
+  }
 
   var div = document.getElementById("stave");
   var events = [];
@@ -118,7 +138,7 @@
   function initRenderer() {
     if (renderer) return;
     renderer = new VF.Renderer(div, VF.Renderer.Backends.SVG);
-    renderer.resize(800, 600);
+    renderer.resize(canvasWidth(), 600);
     context = renderer.getContext();
   }
 
@@ -324,8 +344,8 @@ function addAccidentals(staveNote, midiNotes) {
 
   // Notes (noteheads) per stave line before wrapping. With measure barlines
   // the actual wrap is on whole-bar boundaries, but this keeps a line from
-  // getting over-full / too many bars on one row.
-  var NOTES_PER_LINE = 16;
+  // getting over-full / too many bars on one row. The cap is scaled to the
+  // line width in notesPerLine(), so wider staves hold more notes.
 
   // Called from app.js when the user changes the time signature selector.
   function setTimeSignature(numer, denom) {
@@ -349,7 +369,7 @@ function addAccidentals(staveNote, midiNotes) {
         bar = Math.floor((t - t0) / barSeconds);
         if (bar < 0) bar = 0;
       } else {
-        bar = Math.floor(i / NOTES_PER_LINE);
+        bar = Math.floor(i / notesPerLine());
       }
       return bar;
     });
@@ -379,11 +399,12 @@ function addAccidentals(staveNote, midiNotes) {
     if (curNotes.length) measures.push({ notes: curNotes, eventIds: curIds, bar: curBar });
 
     // Pack whole measures into lines (never split a bar across a line wrap).
+    var maxPerLine = notesPerLine();
     var staveLines = [];
     var line = [];
     var count = 0;
     for (var m = 0; m < measures.length; m++) {
-      if (line.length && count + measures[m].notes.length > NOTES_PER_LINE) {
+      if (line.length && count + measures[m].notes.length > maxPerLine) {
         staveLines.push(line);
         line = [];
         count = 0;
@@ -435,7 +456,7 @@ function addAccidentals(staveNote, midiNotes) {
         allBeams = allBeams.concat(buildBeams(measure.notes));
       }
 
-      var stave = new VF.Stave(X_START, y, STAVE_W);
+      var stave = new VF.Stave(X_START, y, staveWidth());
       stave.addClef("treble");
       if (currentKeySig) stave.addKeySignature(currentKeySig);
       stave.addTimeSignature(ts);
@@ -469,7 +490,7 @@ function addAccidentals(staveNote, midiNotes) {
       totalHeight = y;
     }
 
-    if (renderer) renderer.resize(800, totalHeight + 40);
+    if (renderer) renderer.resize(canvasWidth(), totalHeight + 40);
 
     // Auto-scroll stave-wrap to bottom
     var staveWrap = document.getElementById('stave-wrap');

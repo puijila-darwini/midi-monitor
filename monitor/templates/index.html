@@ -58,46 +58,68 @@
 
       <section id="key" class="keysec card">
         <div class="keysec-head">
-          <span class="keysec-title">intended key</span>
+          <span class="keysec-title">tonic &amp; scale</span>
         </div>
         <div class="keysec-controls">
           <label>
-            <span>key:</span>
-            <select id="intended-key">
-              <option value="auto">auto (no signature)</option>
-              <optgroup label="Major">
-                <option value="C">C major</option>
-                <option value="G">G major</option>
-                <option value="D">D major</option>
-                <option value="A">A major</option>
-                <option value="E">E major</option>
-                <option value="B">B major</option>
-                <option value="F#">F# major</option>
-                <option value="C#">C# major</option>
-                <option value="F">F major</option>
-                <option value="Bb">Bb major</option>
-                <option value="Eb">Eb major</option>
-                <option value="Ab">Ab major</option>
-                <option value="Db">Db major</option>
-                <option value="Gb">Gb major</option>
-                <option value="Cb">Cb major</option>
+            <span>tonic:</span>
+            <select id="key-tonic">
+              <option value="-1">— off —</option>
+              <option value="0">C</option>
+              <option value="1">C# / Db</option>
+              <option value="2">D</option>
+              <option value="3">D# / Eb</option>
+              <option value="4">E</option>
+              <option value="5">F</option>
+              <option value="6">F# / Gb</option>
+              <option value="7">G</option>
+              <option value="8">G# / Ab</option>
+              <option value="9">A</option>
+              <option value="10">A# / Bb</option>
+              <option value="11">B</option>
+            </select>
+          </label>
+          <label>
+            <span>scale:</span>
+            <select id="key-scale">
+              <option value="-1">— off —</option>
+              <optgroup label="Diatonic modes">
+                <option value="major">Major (Ionian)</option>
+                <option value="dorian">Dorian</option>
+                <option value="phrygian">Phrygian</option>
+                <option value="lydian">Lydian</option>
+                <option value="mixolydian">Mixolydian</option>
+                <option value="aeolian">Natural Minor (Aeolian)</option>
+                <option value="locrian">Locrian</option>
               </optgroup>
-              <optgroup label="Minor">
-                <option value="Am">A minor</option>
-                <option value="Em">E minor</option>
-                <option value="Bm">B minor</option>
-                <option value="F#m">F# minor</option>
-                <option value="C#m">C# minor</option>
-                <option value="G#m">G# minor</option>
-                <option value="D#m">D# minor</option>
-                <option value="A#m">A# minor</option>
-                <option value="Dm">D minor</option>
-                <option value="Gm">G minor</option>
-                <option value="Cm">C minor</option>
-                <option value="Fm">F minor</option>
-                <option value="Bbm">Bb minor</option>
-                <option value="Ebm">Eb minor</option>
-                <option value="Abm">Ab minor</option>
+              <optgroup label="Minor & classical">
+                <option value="harmonic_minor">Harmonic Minor</option>
+                <option value="melodic_minor">Melodic Minor</option>
+                <option value="harmonic_major">Harmonic Major</option>
+                <option value="double_harmonic">Double Harmonic Major</option>
+                <option value="phrygian_dominant">Phrygian Dominant</option>
+                <option value="lydian_dominant">Lydian Dominant</option>
+                <option value="super_locrian">Super Locrian (Altered)</option>
+              </optgroup>
+              <optgroup label="Pentatonic & blues">
+                <option value="major_pent">Major Pentatonic</option>
+                <option value="minor_pent">Minor Pentatonic</option>
+                <option value="blues">Blues</option>
+                <option value="hirajoshi">Hirajoshi</option>
+              </optgroup>
+              <optgroup label="Bebop">
+                <option value="bebop_major">Bebop Major</option>
+                <option value="bebop_dominant">Bebop Dominant</option>
+                <option value="bebop_dorian">Bebop Dorian (Minor)</option>
+              </optgroup>
+              <optgroup label="Symmetric & exotic">
+                <option value="whole_tone">Whole Tone</option>
+                <option value="diminished">Diminished (whole-half)</option>
+                <option value="chromatic">Chromatic</option>
+                <option value="enigmatic">Enigmatic</option>
+                <option value="hungarian_minor">Hungarian Minor</option>
+                <option value="neapolitan_major">Neapolitan Major</option>
+                <option value="neapolitan_minor">Neapolitan Minor</option>
               </optgroup>
             </select>
           </label>

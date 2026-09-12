@@ -20,8 +20,10 @@
   --link: var(--royal-soft);
   --text: #F0E8C8;
   --paper: #F0E8C8;
-  --key-w: 15px;
-  --key-h: 110px;
+  --key-w: 30px;
+  --key-h: 190px;
+  --key-bw: 19px;
+  --key-bh: 120px;
 }
 
 * { box-sizing: border-box; }
@@ -333,8 +335,8 @@ select option { background: var(--phthalo-card); color: var(--text); }
   z-index: 1;
 }
 .key.black {
-  width: 9px;
-  height: 66px;
+  width: var(--key-bw);
+  height: var(--key-bh);
   background: linear-gradient(180deg, #1C2E26, #071310);
   border: 1px solid #000;
   z-index: 3;
@@ -351,12 +353,44 @@ select option { background: var(--phthalo-card); color: var(--text); }
 
 .key.white .oct-label {
   position: absolute;
-  bottom: 3px;
+  top: 3px;
   left: 3px;
-  font-size: 9px;
+  font-size: 11px;
   color: var(--phthalo);
   pointer-events: none;
 }
+
+/* ---- tonic & scale guide (shaded in-scale keys + interval labels) ---- */
+.key.inscale.white {
+  background: linear-gradient(180deg, #b7d4c2, #7fa88f);
+}
+.key.inscale.black {
+  background: linear-gradient(180deg, #4f7a68, #2c4a3c);
+}
+.key.tonic.white {
+  background: linear-gradient(180deg, #F2E6A6, #D4C47A);
+}
+.key.tonic.black {
+  background: linear-gradient(180deg, #E8D9A0, #9a8748);
+}
+.key .ivl-label {
+  position: absolute;
+  bottom: 2px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 700;
+  pointer-events: none;
+  user-select: none;
+}
+.key.white .ivl-label { color: #123c2c; }
+.key.black .ivl-label { color: var(--straw); }
+.key.outscale .ivl-label {
+  font-weight: 600;
+}
+.key.outscale.white .ivl-label { color: #6e837b; }
+.key.outscale.black .ivl-label { color: #5d746b; }
 
 /* ---- flash ---- */
 #flash {

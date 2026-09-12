@@ -503,3 +503,35 @@ Superseded by the `monitor/` web app, kept for reference:
   quarters 0.48-0.72 -> 0 rests; held-1.2s pause -> 1.125 note + rest;
   steady halves -> 0 rests. Server restarted; page loads with no JS errors.
   Committed agent:, pushed.
+- Ver 38: TONIC & SCALE GUIDE + FULL-INTERVAL KEYBOARD + WIDER STAVES. The old
+  "intended key" dropdown is gone. The keysec now has **tonic** + **scale**
+  selectors (12 pitch classes x ~27 scales in optgroups: diatonic modes,
+  minor & classical, pentatonic & blues, bebop, symmetric & exotic). Picking a
+  tonic+scale:
+  - **Shades** every key whose pitch class is in the scale (green-teal
+    gradient; all octaves) and gold-tinges the tonic key.
+  - **Labels EVERY key** with its interval from the tonic (`1, m2, M2, m3, M3,
+    P4, TT, P5, m6, M6, m7, M7`). In-scale keys get a bright label (#123c2c on
+    white / straw on black); **out-of-scale keys get a dimmed grey-blue-green
+    label** (`#6e837b` white, `#5d746b` black) with the `.outscale` class, no
+    shading — so the whole tonal map is visible while the scale still pops.
+  - **Drives the stave key signature**: `StavePanel.setKey(PC_MAJOR[(tonicPc +
+    sig) % 12])` where each scale def has a `sig` (offset to its parent MAJOR
+    key); scales with `sig:null` (whole-tone, diminished, chromatic, exotic)
+    set the stave to "auto" (no signature). Detected-key auto-path unchanged
+    (inert). Verified in-browser via Playwright (no keyboard): G minor-pent
+    shades pcs {7,10,0,2,5}, 88 labels, 37 inscale / 51 outscale; G4 tonic gold
+    "1", G#4 dim "m2" with transparent bg; zero JS errors.
+  - **Bigger keyboard**: key sizes moved to CSS vars — whites 30px x 190px,
+    blacks 19px x 120px (was 15x110 / 9x66); `buildPiano()` reads --key-w /
+    --key-bw from getComputedStyle so JS+CSS can't drift; octave labels moved
+    to the top of each key.
+  - **Staves stretched to keyboard width**: stave.js previously fixed the
+    renderer at 800px / line at 720px. Now `canvasWidth()` sizes off the #piano
+    keybed (+ X_START + right pad) and `staveWidth()` = that minus margins, so
+    each stave line is EXACTLY the same width as the on-screen keyboard
+    (verified: line 1580px = keybed 1580px). `notesPerLine()` scales the
+    per-line note cap (~45px/notehead) so wider lines hold more notes instead of
+    wrapping early with gaps. Fallback path keeps 800px if the piano isn't
+    measured yet.
+  Committed agent:, pushed.

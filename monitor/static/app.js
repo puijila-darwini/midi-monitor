@@ -47,6 +47,104 @@ window.tempoBpm = 0;  // expose on window for durationToVexFlow
     return "C" + (Math.floor(note / 12) - 1);
   }
 
+  // ---- tonic & scale guide -------------------------------------------------
+  // Interval labels shown on each in-scale key, indexed by pitch class relative
+  // to the tonic. Repeats every octave.
+  var INTERVAL_NAMES = ["1", "m2", "M2", "m3", "M3", "P4", "TT", "P5",
+                        "m6", "M6", "m7", "M7"];
+  // When the tonic root, stays "1" (labels are per-PC, not per-interval-class).
+
+  // Scale definitions. semis = scale tones as semitone offsets from the tonic
+  // (all measured from 0). sig = mode offset from tonic to the parent MAJOR
+  // key's tonic (for driving the stave key signature); null = no standard key
+  // signature (whole-tone/diminished/etc.) -> stave shows none.
+  var SCALES = {
+    "major":           { semis: [0, 2, 4, 5, 7, 9, 11],       sig: 0 },
+    "dorian":          { semis: [0, 2, 3, 5, 7, 9, 10],       sig: -2 },
+    "phrygian":        { semis: [0, 1, 3, 5, 7, 8, 10],       sig: -4 },
+    "lydian":          { semis: [0, 2, 4, 6, 7, 9, 11],       sig: -5 },
+    "mixolydian":      { semis: [0, 2, 4, 5, 7, 9, 10],       sig: -7 },
+    "aeolian":         { semis: [0, 2, 3, 5, 7, 8, 10],       sig: -9 },
+    "locrian":         { semis: [0, 1, 3, 5, 6, 8, 10],       sig: -11 },
+    "harmonic_minor":  { semis: [0, 2, 3, 5, 7, 8, 11],       sig: -9 },
+    "melodic_minor":   { semis: [0, 2, 3, 5, 7, 9, 11],       sig: -9 },
+    "harmonic_major":  { semis: [0, 2, 4, 5, 7, 8, 11],       sig: 0 },
+    "double_harmonic": { semis: [0, 1, 4, 5, 7, 8, 11],       sig: null },
+    "phrygian_dominant": { semis: [0, 1, 4, 5, 7, 8, 10],     sig: null },
+    "lydian_dominant": { semis: [0, 2, 4, 6, 7, 9, 10],       sig: null },
+    "super_locrian":   { semis: [0, 1, 3, 4, 6, 8, 10],       sig: null },
+    "major_pent":      { semis: [0, 2, 4, 7, 9],              sig: 0 },
+    "minor_pent":      { semis: [0, 3, 5, 7, 10],             sig: -9 },
+    "blues":           { semis: [0, 3, 5, 6, 7, 10],          sig: -9 },
+    "hirajoshi":       { semis: [0, 2, 3, 7, 8],              sig: null },
+    "bebop_major":     { semis: [0, 2, 4, 5, 7, 8, 9, 11],    sig: 0 },
+    "bebop_dominant":  { semis: [0, 2, 4, 5, 7, 9, 10, 11],   sig: -7 },
+    "bebop_dorian":    { semis: [0, 2, 3, 4, 5, 7, 9, 10],    sig: -2 },
+    "whole_tone":      { semis: [0, 2, 4, 6, 8, 10],          sig: null },
+    "diminished":      { semis: [0, 2, 3, 5, 6, 8, 9, 11],    sig: null },
+    "chromatic":       { semis: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], sig: null },
+    "enigmatic":       { semis: [0, 1, 4, 6, 8, 10, 11],      sig: null },
+    "hungarian_minor": { semis: [0, 2, 3, 6, 7, 8, 11],       sig: null },
+    "neapolitan_major": { semis: [0, 1, 3, 5, 7, 9, 11],      sig: null },
+    "neapolitan_minor": { semis: [0, 1, 3, 5, 7, 8, 11],      sig: null }
+  };
+  // Conventional major-key spelling per pitch class (mirrors stave.js).
+  var PC_MAJOR = ["C", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
+
+  function clearScaleGuide() {
+    for (var n = LOW; n <= HIGH; n++) {
+      var k = keyEls[n];
+      if (!k) continue;
+      k.classList.remove("inscale", "tonic", "outscale");
+      var lab = k.querySelector(".ivl-label");
+      if (lab) lab.parentNode.removeChild(lab);
+    }
+  }
+
+  // Shade every key whose pitch class is in the chosen scale (in all octaves),
+  // gold-tinge the tonic key, and label EVERY key with its interval from the
+  // tonic (m2, M2, m3, ...) so the full tonal map is visible. In-scale keys
+  // get shaded + a bright label; out-of-scale keys keep a dimmed label only.
+  // Also drives the stave key signature when the scale maps to one (diatonic
+  // modes, pentatonics); "off" or exotic scales clear it.
+  function applyScaleGuide(tonic, scaleId) {
+    clearScaleGuide();
+    var tonicPc = parseInt(tonic, 10);
+    var def = SCALES[scaleId];
+    if (isNaN(tonicPc) || tonicPc < 0 || tonicPc > 11 || !def) {
+      if (window.StavePanel) StavePanel.setKey("auto");
+      return;
+    }
+    // inScale[pc] = true when that absolute pitch class is in the scale under
+    // this tonic (pc 0..11). dist() = semitones up from the tonic to the note.
+    var inScale = [];
+    def.semis.forEach(function (s) { inScale[(s + tonicPc) % 12] = true; });
+    for (var n = LOW; n <= HIGH; n++) {
+      var pc = n % 12;
+      var dist = (pc - tonicPc + 12) % 12;
+      var k = keyEls[n];
+      if (!k) continue;
+      var lab = document.createElement("span");
+      lab.className = "ivl-label";
+      lab.textContent = INTERVAL_NAMES[dist];
+      k.appendChild(lab);
+      if (inScale[pc]) {
+        k.classList.add("inscale");
+        if (dist === 0) k.classList.add("tonic");
+      } else {
+        k.classList.add("outscale");
+      }
+    }
+    if (window.StavePanel) {
+      if (def.sig === null) {
+        StavePanel.setKey("auto");
+      } else {
+        var parent = (((tonicPc + def.sig) % 12) + 12) % 12;
+        StavePanel.setKey(PC_MAJOR[parent]);
+      }
+    }
+  }
+
   // number of white keys strictly below `note`
   function whiteBelow(note) {
     var count = 0;
@@ -58,7 +156,10 @@ window.tempoBpm = 0;  // expose on window for durationToVexFlow
 
   function buildPiano() {
     var piano = document.getElementById("piano");
-    var KW = 15, BW = 9;
+    // Key dimensions come from the CSS vars so JS and CSS can't drift apart.
+    var cs = getComputedStyle(document.documentElement);
+    var KW = parseFloat(cs.getPropertyValue("--key-w")) || 30;
+    var BW = parseFloat(cs.getPropertyValue("--key-bw")) || 19;
     for (var n = LOW; n <= HIGH; n++) {
       var k = document.createElement("div");
       k.className = "key " + (isBlack(n) ? "black" : "white");
@@ -325,13 +426,18 @@ window.tempoBpm = 0;  // expose on window for durationToVexFlow
     });
   })();
 
-  // Intended-key selector (manual key input)
+  // Tonic + scale selector: shade in-scale keys + interval labels on the piano,
+  // and drive the stave key signature when the scale maps to one.
   (function () {
-    var sel = document.getElementById("intended-key");
-    if (!sel) return;
-    sel.addEventListener("change", function () {
-      if (window.StavePanel) StavePanel.setKey(sel.value);
-    });
+    var tonicSel = document.getElementById("key-tonic");
+    var scaleSel = document.getElementById("key-scale");
+    if (!tonicSel || !scaleSel) return;
+    // selectors always hold a valid value (-1 initially = guide off)
+    function current() {
+      applyScaleGuide(tonicSel.value, scaleSel.value);
+    }
+    tonicSel.addEventListener("change", current);
+    scaleSel.addEventListener("change", current);
   })();
 
   // Intervals toggle

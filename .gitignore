@@ -23,3 +23,7 @@ Thumbs.db
 
 # Logs in general — exclude runtime logs from any parent dir (*log)
 *.log
+
+# Playwright browser automation snapshots & screenshots (ephemeral test artifacts)
+.playwright-mcp/
+*.png
