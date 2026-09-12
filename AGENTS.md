@@ -482,3 +482,24 @@ Superseded by the `monitor/` web app, kept for reference:
   rest; set_recording OFF flushes); frontend rest glyph renders (U+E4E5 quarter
   rest visible in SVG); REC/STOP toggle flips `recording` class and syncs with
   `/api/state` on reload. Committed agent:, pushed.
+- Ver 37b bugfix: REST SPAM (a lot of small rests). Root cause: the pause
+  threshold was gap > 1.5x the player's prevailing beat, so ordinary phrasing
+  and timing jitter (a "longer" quarter, dotted values, a brief breath) split
+  the note into a quarter + a 16th/eighth rest. Also the note was clamped to
+  exactly one prevailing beat even when the player actually HELD the key longer
+  (e.g. a held 1.2s note became 0.5 + rest). Fix in `_split_note_rest`:
+  (a) threshold raised to gap > 2x the prevailing beat — everything <= 2 beats
+  of spacing (dotted notes, halves, jitter) is normal phrasing and keeps its
+  full time-to-next value, no rest; rests only appear for true pauses.
+  (b) note_dur = min(gap, max(prev, snapped held)) so an actually-held-longer
+  note keeps that value instead of being clamped to one beat.
+  (c) rest slivers are floored at one grid step (sub-grid silence merges back
+  into the note). _robust_gap_duration already excludes rests so the median
+  beat can't be dragged down by the rests themselves. Also hardened
+  monitor.sh: it now probes for a flask-capable python3 explicitly (the shell
+  PATH can point at a venv with no flask, which made 'restart' fail with
+  ModuleNotFoundError) — verified restart works. Verified via drive tests:
+  1.5x and ~2x gaps -> 0 rests; 6-beat pause -> one 2.5s rest; jittery
+  quarters 0.48-0.72 -> 0 rests; held-1.2s pause -> 1.125 note + rest;
+  steady halves -> 0 rests. Server restarted; page loads with no JS errors.
+  Committed agent:, pushed.

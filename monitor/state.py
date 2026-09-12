@@ -204,20 +204,24 @@ class State:
         """Decide how a gap-to-next-onset splits into a note value and a rest.
 
         The gap is the time-to-next-onset (what the note would stretch to). A rest
-        is introduced only for a true PAUSE, i.e. a gap that is much longer than
-        the player's prevailing beat AND the key was actually released early.
-        Three signals:
+        is introduced only for a true PAUSE — a gap well beyond the player's
+        prevailing beat (>2x). Everything inside 2x is normal phrasing (dotted
+        values, half notes between quarters, simple timing jitter) and keeps its
+        full value as a single note.
 
+        Signals:
           - sustained: key held through (almost) the whole gap -> the whole gap is
             one note (a genuinely long/held note), no rest.
-          - even rhythm: gap within ~1.5x of the player's prevailing beat -> note
-            value = full gap (Ver 34 time-to-next), no rest. Otherwise short
-            staccato strikes in even playing would be demoted to 16ths + rests.
-          - pause: gap is long AND the key was released early -> the note keeps
-            its prevailing value and the SILENCE becomes a rest.
+          - even/phrased rhythm: gap <= 2x the player's prevailing beat -> note
+            value = full gap (Ver 34 time-to-next), no rest, whatever the held
+            time. On a keyboard nearly all strikes are released early
+            (staccato-ish), so held time canNOT be the discriminator — capping at
+            1.5x the beat used to demote dotted/half phrasing into tiny rests.
+          - pause: gap > 2x the prevailing beat AND the key was released early ->
+            the note keeps its prevailing value and the SILENCE becomes a rest.
 
         Returns (note_dur, rest_dur) in seconds. rest_dur is None when there is
-        no silence to show (unknown held time, sustained, or even rhythm).
+        no silence to show (unknown held time, sustained, or normal phrasing).
         """
         # No held info yet (chord member still down) -> note covers the whole gap.
         if held is None or held <= 0:
@@ -226,22 +230,38 @@ class State:
         if held >= gap * 0.9:
             return gap, None
         prev = self._robust_gap_duration()
-        if prev is None:
-            # No history yet (leading note of the phrase): assume the player's
-            # beat is one beat at the current tempo so a leading note followed
-            # by a pause still splits cleanly instead of stretching.
+        if prev is None or prev <= 0:
+            # No history yet (leading note of the phrase): fall back to one beat
+            # at the current tempo.
             if self.tempo_bpm > 0:
                 prev = 60.0 / self.tempo_bpm
             else:
                 return gap, None
-        if gap <= prev * 1.5:
-            # Even rhythm (within phrasing tolerance) -> full gap, no rest.
+        if gap <= prev * 2.0:
+            # Normal phrasing (up to ~2 beats: dotted, halves, jitter) -> the
+            # whole gap is the note's value, no rest.
             return gap, None
-        # Pause: the note keeps its prevailing value, the surplus is silence.
-        note_dur = min(prev, gap)
+        # True pause: the note keeps its prevailing value (snapped held time as a
+        # floor — if they actually held longer than one prevailing beat, honour
+        # the longer value), and the surplus is silence.
+        held_snapped = held
+        if self.tempo_bpm > 0:
+            beat = 60.0 / self.tempo_bpm
+            grid = beat / max(1, self.quantization_divisions)
+            if grid > 0:
+                held_snapped = max(1, int(round(held / grid))) * grid
+        note_dur = min(gap, max(prev, held_snapped))
         rest_dur = gap - note_dur
+        # Avoid emitting a meaningless sliver of a rest (grid-sized or smaller).
         if rest_dur <= 0:
             return note_dur, None
+        # Floor the rest at one grid step at the current grid (else sub-unit rests
+        # would render as 32nd slivers on the stave).
+        if self.tempo_bpm > 0:
+            beat = 60.0 / self.tempo_bpm
+            grid = beat / max(1, self.quantization_divisions)
+            if grid > 0 and rest_dur < grid:
+                return gap, None
         return note_dur, rest_dur
 
     def take_quantized_events(self):

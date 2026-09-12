@@ -17,6 +17,26 @@ LOG="$HOME/ai/tmp/keymon/monitor.log"
 SUPLOG="$HOME/ai/tmp/keymon/supervisor.log"
 PORT=5050
 
+# A flask-capable python3. The ambient PATH sometimes points at a venv that has
+# no flask (e.g. ~/ai/vox/.venv), so probe for one explicitly.
+pick_python() {
+  local p
+  for p in "$HOME/ai/midi/.venv/bin/python3" "$HOME/ai/midi/venv/bin/python3" \
+           /usr/bin/python3 /usr/local/bin/python3 python3; do
+    if command -v "$p" >/dev/null 2>&1 && "$p" -c 'import flask' >/dev/null 2>&1; then
+      echo "$p"
+      return 0
+    fi
+  done
+  echo ""
+}
+
+PY="$(pick_python)"
+if [ -z "$PY" ]; then
+  echo "No flask-capable python3 found (looked in venvs + system paths)." >&2
+  exit 1
+fi
+
 mkdir -p "$HOME/ai/tmp/keymon"
 
 is_running() {
@@ -49,7 +69,7 @@ cmd_start() {
   fi
   rm -f "$PIDFILE"
   cd "$DIR" || exit 1
-  nohup python3 -m monitor.app >> "$LOG" 2>&1 &
+  nohup "$PY" -m monitor.app >> "$LOG" 2>&1 &
   echo $! > "$PIDFILE"
   # Supervisor: health-checks /api/state and restarts the server if capture
   # dies or the server goes unreachable. Not started with the server so an
@@ -57,7 +77,7 @@ cmd_start() {
   # try to restart a deliberately-stopped server.
   if ! sup_running; then
     rm -f "$SUPPIDFILE"
-    nohup python3 -m monitor.supervisor "$DIR/monitor.sh" >> "$SUPLOG" 2>&1 &
+    nohup "$PY" -m monitor.supervisor "$DIR/monitor.sh" >> "$SUPLOG" 2>&1 &
     echo $! > "$SUPPIDFILE"
   fi
   sleep 2
