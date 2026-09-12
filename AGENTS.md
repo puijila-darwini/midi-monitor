@@ -535,3 +535,30 @@ Superseded by the `monitor/` web app, kept for reference:
     wrapping early with gaps. Fallback path keeps 800px if the piano isn't
     measured yet.
   Committed agent:, pushed.
+- Ver 39: PLAYING COLOUR PRECEDENCE REORDERED + MINI-STAVE LAST-CHORD BOX + TONIC
+  CATCH BUTTON. (a) `.active` keys now take precedence over `.inscale`/`.tonic`
+  shades in CSS (guide shades no longer overwrite the played-note purple glow).
+  (b) The keysec's mini stave now also hosts the `#flash` banner above it,
+  formatted tighter (.mini-row, wrap at 560px). (c) NEW "♬ catch" button
+  (`#listen-tonic`): listen for a few notes and auto-set the tonic + scale.
+  `triadFromPcs()` in app.js maps a heard triad to a scale ("major"/"aeolian");
+  playback notes are buffered (unique pcs) with a 900ms `resolveCatchBuffer`
+  timer; a flash event with >=3 notes resolves a triad immediately; catch
+  auto-unarms after 15s. Verified: catch guitar chord -> G major, C maj -> major,
+  A min -> aeolian; single note -> tonic only (scale unchanged); sus4 -> no
+  scale (honest gap). No residual state on unarm.
+- Ver 40: TWO REGRESSION BUGFIXES. (a) NOTESTREAM CRASH — `_robust_gap_duration()`
+  in state.py divides by `self.tempo_bpm` (beat = 60/bpm); when tempo_bpm is
+  still 0 (tempo needs ~6+ onsets but quantized history already exists) it threw
+  ZeroDivisionError from the rest-notation path, crashing the capture thread and
+  making the page look frozen. Added `if self.tempo_bpm <= 0: return None` guard
+  (verified all tempo divisions guarded). Also capture.py now terminates its own
+  aseqdump subprocess via new `_stop()` (used in `__iter__` finally) so a crashed
+  capture loop no longer leaks zombie aseqdumps. (b) CATCH NOT FIRING FOR SINGLE
+  NOTES — app.js line ~312 assigned `catchLast = ev.name` but `catchLast` was
+  never declared; in `"use strict"` this throws ReferenceError on EVERY note
+  event, aborting before `resolveCatchBuffer`'s setTimeout was scheduled. Chords
+  still worked because they resolve via the flash path (which calls resolveCatch
+  directly). Deleted the dead `catchLast` line; single-note catch now sets tonic
+  only (verified live: C4 -> tonic C, scale untouched).
+  Committed agent:, pushed.
