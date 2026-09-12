@@ -123,6 +123,8 @@
               </optgroup>
             </select>
           </label>
+          <button id="listen-tonic" class="listen-btn" type="button"
+                  title="Wait for the next note you play and set the tonic to it">&#9834; catch</button>
         </div>
       </section>
 
@@ -148,15 +150,15 @@
         <div id="stave" class="stave"></div>
       </section>
 
-      <section id="mini-stave-wrap" class="mini-stave-wrap card">
-        <div class="mini-stave-head">
-          <span class="mini-stave-title">last chord / interval</span>
-        </div>
-        <div id="mini-stave" class="mini-stave"></div>
-        <div id="mini-stave-label" class="mini-stave-label"></div>
-      </section>
-
-      <section id="flash" class="flash"></section>
+      <div class="mini-row">
+        <section id="mini-stave-wrap" class="mini-stave-wrap card">
+          <div class="mini-stave-head">
+            <span class="mini-stave-title">last chord / interval</span>
+          </div>
+          <div id="flash" class="flash"></div>
+          <div id="mini-stave" class="mini-stave"></div>
+        </section>
+      </div>
     </main>
   </div>
 

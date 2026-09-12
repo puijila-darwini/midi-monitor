@@ -126,6 +126,9 @@ class State:
         """A musically-plausible duration for flushing the trailing pending note:
         the median of recent quantized durations (the player's local beat), or the
         snapped held duration if nothing is known yet."""
+        if self.tempo_bpm <= 0:
+            # No grid to snap to yet (tempo not estimated / no user tempo set).
+            return None
         if self.quantized_notes:
             recent = [n["duration"] for n in self.quantized_notes[-8:]
                       if not n.get("rest")]

@@ -35,6 +35,74 @@ window.tempoBpm = 0;  // expose on window for durationToVexFlow
   // Default True = continuous behavior (notes flow onto the stave as before);
   // the user uses STOP to end/freeze a take.
   var recording = true;
+  // Catch-tonic (the &#9834; catch button). When armed, the next note(s) from
+  // the keyboard set the tonic. If those notes form a major or minor triad, an
+  // appropriate scale (major / natural minor) is set too. Notes are buffered
+  // briefly so a blocked chord resolves as a chord, not as its first note.
+  var tonicListenActive = false;
+  var catchBuffer = [];
+  var catchLastAt = 0;
+  var catchTimer = null;
+
+  // Given the unique pitch classes heard, return {root, quality} if they form
+  // a major or minor triad (any octave/voicing), else null.
+  function triadFromPcs(pcs) {
+    var set = {};
+    pcs.forEach(function (p) { set[p] = true; });
+    var checks = [
+      { m3: 4, p5: 7, q: "major" },
+      { m3: 3, p5: 7, q: "minor" }
+    ];
+    for (var i = 0; i < pcs.length; i++) {
+      var r = pcs[i];
+      for (var j = 0; j < checks.length; j++) {
+        if (set[(r + checks[j].m3) % 12] && set[(r + checks[j].p5) % 12]) {
+          return { root: r, quality: checks[j].q };
+        }
+      }
+    }
+    return null;
+  }
+
+  function resetCatch() {
+    tonicListenActive = false;
+    catchBuffer = [];
+    if (catchTimer) { clearTimeout(catchTimer); catchTimer = null; }
+    var lst = document.getElementById("listen-tonic");
+    if (lst) { lst.classList.remove("listening"); lst.textContent = "\u266a catch"; }
+  }
+
+  // Apply an armed-catch resolution: set the tonic select (and the scale select
+  // when a scale is known), re-render the guide, announce on the feed and reset
+  // the button. Used by both the single-note fallback and the triad path.
+  function resolveCatch(rootPc, scaleId) {
+    tonicListenActive = false;
+    var tonSel = document.getElementById("key-tonic");
+    var scSel = document.getElementById("key-scale");
+    if (tonSel && scSel) {
+      tonSel.value = String(rootPc);
+      if (scaleId) scSel.value = scaleId;
+      applyScaleGuide(tonSel.value, scSel.value);
+    }
+    var lst = document.getElementById("listen-tonic");
+    if (lst) { lst.classList.remove("listening"); lst.textContent = "\u266a catch"; }
+    var nm = (PC_MAJOR[rootPc] || "?");
+    addFeed('<span class="time">' + fmtTime(catchLastAt) +
+      '</span>  TONIC set to ' + nm + (scaleId ? " &middot; " + scaleId + " scale" : ""), "tonic");
+  }
+
+  // Fallback path: no chord flash arrived, so resolve from whatever notes were
+  // buffered (last note wins if they don't form a triad).
+  function resolveCatchBuffer() {
+    if (catchTimer) { clearTimeout(catchTimer); catchTimer = null; }
+    if (!tonicListenActive) return;
+    var triad = catchBuffer.length ? triadFromPcs(catchBuffer) : null;
+    var root = triad ? triad.root : (catchBuffer.length ? catchBuffer[catchBuffer.length - 1] : null);
+    if (root === null) { resetCatch(); return; }
+    var scaleId = triad ? (triad.quality === "major" ? "major" : "aeolian") : null;
+    resolveCatch(root, scaleId);
+    catchBuffer = [];
+  }
 
   function setTimesig(numer, denom) {
     timesig.numer = numer;
@@ -237,6 +305,14 @@ window.tempoBpm = 0;  // expose on window for durationToVexFlow
         addFeed('<span class="time">' + fmtTime(ev.time) +
           '</span>  <span class="nmark">' + ev.name + "</span>  on (v" +
           ev.velocity + ")", "on");
+        if (tonicListenActive) {
+          // Buffer the pitch class heard; keep (re)starting a short window so
+          // a chord blocked over a few key-strikes collects into one buffer.
+          if (catchBuffer.indexOf(ev.note % 12) < 0) catchBuffer.push(ev.note % 12);
+          catchLastAt = ev.time;
+          if (catchTimer) clearTimeout(catchTimer);
+          catchTimer = setTimeout(resolveCatchBuffer, 900);
+        }
         // NOTE: do NOT push to stave here. The quantized_note event for the
         // same note adds it to the stave (with its proper duration). Pushing
         // here too renders each note twice (duplicate notes on the stave).
@@ -261,8 +337,32 @@ window.tempoBpm = 0;  // expose on window for durationToVexFlow
           addFeed('<span class="time">' + fmtTime(ev.time) +
             '</span>  INTERVAL  ' + ev.label, "interval");
         }
-        if (recording && window.StavePanel && ev.notes) {
-          StavePanel.push(ev.kind, ev.notes, ev.time, ev.label);
+        // If the catch button is armed and the analyser names a chord or
+        // arpeggio, use it right away: a major/minor triad sets the tonic AND
+        // an appropriate scale (major / natural minor). Solving here beats the
+        // buffer fallback and gives a correct root for chords/inversions.
+        if (tonicListenActive && (ev.kind === "chord" || ev.kind === "arpeggio") &&
+            ev.notes && ev.notes.length >= 3) {
+          var pcsArr = [];
+          ev.notes.forEach(function (n) {
+            var p = n % 12;
+            if (pcsArr.indexOf(p) < 0) pcsArr.push(p);
+          });
+          var tri = triadFromPcs(pcsArr);
+          if (tri) {
+            if (catchTimer) { clearTimeout(catchTimer); catchTimer = null; }
+            catchBuffer = [];
+            catchLastAt = ev.time;
+            var scId = tri.quality === "major" ? "major" : "aeolian";
+            resolveCatch(tri.root, scId);
+          }
+        }
+        // Decoupled from record/stop: the mini "last chord / interval" stave
+        // always shows the latest flash, mid-take or not. The main stave push
+        // stays recording-gated.
+        if (window.StavePanel && ev.notes && ev.notes.length) {
+          StavePanel.pushMini(ev.kind, ev.notes, ev.time, ev.label);
+          if (recording) StavePanel.push(ev.kind, ev.notes, ev.time, ev.label);
         }
         break;
       case "program_change":
@@ -427,17 +527,38 @@ window.tempoBpm = 0;  // expose on window for durationToVexFlow
   })();
 
   // Tonic + scale selector: shade in-scale keys + interval labels on the piano,
-  // and drive the stave key signature when the scale maps to one.
+  // and drive the stave key signature when the scale maps to one. The "catch"
+  // button arms a one-shot listener: the next note (or chord) heard from the
+  // keyboard becomes the tonic — a major/minor triad also sets a fitting scale.
   (function () {
     var tonicSel = document.getElementById("key-tonic");
     var scaleSel = document.getElementById("key-scale");
-    if (!tonicSel || !scaleSel) return;
-    // selectors always hold a valid value (-1 initially = guide off)
-    function current() {
-      applyScaleGuide(tonicSel.value, scaleSel.value);
+    if (tonicSel && scaleSel) {
+      // selectors always hold a valid value (-1 initially = guide off)
+      function current() {
+        applyScaleGuide(tonicSel.value, scaleSel.value);
+      }
+      tonicSel.addEventListener("change", current);
+      scaleSel.addEventListener("change", current);
+
+      var lst = document.getElementById("listen-tonic");
+      var armTimer = null;
+      function unarm() {
+        tonicListenActive = false;
+        lst.classList.remove("listening");
+        lst.textContent = "\u266a catch";
+        clearTimeout(armTimer);
+        armTimer = null;
+      }
+      lst.addEventListener("click", function () {
+        if (tonicListenActive) { unarm(); return; }
+        tonicListenActive = true;
+        catchBuffer = [];
+        lst.classList.add("listening");
+        lst.textContent = "\u266a listen\u2026";
+        armTimer = setTimeout(unarm, 15000);
+      });
     }
-    tonicSel.addEventListener("change", current);
-    scaleSel.addEventListener("change", current);
   })();
 
   // Intervals toggle

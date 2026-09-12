@@ -202,6 +202,20 @@ class Capture:
     def _now(self):
         return time.time() - self._start
 
+    def _stop(self):
+        """Terminate the aseqdump subprocess if alive, so a crashed/restarted
+        capture thread never leaves orphaned readers holding the MIDI port."""
+        proc, self._proc = self._proc, None
+        if proc is not None:
+            try:
+                proc.terminate()
+                try:
+                    proc.wait(timeout=1.0)
+                except Exception:
+                    proc.kill()
+            except Exception:
+                pass
+
     def get_program(self):
         """Return current program number (0-127)."""
         return self._program
@@ -211,6 +225,13 @@ class Capture:
         return self.VOICE_BY_PROGRAM.get((self._bank, self._program), "Unknown")
 
     def __iter__(self):
+        try:
+            yield from self._iterate()
+        finally:
+            self._stop()
+            self._reported_online = False
+
+    def _iterate(self):
         self._reported_online = False
         while True:
             self._ensure_online()

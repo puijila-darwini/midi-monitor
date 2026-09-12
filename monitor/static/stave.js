@@ -154,7 +154,7 @@
     if (miniRenderer) return;
     if (!miniDiv) return;
     miniRenderer = new VF.Renderer(miniDiv, VF.Renderer.Backends.SVG);
-    miniRenderer.resize(400, 150);
+    miniRenderer.resize(560, 150);
     miniContext = miniRenderer.getContext();
   }
 
@@ -523,7 +523,7 @@ function addAccidentals(staveNote, midiNotes) {
     var sn = new VF.StaveNote({ keys: keys, duration: dur });
     addAccidentals(sn, lastChordEvent.notes);
 
-    var stave = new VF.Stave(10, 20, 360);
+    var stave = new VF.Stave(10, 20, 520);
     stave.addClef("treble");
     stave.setContext(miniContext);
     stave.draw();
@@ -537,15 +537,26 @@ function addAccidentals(staveNote, midiNotes) {
     formatter.format([voice], stave.getNoteEndX());
     voice.draw(miniContext, stave);
 
-    // Add label below the mini stave
-    var labelEl = document.getElementById("mini-stave-label");
-    if (labelEl && lastChordEvent.label) {
-      labelEl.textContent = lastChordEvent.label;
-    } else if (labelEl) {
-      labelEl.textContent = "";
-    }
+    if (miniRenderer) miniRenderer.resize(560, 130);
+  }
 
-    if (miniRenderer) miniRenderer.resize(400, 100);
+  // Update ONLY the mini "last chord / interval" stave. Independent of the
+  // record/stop system: the mini stave always reflects the most recent
+  // chord/arpeggio/interval, even mid-take or while not recording.
+  function pushMini(kind, notes, time, label) {
+    if (!notes || !notes.length) return;
+    var sortedNotes = notes.slice().sort(function (a, b) { return a - b; });
+
+    if (kind === "chord" || kind === "arpeggio" || kind === "interval") {
+      lastChordEvent = { kind: kind, notes: sortedNotes, time: time, label: label };
+      redrawMini();
+    } else if (kind !== "rest") {
+      // Single notes only fill an empty mini stave.
+      if (!lastChordEvent) {
+        lastChordEvent = { kind: kind, notes: sortedNotes, time: time };
+        redrawMini();
+      }
+    }
   }
 
   function push(kind, notes, time, label, duration) {
@@ -563,15 +574,11 @@ function addAccidentals(staveNote, midiNotes) {
       });
 
       // Update mini stave for chord/arpeggio/interval
-      lastChordEvent = { kind: kind, notes: sortedNotes, time: time, label: label };
-      redrawMini();
+      pushMini(kind, sortedNotes, time, label);
     } else if (kind !== "rest") {
       // For single notes, don't update mini stave unless it's empty. Rests
       // never touch the mini stave (no noteheads to show).
-      if (!lastChordEvent) {
-        lastChordEvent = { kind: kind, notes: sortedNotes, time: time };
-        redrawMini();
-      }
+      pushMini(kind, sortedNotes, time, undefined);
     }
 
     var ev = {
@@ -639,6 +646,7 @@ function addAccidentals(staveNote, midiNotes) {
 
   window.StavePanel = {
     push: push,
+    pushMini: pushMini,
     clear: clear,
     redraw: redraw,
     setSpellingKey: setSpellingKey,
