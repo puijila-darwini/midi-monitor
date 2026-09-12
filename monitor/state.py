@@ -70,10 +70,18 @@ class State:
         # A chord member (same grid tick) joins the group; a new tick finalizes the
         # previous group with duration = gap (in grid steps) to this onset.
         self._pending = None
-        self._emit_queue = []  # finalized quantized notes waiting for app.py to emit
+        self._emit_queue = []  # finalized quantized notes (or rests) waiting for app.py to emit
         self._emit_lock = threading.RLock()  # guard _emit_queue/_pending across threads
         self._flush_daemon = None
         self._flush_stop = threading.Event()
+
+        # Recording take: when True the frontend accumulates a fresh take on the
+        # stave. Default True = continuous behavior (notes flow onto the stave as
+        # they always did); STOP switches it off once the user wants to freeze a
+        # take. Starting a take clears the quantized buffer (fresh piece); stopping
+        # flushes the trailing pending note immediately so the last played note is
+        # captured.
+        self.recording = True
 
     def _start_flush_daemon(self):
         """Daemon that flushes the trailing pending note so the last note of a
@@ -119,20 +127,29 @@ class State:
         the median of recent quantized durations (the player's local beat), or the
         snapped held duration if nothing is known yet."""
         if self.quantized_notes:
-            recent = [n["duration"] for n in self.quantized_notes[-8:]]
-            med = statistics.median(recent)
-            beat = 60.0 / self.tempo_bpm
-            grid = beat / max(1, self.quantization_divisions)
-            if grid > 0:
-                steps = max(1, int(round(med / grid)))
-                return steps * grid
+            recent = [n["duration"] for n in self.quantized_notes[-8:]
+                      if not n.get("rest")]
+            if recent:
+                med = statistics.median(recent)
+                beat = 60.0 / self.tempo_bpm
+                grid = beat / max(1, self.quantization_divisions)
+                if grid > 0:
+                    steps = max(1, int(round(med / grid)))
+                    return steps * grid
         return None
 
     def _finalize_pending(self, duration):
         """Append quantized notes for the pending group with the given duration,
         push them to the emit queue, and clear the pending group.
+
         duration == None -> fall back to the snapped held duration of the group's
-        first note (purely for the degenerate no-tempo case)."""
+        first note (purely for the degenerate no-tempo case).
+
+        Rests: when a gap to the next onset is LONGER than the group's own held
+        time implies, the excess is emitted as a quantized REST so recording
+        shows empty beats instead of stretching the note value. Held time is only
+        used to decide how much of the gap is the note vs the silence.
+        """
         p = self._pending
         if p is None:
             return []
@@ -140,8 +157,11 @@ class State:
         if duration is None:
             return []
         new = []
-        for note, vel in p["notes"]:
-            off = p["qon"] + duration
+
+        held = self._group_held(p)
+        note_dur, rest_dur = self._split_note_rest(duration, held)
+        for note, vel, rel in p["notes"]:
+            off = p["qon"] + note_dur
             qn = {
                 "note": note,
                 "on_time": p["qon"],
@@ -151,11 +171,78 @@ class State:
             }
             self.quantized_notes.append(qn)
             new.append(qn)
+        if rest_dur is not None and rest_dur > 0:
+            rstart = p["qon"] + note_dur
+            rn = {
+                "note": None,
+                "on_time": rstart,
+                "off_time": rstart + rest_dur,
+                "velocity": 0,
+                "duration": rest_dur,
+                "rest": True,
+            }
+            self.quantized_notes.append(rn)
+            new.append(rn)
         if len(self.quantized_notes) > self.max_quantized_notes:
             self.quantized_notes = self.quantized_notes[-self.max_quantized_notes:]
         with self._emit_lock:
             self._emit_queue.extend(new)
         return new
+
+    def _group_held(self, p):
+        """Longest held duration among the pending group's members (seconds),
+        or None if no release has arrived yet."""
+        held = None
+        for note, vel, rel in p["notes"]:
+            if rel is not None:
+                h = rel - p["qon"]
+                if held is None or h > held:
+                    held = h
+        return held
+
+    def _split_note_rest(self, gap, held):
+        """Decide how a gap-to-next-onset splits into a note value and a rest.
+
+        The gap is the time-to-next-onset (what the note would stretch to). A rest
+        is introduced only for a true PAUSE, i.e. a gap that is much longer than
+        the player's prevailing beat AND the key was actually released early.
+        Three signals:
+
+          - sustained: key held through (almost) the whole gap -> the whole gap is
+            one note (a genuinely long/held note), no rest.
+          - even rhythm: gap within ~1.5x of the player's prevailing beat -> note
+            value = full gap (Ver 34 time-to-next), no rest. Otherwise short
+            staccato strikes in even playing would be demoted to 16ths + rests.
+          - pause: gap is long AND the key was released early -> the note keeps
+            its prevailing value and the SILENCE becomes a rest.
+
+        Returns (note_dur, rest_dur) in seconds. rest_dur is None when there is
+        no silence to show (unknown held time, sustained, or even rhythm).
+        """
+        # No held info yet (chord member still down) -> note covers the whole gap.
+        if held is None or held <= 0:
+            return gap, None
+        # They held the note for most of the gap -> sustained, no rest.
+        if held >= gap * 0.9:
+            return gap, None
+        prev = self._robust_gap_duration()
+        if prev is None:
+            # No history yet (leading note of the phrase): assume the player's
+            # beat is one beat at the current tempo so a leading note followed
+            # by a pause still splits cleanly instead of stretching.
+            if self.tempo_bpm > 0:
+                prev = 60.0 / self.tempo_bpm
+            else:
+                return gap, None
+        if gap <= prev * 1.5:
+            # Even rhythm (within phrasing tolerance) -> full gap, no rest.
+            return gap, None
+        # Pause: the note keeps its prevailing value, the surplus is silence.
+        note_dur = min(prev, gap)
+        rest_dur = gap - note_dur
+        if rest_dur <= 0:
+            return note_dur, None
+        return note_dur, rest_dur
 
     def take_quantized_events(self):
         """Drain and return the finalized quantized notes not yet emitted via SSE."""
@@ -373,7 +460,7 @@ class State:
                     # Simultaneous onset (chord member, or a clock-skew tie): join the
                     # group. The whole group's duration is set when the NEXT distinct
                     # onset arrives.
-                    self._pending["notes"].append((event["note"], event["velocity"]))
+                    self._pending["notes"].append((event["note"], event["velocity"], None))
                     return
             if finalize is not None:
                 self._finalize_pending(finalize)
@@ -383,7 +470,10 @@ class State:
                 # flush daemon needs the same time base as time.time() to age the
                 # note correctly (capture-relative qon would ALWAYS look ancient).
                 "wall_t": time.time(),
-                "notes": [(event["note"], event["velocity"])],
+                # members are (note, velocity, release_time) where release_time is
+                # set when the key's note_off arrives (used to split long gaps
+                # into note-value + rest when the player pauses between notes).
+                "notes": [(event["note"], event["velocity"], None)],
             }
 
     def _quantize_time(self, time_value, now):
@@ -421,6 +511,15 @@ class State:
             self.recent.append(
                 {"type": "note_off", "note": event["note"], "time": event["time"]}
             )
+            # Record the release on the open pending group (if the note is still
+            # pending here) so held time is known when the group is finalized.
+            if self._pending is not None:
+                for i, m in enumerate(self._pending["notes"]):
+                    if m[0] == event["note"]:
+                        notes = list(self._pending["notes"])
+                        notes[i] = (m[0], m[1], event["time"])
+                        self._pending["notes"] = notes
+                        break
             if prev is not None:
                 duration = event["time"] - prev["on_time"]
                 self.melody.append(
@@ -453,6 +552,34 @@ class State:
         if old != self.quantization_divisions:
             self.version += 1
 
+    def set_recording(self, flag):
+        """Start or stop a recording take.
+
+        Starting a take clears pending quantized state (fresh piece) and sets
+        self.recording = True. Stopping a take flushes the trailing pending note
+        immediately (so the last-played note is captured rather than hanging) and
+        sets self.recording = False.
+
+        The frontend only accumulates events into its stave while recording, which
+        is what gives the explicit REC/STOP behaviour: press REC to clear the stave
+        and start a take, press STOP to freeze it (flushing the final note).
+        """
+        flag = bool(flag)
+        if flag:
+            with self._emit_lock:
+                self._pending = None
+                self.quantized_notes = []
+                self.held = {}
+                self.version += 1
+            self.recording = True
+        else:
+            with self._emit_lock:
+                # Flush the trailing pending note so STOP captures the last attack.
+                if self._pending is not None and self.tempo_bpm > 0:
+                    self._finalize_pending(self._robust_gap_duration())
+                self.version += 1
+            self.recording = False
+
     def snapshot(self):
         return {
             "online": self.online,
@@ -468,5 +595,6 @@ class State:
             "user_tempo_bpm": round(self.user_tempo_bpm, 1) if self.user_tempo_bpm > 0 else 0,
             "quantization_divisions": self.quantization_divisions,
             "time_signature": self.time_signature,
+            "recording": self.recording,
             "quantized_notes": self.quantized_notes[-100:],  # last 100 quantized notes
         }

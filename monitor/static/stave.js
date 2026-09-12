@@ -165,6 +165,12 @@
       // Convert duration to VexFlow duration
       dur = durationToVexFlow(ev.duration);
     }
+    if (ev.kind === "rest") {
+      // A rest: VexFlow rest duration = the note duration string plus "r"
+      // (e.g. "q" -> "qr", "8d" -> "8dr"; full/whole = "wr"). Keys are a
+      // dummy slot; VexFlow renders the rest glyph on the staff directly.
+      return [new VF.StaveNote({ keys: ["b/4"], duration: dur + "r" })];
+    }
     if (ev.kind === "chord" || ev.kind === "arpeggio" || ev.kind === "interval") {
       var keys = ev.notes.map(midiToKey);
       var sn = new VF.StaveNote({ keys: keys, duration: dur });
@@ -480,8 +486,8 @@ function addAccidentals(staveNote, midiNotes) {
     if (!heads.length) return;
     var start = Math.max(0, heads.length - count);
     for (var i = start; i < heads.length; i++) {
-      heads[i].setAttribute('fill', '#4c9aff');
-      heads[i].setAttribute('stroke', '#4c9aff');
+      heads[i].setAttribute('fill', '#9B7ED8');
+      heads[i].setAttribute('stroke', '#9B7ED8');
     }
   }
 
@@ -522,8 +528,9 @@ function addAccidentals(staveNote, midiNotes) {
   }
 
   function push(kind, notes, time, label, duration) {
-    if (!notes || !notes.length) return;
-    var sortedNotes = notes.slice().sort(function (a, b) { return a - b; });
+    // Rests are empty note events; skip the "no notes" bail for them.
+    if (kind !== "rest" && (!notes || !notes.length)) return;
+    var sortedNotes = notes ? notes.slice().sort(function (a, b) { return a - b; }) : [];
 
     // If this is a chord/arpeggio, suppress recent individual notes
     if (kind === "chord" || kind === "arpeggio") {
@@ -537,8 +544,9 @@ function addAccidentals(staveNote, midiNotes) {
       // Update mini stave for chord/arpeggio/interval
       lastChordEvent = { kind: kind, notes: sortedNotes, time: time, label: label };
       redrawMini();
-    } else {
-      // For single notes, don't update mini stave unless it's empty
+    } else if (kind !== "rest") {
+      // For single notes, don't update mini stave unless it's empty. Rests
+      // never touch the mini stave (no noteheads to show).
       if (!lastChordEvent) {
         lastChordEvent = { kind: kind, notes: sortedNotes, time: time };
         redrawMini();
@@ -553,6 +561,34 @@ function addAccidentals(staveNote, midiNotes) {
     };
     if (duration !== undefined) ev.duration = duration;
     events.push(ev);
+    if (events.length > MAX_EVENTS) events.shift();
+    redraw();
+  }
+
+  // Fill out the remainder of the final measure with a trailing rest (used
+  // when the user presses STOP: the take freezes, and the unfinished bar shows
+  // its empty beats as a rest instead of ending abruptly on a downbeat edge).
+  // Requires a tempo + time signature so bar boundaries are computable.
+  function finishTake() {
+    if (!window.tempoBpm || window.tempoBpm <= 0) return;
+    if (!events.length) return;
+    var barSeconds = (60.0 / window.tempoBpm) * tsNumer;
+    if (barSeconds <= 0) return;
+    var t0 = events[0].time || 0;
+    var last = events[events.length - 1];
+    var lastEnd = (typeof last.time === "number" ? last.time : t0) + (last.duration || 0);
+    // Next barline after the final note's end.
+    var barsElapsed = Math.floor((lastEnd - t0) / barSeconds);
+    var nextBarStart = t0 + (barsElapsed + 1) * barSeconds;
+    var gap = nextBarStart - lastEnd;
+    // Don't add a tiny sliver of a rest (sub-16th at current tempo) or when the
+    // take already ends exactly on the barline.
+    var gridStep = (60.0 / window.tempoBpm) / 4;
+    if (gap <= gridStep) return;
+    // The rest occupies the empty beats of the final bar: start time = end of
+    // the last event (assignBars computes the bar from time), duration = gap.
+    var rid = Date.now() + Math.random() + 1;
+    events.push({ kind: "rest", notes: [], time: lastEnd, duration: gap, id: rid });
     if (events.length > MAX_EVENTS) events.shift();
     redraw();
   }
@@ -589,6 +625,7 @@ function addAccidentals(staveNote, midiNotes) {
     setKey: setKey,
     setTimeSignature: setTimeSignature,
     backspace: backspace,
+    finishTake: finishTake,
   };
 
   // Editing: Backspace deletes the last note on the stave. Guard so it never

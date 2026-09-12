@@ -433,3 +433,52 @@ Superseded by the `monitor/` web app, kept for reference:
     pushed. Lesson: for VexFlow 5 measure rendering use BarNote tickables in one voice, not
     multiple fixed-width VF.Stave boxes — separate-stave composition detaches notes from bars
     in this build.
+
+- Ver 36: NILOTIC GREENHOUSE THEME. Rewrote monitor UI to follow the canonical "Nilotic
+    Greenhouse" pattern (see ~/ai/knowledge/aesthetics.md — the pattern is the DEFINITION,
+    copied from police/dashboard/app.py). Full triadic palette on the page: phthalo green
+    (--phthalo #0B1F1A, deep #071310 page bg, card #143329, border #2A4F44, muted #8FB3A3),
+    straw yellow (#F2E6A6 headings/flash-chord, soft #E8D9A0, gold #D4C47A ok/up),
+    royal purple (#6B3FA0 interactive, bright #8A5BC7 bad/offline, soft #9B7ED8 interval/
+    arpeggio highlight). Concrete pattern vocabulary applied: pinstriped + radial-glow
+    phthalo-deep body bg; .card wedge borders (4px royal top+left, 2px straw-gold bottom,
+    radius 2px, octagon clip-path, fractal-noise overlay, inset straw hairline, hover warms
+    to royal-soft); pill card-heads (border-radius 999px, straw border on #08110E, straw->gold
+    gradient "tab" nub via ::after on feed/keysec/mini heads); brass-sole buttons (royal
+    border, 2px straw bottom edge, translucent royal fill, hover solid royal, :active pressed
+    down 1px); chevron badges/status (clip-path arrow ends, royal-soft border, straw text;
+    status online=straw-gold, offline=royal-bright per semantics gold=up/purple=down); striped
+    sunrise header band (royal->straw->phthalo gradient, 6px straw left edge) with chevron
+    badge "walled garden · 127.0.0.1:5050". Stave stays on CREDAM paper (#F0E8C8 = --text
+    cream) bordered straw-gold + royal left, so black VexFlow notes stay readable inside the
+    dark cards (the "sheet in the garden"). Piano white keys cream-ivory (#EFE7C8), black keys
+    deep phthalo, active notes royal-soft/bright purple glow (interactive=royal). Feed coloring
+    remapped: chord=straw, arpeggio=straw-soft, interval=royal-soft, program_change=straw-gold
+    italic, off/statusline=muted. Stave highlightLastNoteheads color changed #4c9aff ->
+    #9B7ED8 royal-soft (was hardcoded blue in stave.js). Verified live in browser: zero JS
+    errors, all computed styles correct (phthalo-deep bg, pinstripes, card wedge/clip/radius,
+    pill head radius+bg, badge chevron, straw text on h1/tempo/feed-chord, cream stave paper).
+    Server restarted.
+- Ver 37: EXPLICIT RECORD/STOP + REST NOTATION. Rests are now visible on the
+  notation stave when pauses occur between notes. Backend: `State._split_note_rest()`
+  compares the held release time against the inter-onset gap and the player's
+  prevailing beat (median of recent durations) to decide whether the gap is a
+  genuine pause (→ note value keeps prevailing, rest fills remainder) vs normal
+  phrasing (full gap, no rest). `release` timestamps tracked in the pending group;
+  `note_off` updates them. `_finalize_pending` now produces both NOTE and REST
+  quantized entries (`rest:True`). `_robust_gap_duration` skips rests so tempo
+  median is unaffected by silence. `POST /api/record` {recording:bool} toggles a
+  `State.recording` flag (default True for continuity): OFF flushes the trailing
+  pending note immediately, ON clears the quantized buffer for a fresh take; both
+  paths drain + publish quantized events and return them in the response body so
+  the client can render the tail without an SSE race. Frontend: `#record-btn`
+  (● rec / ■ stop) toggle in `.stave-controls`; client `recording` state gates ALL
+  `StavePanel.push` calls (notes, chords, arps, intervals, rests). `quantized_rest`
+  SSE events push rest StaveNotes (durationToVexFlow + "r" suffix, keys ["b/4"]).
+  `StavePanel.finishTake()` computes the next barline after the last event and fills
+  the remainder with a rest, called when STOP is pressed. Button + dot CSS via
+  `.record-btn`/`.record-dot` classes (recording ↔ not). Verified: backend unit
+  tests (even-phrase quarters → 0 rests; 2s pause → 1.5s rest; sustained held → no
+  rest; set_recording OFF flushes); frontend rest glyph renders (U+E4E5 quarter
+  rest visible in SVG); REC/STOP toggle flips `recording` class and syncs with
+  `/api/state` on reload. Committed agent:, pushed.

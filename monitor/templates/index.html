@@ -9,7 +9,10 @@
 </head>
 <body>
   <header>
-    <h1>Key&middot;Monitor</h1>
+    <div class="head-title">
+      <h1>Key&middot;Monitor</h1>
+      <span class="badge">walled garden &middot; 127.0.0.1:5050</span>
+    </div>
     <div id="status" class="status offline">keyboard offline</div>
     <div id="instrument" class="instrument">instrument: &mdash;</div>
     <div id="tempo" class="tempo">
@@ -39,7 +42,7 @@
 
   <div class="main-grid">
     <!-- Left sidebar: Note stream feed -->
-    <aside id="feed-sidebar" class="feed-sidebar">
+    <aside id="feed-sidebar" class="feed-sidebar card">
       <div class="feed-header">
         <span class="feed-label">note stream</span>
         <button id="feed-clear" class="key-reset" type="button" title="Clear note stream">clear</button>
@@ -49,11 +52,11 @@
 
     <!-- Right main area -->
     <main id="main-area" class="main-area">
-      <section id="piano-wrap">
+      <section id="piano-wrap" class="card">
         <div id="piano"></div>
       </section>
 
-      <section id="key" class="keysec">
+      <section id="key" class="keysec card">
         <div class="keysec-head">
           <span class="keysec-title">intended key</span>
         </div>
@@ -101,7 +104,7 @@
         </div>
       </section>
 
-      <section id="stave-wrap" class="stave-wrap">
+      <section id="stave-wrap" class="stave-wrap card">
         <div class="stave-head">
           <span class="stave-title">notation</span>
           <div class="stave-controls">
@@ -113,13 +116,17 @@
               </select>
             </label>
             <label><input type="checkbox" id="show-intervals"> intervals</label>
+            <button id="record-btn" class="record-btn" type="button"
+                    title="REC: clear the stave and start a new take. STOP: freeze the take and flush the last note.">
+              <span id="record-btn-dot" class="record-dot"></span><span id="record-btn-label">rec</span>
+            </button>
             <button id="stave-clear" class="key-reset" type="button" title="Clear notation">clear</button>
           </div>
         </div>
         <div id="stave" class="stave"></div>
       </section>
 
-      <section id="mini-stave-wrap" class="mini-stave-wrap">
+      <section id="mini-stave-wrap" class="mini-stave-wrap card">
         <div class="mini-stave-head">
           <span class="mini-stave-title">last chord / interval</span>
         </div>

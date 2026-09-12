@@ -139,12 +139,20 @@ def _run_capture():
         # (idle keyboard still lets Queued = clock/active-sensing events through,
         # so a flushed note reaches SSE without waiting for the next note_on).
         for qn in state.take_quantized_events():
-            hub.publish({"type": "quantized_note", "note": qn["note"],
-                         "on_time": qn["on_time"], "off_time": qn["off_time"],
-                         "duration": qn["duration"], "velocity": qn["velocity"],
-                         "tempo": state.tempo_bpm,
-                         "detected_bpm": state.detected_bpm,
-                         "user_tempo_bpm": state.user_tempo_bpm})
+            if qn.get("rest"):
+                hub.publish({"type": "quantized_rest",
+                             "on_time": qn["on_time"], "off_time": qn["off_time"],
+                             "duration": qn["duration"],
+                             "tempo": state.tempo_bpm,
+                             "detected_bpm": state.detected_bpm,
+                             "user_tempo_bpm": state.user_tempo_bpm})
+            else:
+                hub.publish({"type": "quantized_note", "note": qn["note"],
+                             "on_time": qn["on_time"], "off_time": qn["off_time"],
+                             "duration": qn["duration"], "velocity": qn["velocity"],
+                             "tempo": state.tempo_bpm,
+                             "detected_bpm": state.detected_bpm,
+                             "user_tempo_bpm": state.user_tempo_bpm})
 
 
 @app.route("/")
@@ -175,6 +183,36 @@ def api_quant():
         return jsonify({"ok": False, "error": "divisions must be an int"}), 400
     state.set_quantization(divisions)
     return jsonify({"ok": True, "divisions": state.quantization_divisions})
+
+
+@app.route("/api/record", methods=["POST"])
+def api_record():
+    """Start or stop a recording take. Stopping flushes the trailing pending
+    note immediately (so the last-played note is captured) and drains any
+    quantized events (note + rest) it produced into the SSE stream. The same
+    events are returned in the response body so the requesting client can render
+    the trailing note even though it just switched its SSE gate off."""
+    body = request.get_json(silent=True) or {}
+    state.set_recording(bool(body.get("recording", False)))
+    out_events = []
+    for qn in state.take_quantized_events():
+        if qn.get("rest"):
+            ev = {"type": "quantized_rest",
+                  "on_time": qn["on_time"], "off_time": qn["off_time"],
+                  "duration": qn["duration"],
+                  "tempo": state.tempo_bpm,
+                  "detected_bpm": state.detected_bpm,
+                  "user_tempo_bpm": state.user_tempo_bpm}
+        else:
+            ev = {"type": "quantized_note", "note": qn["note"],
+                  "on_time": qn["on_time"], "off_time": qn["off_time"],
+                  "duration": qn["duration"], "velocity": qn["velocity"],
+                  "tempo": state.tempo_bpm,
+                  "detected_bpm": state.detected_bpm,
+                  "user_tempo_bpm": state.user_tempo_bpm}
+        hub.publish(ev)
+        out_events.append(ev)
+    return jsonify({"ok": True, "recording": state.recording, "events": out_events})
 
 
 @app.route("/api/tempo", methods=["POST"])

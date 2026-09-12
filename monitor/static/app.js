@@ -28,6 +28,14 @@ window.tempoBpm = 0;  // expose on window for durationToVexFlow
   var timesig = { numer: 4, denom: 4 };
   window.timesig = timesig;
 
+  // Recording gate: the notation stave accumulates ONLY while recording. REC
+  // clears the stave and starts a fresh take (backend reset too); STOP freezes
+  // the take (backend flushes the trailing note; the stave fills the final bar
+  // with a rest). The feed/piano/flash banner stay live either way.
+  // Default True = continuous behavior (notes flow onto the stave as before);
+  // the user uses STOP to end/freeze a take.
+  var recording = true;
+
   function setTimesig(numer, denom) {
     timesig.numer = numer;
     timesig.denom = denom;
@@ -152,7 +160,7 @@ window.tempoBpm = 0;  // expose on window for durationToVexFlow
           addFeed('<span class="time">' + fmtTime(ev.time) +
             '</span>  INTERVAL  ' + ev.label, "interval");
         }
-        if (window.StavePanel && ev.notes) {
+        if (recording && window.StavePanel && ev.notes) {
           StavePanel.push(ev.kind, ev.notes, ev.time, ev.label);
         }
         break;
@@ -168,7 +176,17 @@ window.tempoBpm = 0;  // expose on window for durationToVexFlow
           window.tempoBpm = ev.tempo;
         }
         renderTempo(ev.tempo, ev.detected_bpm || 0, ev.user_tempo_bpm || 0);
-        if (window.StavePanel) StavePanel.push("note", [ev.note], ev.off_time, null, ev.duration);
+        if (recording && window.StavePanel) StavePanel.push("note", [ev.note], ev.off_time, null, ev.duration);
+        break;
+      case "quantized_rest":
+        // A rest emitted by the recorder when a pause is detected between
+        // notes (backend splits long gaps into note value + silence).
+        if (ev.tempo) {
+          tempoBpm = ev.tempo;
+          window.tempoBpm = ev.tempo;
+        }
+        renderTempo(ev.tempo, ev.detected_bpm || 0, ev.user_tempo_bpm || 0);
+        if (recording && window.StavePanel) StavePanel.push("rest", [], ev.off_time, null, ev.duration);
         break;
       case "capture_error":
         showCaptureError(ev.message, ev.restarts);
@@ -239,6 +257,63 @@ window.tempoBpm = 0;  // expose on window for durationToVexFlow
     btn.addEventListener("click", function () {
       if (window.StavePanel) StavePanel.clear();
     });
+  })();
+
+  // REC/STOP take control. REC clears the stave + resets the backend take and
+  // starts accumulating; STOP ends the take: the backend flushes the trailing
+  // pending note (returned in the response so the client can render it through
+  // the recording gate), and the stave fills the final bar with a trailing rest.
+  (function () {
+    var btn = document.getElementById("record-btn");
+    var dot = document.getElementById("record-btn-dot");
+    var lab = document.getElementById("record-btn-label");
+    if (!btn) return;
+
+    function renderButton() {
+      btn.classList.toggle("recording", recording);
+      if (dot) dot.classList.toggle("recording", recording);
+      if (lab) lab.textContent = recording ? "stop" : "rec";
+    }
+
+    btn.addEventListener("click", function () {
+      var next = !recording;
+      // Flip the gate synchronously: once STOP is issued, the SSE stream for
+      // the flushed trailing note must be skipped (we render it from the POST
+      // response body instead) — otherwise it would double-render.
+      recording = next;
+      renderButton();
+      if (next) {
+        // Start: backend clears the take, frontend clears the stave.
+        if (window.StavePanel) window.StavePanel.clear();
+      }
+      fetch("/api/record", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ recording: next })
+      }).then(function (r) { return r.json(); })
+        .then(function (res) {
+          recording = !!res.recording;
+          renderButton();
+          if (!recording && res.events && res.events.length && window.StavePanel) {
+            // STOP flushed the trailing pending note (returned as both
+            // quantized_note and quantized_rest) — render them here because the
+            // recording gate is now off and the SSE stream would skip them.
+            res.events.forEach(function (ev) {
+              if (ev.type === "quantized_note") {
+                StavePanel.push("note", [ev.note], ev.off_time, null, ev.duration);
+              } else if (ev.type === "quantized_rest") {
+                StavePanel.push("rest", [], ev.off_time, null, ev.duration);
+              }
+            });
+          }
+          if (!recording && window.StavePanel) {
+            StavePanel.finishTake(); // fill the final bar with a trailing rest
+          }
+        })
+        .catch(function () { /* transient */ });
+    });
+
+    renderButton();
   })();
 
   (function () {
@@ -461,6 +536,18 @@ window.tempoBpm = 0;  // expose on window for durationToVexFlow
         }
       }
       seedHeld(s.held || []);
+      // Sync the REC/STOP control with the backend recording state.
+      if (typeof s.recording !== "undefined" && s.recording !== recording) {
+        recording = !!s.recording;
+        var rbtn = document.getElementById("record-btn");
+        var dot = document.getElementById("record-btn-dot");
+        var lab = document.getElementById("record-btn-label");
+        if (rbtn) {
+          rbtn.classList.toggle("recording", recording);
+          if (dot) dot.classList.toggle("recording", recording);
+          if (lab) lab.textContent = recording ? "stop" : "rec";
+        }
+      }
     })
     .catch(function () { /* server just started? SSE will catch us up */ });
 
