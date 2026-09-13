@@ -665,3 +665,26 @@ Superseded by the `monitor/` web app, kept for reference:
   22 picks total, sorted alphabetically, scrollHeight 1091 > clientHeight
   (scrolls), topIsTooltip true via elementFromPoint, console 0 errors.
   Committed agent:, pushed.
+- Ver 45: TOOLTIP = FULL DROPDOWN LIST (SAME ORDER) + EXPLICIT GAPS. The
+  tooltip's ordering is now the DROPDOWN's ordering, by construction:
+  `buildCatchTooltip()` walks the live `#key-scale` <select> DOM (optgroups +
+  options) and emits one row per scale-group in the menu's exact sequence
+  (Diatonic modes / Minor & classical / Pentatonic & blues / Bebop / Symmetric
+  & exotic) — so if the menu is ever reordered, the tooltip follows
+  automatically. Scale labels also come from the <option> text (single source
+  of truth; old `CATCH_MODE_NAMES` map deleted). Every one of the 28 dropdown
+  scales now appears. Scales that have a catch chord show their picks
+  (`CATCH_SHAPES` grouped by target scale + bare-triads faked in for
+  major/aeolian so those two don't read as gaps); scales with NO catch chord
+  render a muted `∅ no chord shape yet — pick it from the menu` row, and the
+  footer defines that marker ("these are scale colours, not chord colours").
+  GAP-FILLING IS DELIBERATELY DEFERRED: no new shapes added yet — the 10 gap
+  scales (melodic_minor, double_harmonic, bebop_major, bebop_dominant,
+  bebop_dorian, chromatic, enigmatic, hungarian_minor, neapolitan_major,
+  neapolitan_minor) are acknowledged but not yet catchable; user will review
+  gap-filling separately. CSS: `.tt-group` header rows (straw-gold uppercase)
+  + `.none` (muted italic gap note). Removed `.cshape/.civ/.cmode` leftovers.
+  Verified: 34 table rows = 28 scale rows + 5 group headers + 1 header row,
+  10 `.none` gaps in the right places, order matches menu exactly, topIsTooltip
+  still true, scrollHeight 1530 > clientHeight 808, 0 console errors. Server
+  restarted. Committed agent:, pushed.

@@ -177,68 +177,60 @@ window.tempoBpm = 0;  // expose on window for durationToVexFlow
     return null;
   }
 
-  // Pretty scale names for the catch-table tooltip.
-  var CATCH_MODE_NAMES = {
-    "blues": "Blues",
-    "whole_tone": "Whole tone",
-    "hirajoshi": "Hirajoshi",
-    "minor_pent": "Minor pentatonic",
-    "major_pent": "Major pentatonic",
-    "super_locrian": "Super Locrian (altered)",
-    "phrygian": "Phrygian",
-    "dorian": "Dorian",
-    "phrygian_dominant": "Phrygian dominant",
-    "lydian_dominant": "Lydian dominant",
-    "mixolydian": "Mixolydian",
-    "diminished": "Diminished",
-    "locrian": "Locrian",
-    "harmonic_minor": "Harmonic minor",
-    "lydian": "Lydian",
-    "harmonic_major": "Harmonic major",
-    "major": "Major (Ionian)",
-    "aeolian": "Natural minor"
-  };
-
-  // Build the "how does catch work" tooltip from the CATCH_SHAPES data itself,
-  // so the docs can never drift from the table they describe.
+  // Build the "how does catch work" tooltip by WALKING THE ACTUAL SCALE
+  // DROPDOWN, so it lists every scale the guide offers, in exactly the menu's
+  // grouping and order (and can never drift from it). Scales with a catch shape
+  // get "play this chord"; scales with no catch chord show an explicit gap.
+  // (Filling those gaps with new shapes is deliberately deferred.)
 function buildCatchTooltip() {
     var tip = document.getElementById("catch-tooltip");
     if (!tip) return;
-    // Group the shapes BY TARGET SCALE so the table reads "want this scale ->
-    // play this chord" (the data-entry direction) rather than the reverse.
-    var groups = {}; // mode id -> { scale, note, play: [{name, tones}] }
+    var scaleSel = document.getElementById("key-scale");
+    if (!scaleSel) return;
+
+    // chord picks grouped by target scale (from the matching table)
+    var byMode = {}; // mode id -> [{name, tones, n}]
     CATCH_SHAPES.forEach(function (s) {
-      if (!groups[s.mode]) {
-        groups[s.mode] = {
-          scale: CATCH_MODE_NAMES[s.mode] || s.mode,
-          note: CATCH_NOTES[s.mode] || "",
-          play: []
-        };
-      }
-      groups[s.mode].play.push({
+      (byMode[s.mode] = byMode[s.mode] || []).push({
         name: s.name,
         tones: s.semis.map(function (semi) { return INTERVAL_NAMES[semi]; }).join(" "),
         n: s.semis.length
       });
     });
-    // Simpler chords first within a scale (fewest tones), then in table order;
-    // scales sorted by name so the row you want is easy to find.
-    var order = Object.keys(groups).sort(function (a, b) {
-      return groups[a].scale.localeCompare(groups[b].scale);
-    });
+    // The two vanilla modes are caught by a bare triad rather than a shape in
+    // CATCH_SHAPES; document them so they don't read as gaps.
+    byMode["major"]   = [{ name: "maj triad", tones: "1 M3 P5", n: 3 }];
+    byMode["aeolian"] = [{ name: "min triad", tones: "1 m3 P5", n: 3 }];
+
+    function scaleLabel(id) {
+      var opt = scaleSel.querySelector('option[value="' + id + '"]');
+      return opt ? opt.textContent : id;
+    }
+
     var rows = "";
-    for (var g = 0; g < order.length; g++) {
-      var grp = groups[order[g]];
-      grp.play.sort(function (a, b) {
-        return a.n - b.n;
-      });
-      var picks = grp.play.map(function (p) {
-        return '<span class="pick"><b>' + p.name + "</b>" +
-               '<span class="tones">(' + p.tones + ")</span></span>";
-      }).join("");
-      rows += '<tr><td class="cscale"><b>' + grp.scale + "</b>" +
-              (grp.note ? "<i>" + grp.note + "</i>" : "") + "</td>" +
-              '<td class="cplay">' + picks + "</td></tr>";
+    var groups = scaleSel.querySelectorAll("optgroup");
+    for (var gi = 0; gi < groups.length; gi++) {
+      rows += '<tr class="tt-group"><td colspan="2">' + groups[gi].label + "</td></tr>";
+      var opts = groups[gi].querySelectorAll("option");
+      for (var oi = 0; oi < opts.length; oi++) {
+        var id = opts[oi].value;
+        if (id === "-1") continue;
+        var picks = (byMode[id] || []).slice().sort(function (a, b) { return a.n - b.n; });
+        var playHtml;
+        if (picks.length) {
+          playHtml = picks.map(function (p) {
+            return '<span class="pick"><b>' + p.name + "</b>" +
+                   '<span class="tones">(' + p.tones + ")</span></span>";
+          }).join("");
+        } else {
+          playHtml = '<span class="none">&#8709; no chord shape yet &mdash; ' +
+                     "pick it from the menu</span>";
+        }
+        var note = CATCH_NOTES[id] || "";
+        rows += '<tr><td class="cscale"><b>' + scaleLabel(id) + "</b>" +
+                (note ? "<i>" + note + "</i>" : "") + "</td>" +
+                '<td class="cplay">' + playHtml + "</td></tr>";
+      }
     }
     tip.innerHTML =
       '<div class="tt-head">want this scale &#8594; play this chord</div>' +
@@ -250,6 +242,10 @@ function buildCatchTooltip() {
       "of the chords in that scale&rsquo;s row (any octave, any order — only the " +
       "pitch classes matter). Tones in brackets are semitone distances from the " +
       "root: <b>m2</b> = flat 2nd, <b>M3</b> = major 3rd, <b>TT</b> = tritone, etc." +
+      "<br><br>" +
+      "<b>\u2205 no chord shape yet</b> = that scale can not be caught by any " +
+      "chord in the current table; choose it from the drop-down for now " +
+      "(these are scale colours, not chord colours)." +
       "<br><br>" +
       "Vanilla major / natural-minor only come from a bare triad. " +
       "Aug triad &#8594; whole tone. A lone note sets just the tonic. " +

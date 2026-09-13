@@ -590,6 +590,14 @@ li.tonic {
 }
 .catch-tooltip th.c-scale-col { width: 46%; }
 .catch-tooltip th.c-play-col  { width: 54%; }
+.catch-tooltip tr.tt-group td {
+  padding: 8px 6px 3px;
+  color: var(--straw-gold);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-size: 9px;
+  border-bottom: 1px solid rgba(212, 196, 122, 0.35);
+}
 .catch-tooltip td {
   padding: 3px 6px;
   border-bottom: 1px solid rgba(42, 79, 68, 0.6);
@@ -624,6 +632,10 @@ li.tonic {
   color: var(--text);
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
   margin-left: 2px;
+}
+.catch-tooltip td.cplay .none {
+  color: var(--muted);
+  font-style: italic;
 }
 .catch-tooltip .tt-foot {
   margin-top: 7px;
