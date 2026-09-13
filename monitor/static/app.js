@@ -65,27 +65,46 @@ window.tempoBpm = 0;  // expose on window for durationToVexFlow
     return null;
   }
 
-  // Seventh-chord qualities. Each maps to a NON-vanilla mode on purpose: plain
-  // ionian ("major") and aeolian ("minor") are only selectable by playing a bare
-  // triad (see chordFromPcs). The 4th chord tone is what disambiguates modes.
-  var CHORD_QUALITIES = [
-    { name: "maj7",  semis: [0, 4, 7, 11], mode: "lydian" },
-    { name: "dom7",  semis: [0, 4, 7, 10], mode: "mixolydian" },
-    { name: "m7",    semis: [0, 3, 7, 10], mode: "dorian" },
-    { name: "mMaj7", semis: [0, 3, 7, 11], mode: "harmonic_minor" },
-    { name: "m6",    semis: [0, 3, 7, 9],  mode: "dorian" },
-    { name: "m7b5",  semis: [0, 3, 6, 10], mode: "locrian" },
-    { name: "dim7",  semis: [0, 3, 6, 9],  mode: "diminished" },
-    { name: "maj6",  semis: [0, 4, 7, 9],  mode: "mixolydian" }
+  // Chord -> scale "catch" shapes. This is DATA ENTRY (tell the guide which
+  // key/mode you mean), not key detection, so mappings are generous:
+  //   - each shape lists its semitone offsets from the root;
+  //   - a played pc-set matches when it CONTAINS the shape (subset-tolerant);
+  //   - LONGER shapes win (more specific), then table order;
+  //   - vanilla ionian ("major") / aeolian ("minor") are still ONLY selectable
+  //     by a bare triad (that's the honest core; see chordFromPcs);
+  //   - aug triad -> whole-tone is the one special 3-note case.
+  var CATCH_SHAPES = [
+    // -- 6 tones ---------------------------------------------------------
+    { name: "blues",           semis: [0, 3, 5, 6, 7, 10],    mode: "blues" },
+    { name: "whole_tone",      semis: [0, 2, 4, 6, 8, 10],    mode: "whole_tone" },
+    // -- 5 tones ---------------------------------------------------------
+    { name: "hirajoshi",       semis: [0, 2, 3, 7, 8],        mode: "hirajoshi" },
+    { name: "minor_pent",      semis: [0, 3, 5, 7, 10],       mode: "minor_pent" },
+    { name: "add9",            semis: [0, 2, 4, 7, 9],        mode: "major_pent" },
+    { name: "7alt",            semis: [0, 1, 4, 6, 10],       mode: "super_locrian" },
+    { name: "m7b9",            semis: [0, 1, 3, 7, 10],       mode: "phrygian" },
+    { name: "m9",              semis: [0, 2, 3, 7, 10],       mode: "dorian" },
+    { name: "7b9",             semis: [0, 1, 4, 7, 10],       mode: "phrygian_dominant" },
+    { name: "7#11",            semis: [0, 4, 6, 7, 10],       mode: "lydian_dominant" },
+    { name: "dom9",            semis: [0, 2, 4, 7, 10],       mode: "mixolydian" },
+    // -- 4 tones ---------------------------------------------------------
+    { name: "dim7",            semis: [0, 3, 6, 9],           mode: "diminished" },
+    { name: "m7b5",            semis: [0, 3, 6, 10],          mode: "locrian" },
+    { name: "mMaj7",           semis: [0, 3, 7, 11],          mode: "harmonic_minor" },
+    { name: "m6",              semis: [0, 3, 7, 9],           mode: "dorian" },
+    { name: "m7",              semis: [0, 3, 7, 10],          mode: "dorian" },
+    { name: "maj7",            semis: [0, 4, 7, 11],          mode: "lydian" },
+    { name: "maj6",            semis: [0, 4, 7, 9],           mode: "mixolydian" },
+    { name: "dom7",            semis: [0, 4, 7, 10],          mode: "mixolydian" },
+    { name: "7#5",             semis: [0, 4, 8, 10],          mode: "whole_tone" },
+    { name: "mMaj7#5",         semis: [0, 4, 8, 11],          mode: "harmonic_major" },
+    { name: "7b5",             semis: [0, 4, 6, 10],          mode: "lydian_dominant" }
   ];
 
-  // Generalize triadFromPcs to also recognise seventh chords (4 unique pcs) and
-  // augmented triads. Quality -> mode mapping is complete, so:
-  //   - 7th chord  -> its non-vanilla mode (maj7->lydian, m7->dorian, ...)
-  //   - bare triad -> major / aeolian   (vanilla reachable ONLY here)
-  //   - aug triad  -> whole-tone
-  //   - anything else (sus, 5+, odd sets) -> null (honest: tonic only)
-  // bassPc (optional) = expected root, used to break symmetric-chord ambiguity.
+  // Match a played pc-set against the catch shapes (subset-tolerant, longer
+  // first) and return {root, quality, mode}, or null -> callers fall back to
+  // tonic-only. bassPc (optional) breaks symmetric-chord root ambiguity.
+  // Order in the table is priority within equal length.
   function chordFromPcs(pcs, bassPc) {
     var set = {};
     var uniq = [];
@@ -93,26 +112,30 @@ window.tempoBpm = 0;  // expose on window for durationToVexFlow
       p = p % 12;
       if (!set[p]) { set[p] = true; uniq.push(p); }
     });
-    if (uniq.length === 4) {
-      var cands = [];
-      CHORD_QUALITIES.forEach(function (q) {
+    if (uniq.length >= 4) {
+      // Collect EVERY (shape, root) match so the best one wins globally.
+      // Many chords are subsets of themselves under a different root (Cm6 is
+      // Am7b5, Cadd9 is A minor pent, ...), so we can't return early per shape.
+      var best = null;
+      for (var s = 0; s < CATCH_SHAPES.length; s++) {
+        var shape = CATCH_SHAPES[s];
+        if (shape.semis.length > uniq.length) continue;
         for (var i = 0; i < uniq.length; i++) {
           var r = uniq[i];
           var ok = true;
-          for (var j = 0; j < q.semis.length; j++) {
-            if (!set[(r + q.semis[j]) % 12]) { ok = false; break; }
+          for (var j = 0; j < shape.semis.length; j++) {
+            if (!set[(r + shape.semis[j]) % 12]) { ok = false; break; }
           }
-          if (ok) cands.push({ root: r, quality: q.name, mode: q.mode });
+          if (!ok) continue;
+          var cand = { root: r, quality: shape.name, mode: shape.mode };
+          var score = 0;
+          if (typeof bassPc === "number" && r === bassPc) score += 1000;
+          score += shape.semis.length * 10;       // longest (most specific) wins
+          score += CATCH_SHAPES.length - s;       // then earlier table order
+          if (!best || score > best.score) best = { score: score, cand: cand };
         }
-      });
-      if (cands.length) {
-        if (typeof bassPc === "number") {
-          for (var k = 0; k < cands.length; k++) {
-            if (cands[k].root === bassPc) return cands[k];
-          }
-        }
-        return cands[0];
       }
+      if (best) return best.cand;
     }
     if (uniq.length === 3) {
       var set3 = {};
