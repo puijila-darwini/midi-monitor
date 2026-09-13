@@ -41,6 +41,7 @@ window.tempoBpm = 0;  // expose on window for durationToVexFlow
   // briefly so a blocked chord resolves as a chord, not as its first note.
   var tonicListenActive = false;
   var catchBuffer = [];
+  var catchBass = null;
   var catchLastAt = 0;
   var catchTimer = null;
 
@@ -64,9 +65,77 @@ window.tempoBpm = 0;  // expose on window for durationToVexFlow
     return null;
   }
 
+  // Seventh-chord qualities. Each maps to a NON-vanilla mode on purpose: plain
+  // ionian ("major") and aeolian ("minor") are only selectable by playing a bare
+  // triad (see chordFromPcs). The 4th chord tone is what disambiguates modes.
+  var CHORD_QUALITIES = [
+    { name: "maj7",  semis: [0, 4, 7, 11], mode: "lydian" },
+    { name: "dom7",  semis: [0, 4, 7, 10], mode: "mixolydian" },
+    { name: "m7",    semis: [0, 3, 7, 10], mode: "dorian" },
+    { name: "mMaj7", semis: [0, 3, 7, 11], mode: "harmonic_minor" },
+    { name: "m6",    semis: [0, 3, 7, 9],  mode: "dorian" },
+    { name: "m7b5",  semis: [0, 3, 6, 10], mode: "locrian" },
+    { name: "dim7",  semis: [0, 3, 6, 9],  mode: "diminished" },
+    { name: "maj6",  semis: [0, 4, 7, 9],  mode: "mixolydian" }
+  ];
+
+  // Generalize triadFromPcs to also recognise seventh chords (4 unique pcs) and
+  // augmented triads. Quality -> mode mapping is complete, so:
+  //   - 7th chord  -> its non-vanilla mode (maj7->lydian, m7->dorian, ...)
+  //   - bare triad -> major / aeolian   (vanilla reachable ONLY here)
+  //   - aug triad  -> whole-tone
+  //   - anything else (sus, 5+, odd sets) -> null (honest: tonic only)
+  // bassPc (optional) = expected root, used to break symmetric-chord ambiguity.
+  function chordFromPcs(pcs, bassPc) {
+    var set = {};
+    var uniq = [];
+    pcs.forEach(function (p) {
+      p = p % 12;
+      if (!set[p]) { set[p] = true; uniq.push(p); }
+    });
+    if (uniq.length === 4) {
+      var cands = [];
+      CHORD_QUALITIES.forEach(function (q) {
+        for (var i = 0; i < uniq.length; i++) {
+          var r = uniq[i];
+          var ok = true;
+          for (var j = 0; j < q.semis.length; j++) {
+            if (!set[(r + q.semis[j]) % 12]) { ok = false; break; }
+          }
+          if (ok) cands.push({ root: r, quality: q.name, mode: q.mode });
+        }
+      });
+      if (cands.length) {
+        if (typeof bassPc === "number") {
+          for (var k = 0; k < cands.length; k++) {
+            if (cands[k].root === bassPc) return cands[k];
+          }
+        }
+        return cands[0];
+      }
+    }
+    if (uniq.length === 3) {
+      var set3 = {};
+      uniq.forEach(function (p) { set3[p] = true; });
+      for (var a = 0; a < uniq.length; a++) {
+        var ar = uniq[a];
+        if (set3[(ar + 4) % 12] && set3[(ar + 8) % 12]) {
+          return { root: ar, quality: "aug", mode: "whole_tone" };
+        }
+      }
+      var tri = triadFromPcs(uniq);
+      if (tri) {
+        return { root: tri.root, quality: tri.quality,
+                 mode: tri.quality === "major" ? "major" : "aeolian" };
+      }
+    }
+    return null;
+  }
+
   function resetCatch() {
     tonicListenActive = false;
     catchBuffer = [];
+    catchBass = null;
     if (catchTimer) { clearTimeout(catchTimer); catchTimer = null; }
     var lst = document.getElementById("listen-tonic");
     if (lst) { lst.classList.remove("listening"); lst.textContent = "\u266a catch"; }
@@ -92,16 +161,17 @@ window.tempoBpm = 0;  // expose on window for durationToVexFlow
   }
 
   // Fallback path: no chord flash arrived, so resolve from whatever notes were
-  // buffered (last note wins if they don't form a triad).
+  // buffered (last note wins if they don't form a triad or 7th chord).
   function resolveCatchBuffer() {
     if (catchTimer) { clearTimeout(catchTimer); catchTimer = null; }
     if (!tonicListenActive) return;
-    var triad = catchBuffer.length ? triadFromPcs(catchBuffer) : null;
-    var root = triad ? triad.root : (catchBuffer.length ? catchBuffer[catchBuffer.length - 1] : null);
+    var chord = catchBuffer.length ? chordFromPcs(catchBuffer, catchBass) : null;
+    var root = chord ? chord.root : (catchBuffer.length ? catchBuffer[catchBuffer.length - 1] : null);
     if (root === null) { resetCatch(); return; }
-    var scaleId = triad ? (triad.quality === "major" ? "major" : "aeolian") : null;
+    var scaleId = chord ? chord.mode : null;
     resolveCatch(root, scaleId);
     catchBuffer = [];
+    catchBass = null;
   }
 
   function setTimesig(numer, denom) {
@@ -309,6 +379,9 @@ window.tempoBpm = 0;  // expose on window for durationToVexFlow
           // Buffer the pitch class heard; keep (re)starting a short window so
           // a chord blocked over a few key-strikes collects into one buffer.
           if (catchBuffer.indexOf(ev.note % 12) < 0) catchBuffer.push(ev.note % 12);
+          // Track the lowest (bass) pitch class heard for symmetric-chord
+          // root disambiguation (dim7, aug).
+          if (catchBass === null || (ev.note % 12) < catchBass) catchBass = ev.note % 12;
           catchLastAt = ev.time;
           if (catchTimer) clearTimeout(catchTimer);
           catchTimer = setTimeout(resolveCatchBuffer, 350);
@@ -344,17 +417,19 @@ window.tempoBpm = 0;  // expose on window for durationToVexFlow
         if (tonicListenActive && (ev.kind === "chord" || ev.kind === "arpeggio") &&
             ev.notes && ev.notes.length >= 3) {
           var pcsArr = [];
+          var bass = null;
           ev.notes.forEach(function (n) {
             var p = n % 12;
             if (pcsArr.indexOf(p) < 0) pcsArr.push(p);
+            if (bass === null || p < bass) bass = p;
           });
-          var tri = triadFromPcs(pcsArr);
-          if (tri) {
+          var chord = chordFromPcs(pcsArr, bass);
+          if (chord) {
             if (catchTimer) { clearTimeout(catchTimer); catchTimer = null; }
             catchBuffer = [];
+            catchBass = null;
             catchLastAt = ev.time;
-            var scId = tri.quality === "major" ? "major" : "aeolian";
-            resolveCatch(tri.root, scId);
+            resolveCatch(chord.root, chord.mode);
           }
         }
         // Decoupled from record/stop: the mini "last chord / interval" stave
@@ -554,6 +629,7 @@ window.tempoBpm = 0;  // expose on window for durationToVexFlow
         if (tonicListenActive) { unarm(); return; }
         tonicListenActive = true;
         catchBuffer = [];
+        catchBass = null;
         lst.classList.add("listening");
         lst.textContent = "\u266a listen\u2026";
         armTimer = setTimeout(unarm, 15000);
