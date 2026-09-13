@@ -73,7 +73,6 @@
             <span class="keysec-title">tonic &amp; scale</span>
             <button id="catch-help" class="help-btn" type="button"
                     title="How the catch button turns a played chord into a scale">?</button>
-            <div id="catch-tooltip" class="catch-tooltip" role="tooltip"></div>
           </div>
         <div class="keysec-controls">
           <label>
@@ -177,6 +176,8 @@
       </div>
     </main>
   </div>
+
+  <div id="catch-tooltip" class="catch-tooltip" role="tooltip" aria-hidden="true"></div>
 
   <script src="{{ url_for('static', filename='vendor/vexflow.js') }}"></script>
   <script src="{{ url_for('static', filename='stave.js') }}"></script>

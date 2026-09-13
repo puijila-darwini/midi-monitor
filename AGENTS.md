@@ -612,3 +612,33 @@ Superseded by the `monitor/` web app, kept for reference:
   symmetric ties. Verified: tooltip hover shows all 22 shapes in a table + foot,
   click toggles; timesig 3/4 + fixed-tempo 100 still persist server-side from
   the relocated controls; zero JS errors/warnings. Committed agent:, pushed.
+- Ver 43: CATCH TOOLTIP FIXES (stacking + explain-the-chords).
+  (a) STACKING: the tooltip previously lived INSIDE `.keysec.card`, whose
+  `clip-path` polygon technically trims descendants and whose stack order sat
+  below later cards — so the popover was "swallowed"/clipped by the cards below
+  it. Fix: `#catch-tooltip` moved OUT of the card to be a direct child of
+  `<body>`, styled `position: fixed` with `z-index: 9999` so nothing can paint
+  above it or clip it. All show/hide is now JS-driven (CSS sibling `:hover+
+  .show` selectors were removed): hover-in shows (with a 220ms delayed hide on
+  mouseleave), click PINPINS the tooltip open (stays open even when the pointer
+  leaves; handled via a `wasToggled` flag), click-again or any pointerdown
+  OUTSIDE the button/tooltip dismisses, and the tooltip re-positions (right-
+  edge flush with the button, hangs below; flips ABOVE when it would run off
+  the bottom) on open and on window resize. Verified via elementFromPoint:
+  at a probe point overlapping the stave card's bounding box the topmost
+  painted element is a `.civ` cell inside `#catch-tooltip` — the popover now
+  truly renders above the cards. All hover/click/outside-dismiss state
+  transitions verified; console clean. (b) CONTENT: every `CATCH_SHAPES` row
+  grew a plain-language `note` field, and the table now has THREE columns:
+  `chord | tones from root | scale`. The tones column is computed from each
+  shape's `semis` through the SAME `INTERVAL_NAMES` vocabulary the keyboard
+  labels use (1 m2 M2 m3 M3 P4 TT P5 m6 M6 m7 M7), so "hirajoshi" reads as
+  `1 M2 m3 P5 m6` next to a one-line description ("Japanese pentatonic — the In
+  scale…"), "7alt" explains it's every colour-tone crammed in (b9 #9 3 b5 b7),
+  etc. Footer now spells out the interval abbreviations (m2=flat 2nd, TT=
+  tritone, M7=major 7…), keeps the honest edges, and notes the bass tiebreak
+  in concrete terms (Cmaj9 vs Am11 pick what you played). Tooltip widened to
+  500px with `table-layout: fixed` column widths; max-height 64vh scrolls the
+  long table. Verified: all 22 rows render with spellings + descriptions,
+  scrollHeight 1680 > clientHeight 808 (scrolls), foot text correct, node
+  --check clean, server restarted. Committed agent:, pushed.

@@ -75,30 +75,52 @@ window.tempoBpm = 0;  // expose on window for durationToVexFlow
   //   - aug triad -> whole-tone is the one special 3-note case.
   var CATCH_SHAPES = [
     // -- 6 tones ---------------------------------------------------------
-    { name: "blues",           semis: [0, 3, 5, 6, 7, 10],    mode: "blues" },
-    { name: "whole_tone",      semis: [0, 2, 4, 6, 8, 10],    mode: "whole_tone" },
+    { name: "blues",           semis: [0, 3, 5, 6, 7, 10],    mode: "blues",
+      note: "Six-note blues sound — the blue note sits between P4 and P5." },
+    { name: "whole_tone",      semis: [0, 2, 4, 6, 8, 10],    mode: "whole_tone",
+      note: "Ambient and floating; every interval is a whole step — no strong pull to any one note." },
     // -- 5 tones ---------------------------------------------------------
-    { name: "hirajoshi",       semis: [0, 2, 3, 7, 8],        mode: "hirajoshi" },
-    { name: "minor_pent",      semis: [0, 3, 5, 7, 10],       mode: "minor_pent" },
-    { name: "add9",            semis: [0, 2, 4, 7, 9],        mode: "major_pent" },
-    { name: "7alt",            semis: [0, 1, 4, 6, 10],       mode: "super_locrian" },
-    { name: "m7b9",            semis: [0, 1, 3, 7, 10],       mode: "phrygian" },
-    { name: "m9",              semis: [0, 2, 3, 7, 10],       mode: "dorian" },
-    { name: "7b9",             semis: [0, 1, 4, 7, 10],       mode: "phrygian_dominant" },
-    { name: "7#11",            semis: [0, 4, 6, 7, 10],       mode: "lydian_dominant" },
-    { name: "dom9",            semis: [0, 2, 4, 7, 10],       mode: "mixolydian" },
+    { name: "hirajoshi",       semis: [0, 2, 3, 7, 8],        mode: "hirajoshi",
+      note: "Japanese pentatonic (the In scale). Think of a minor-ish mood: the major 2nd and minor 3rd keep it from sounding Western-minor." },
+    { name: "minor_pent",      semis: [0, 3, 5, 7, 10],       mode: "minor_pent",
+      note: "The classic rock/blues minor pentatonic: 1 ♭3 P4 P5 ♭7. No 2nd, no 6th — instantly familiar." },
+    { name: "add9",            semis: [0, 2, 4, 7, 9],        mode: "major_pent",
+      note: "Major pentatonic — 1 2 3 5 6. A bright, open major sound without the tendency tones (4th and 7th). Think C D E G A." },
+    { name: "7alt",            semis: [0, 1, 4, 6, 10],       mode: "super_locrian",
+      note: "The altered dominant. Every colour-tone is crammed in: b9 #9 3 b5(#11) b7. Maximum tension before resolution." },
+    { name: "m7b9",            semis: [0, 1, 3, 7, 10],       mode: "phrygian",
+      note: "Minor 7 plus a flat 2nd — Phrygian's dark, Spanish-flamenco colour: ♭2 ♭3 5 ♭7." },
+    { name: "m9",              semis: [0, 2, 3, 7, 10],       mode: "dorian",
+      note: "Minor 9th — a lush minor 7 with a natural 2nd (9th on top). Dorian's brighter minor colour: 1 2 ♭3 5 ♭7." },
+    { name: "7b9",             semis: [0, 1, 4, 7, 10],       mode: "phrygian_dominant",
+      note: "Dominant 7 plus a b9: 1 ♭9 3 5 ♭7. A dominant chord with a sharp, darkened top — Phrygian dominant (Spanish dominant)." },
+    { name: "7#11",            semis: [0, 4, 6, 7, 10],       mode: "lydian_dominant",
+      note: "Dominant 7 plus a #11 (a.k.a. b5): 1 3 TT P5 ♭7. Lydian dominant — a dominant with the bright upper-sharp, no b9." },
+    { name: "dom9",            semis: [0, 2, 4, 7, 10],       mode: "mixolydian",
+      note: "A full ninth chord: 1 2 3 5 ♭7. The dominant stack, open and bluesy, the bread and butter of funk/jazz." },
     // -- 4 tones ---------------------------------------------------------
-    { name: "dim7",            semis: [0, 3, 6, 9],           mode: "diminished" },
-    { name: "m7b5",            semis: [0, 3, 6, 10],          mode: "locrian" },
-    { name: "mMaj7",           semis: [0, 3, 7, 11],          mode: "harmonic_minor" },
-    { name: "m6",              semis: [0, 3, 7, 9],           mode: "dorian" },
-    { name: "m7",              semis: [0, 3, 7, 10],          mode: "dorian" },
-    { name: "maj7",            semis: [0, 4, 7, 11],          mode: "lydian" },
-    { name: "maj6",            semis: [0, 4, 7, 9],           mode: "mixolydian" },
-    { name: "dom7",            semis: [0, 4, 7, 10],          mode: "mixolydian" },
-    { name: "7#5",             semis: [0, 4, 8, 10],          mode: "whole_tone" },
-    { name: "mMaj7#5",         semis: [0, 4, 8, 11],          mode: "harmonic_major" },
-    { name: "7b5",             semis: [0, 4, 6, 10],          mode: "lydian_dominant" }
+    { name: "dim7",            semis: [0, 3, 6, 9],           mode: "diminished",
+      note: "Stacked minor thirds. Fully symmetrical — sounds like it belongs to all keys at once; very useful as a pivot." },
+    { name: "m7b5",            semis: [0, 3, 6, 10],          mode: "locrian",
+      note: "Half-diminished. The ii chord in a minor key: minor 3rd + diminished 5th + minor 7. 1 ♭3 TT ♭7." },
+    { name: "mMaj7",           semis: [0, 3, 7, 11],          mode: "harmonic_minor",
+      note: "Minor triad with a major 7 on top: 1 ♭3 5 M7. Haunting and dreamy — the sound of harmonic minor as a chord." },
+    { name: "m6",              semis: [0, 3, 7, 9],           mode: "dorian",
+      note: "Minor 6th: 1 ♭3 5 6. Warm, slightly jazzy minor — Dorian's home colour (no flat 6 to darken it)." },
+    { name: "m7",              semis: [0, 3, 7, 10],          mode: "dorian",
+      note: "The workhorse minor 7th: 1 ♭3 5 ♭7. Works in any key; Dorian when the 6th is natural." },
+    { name: "maj7",            semis: [0, 4, 7, 11],          mode: "lydian",
+      note: "Major 7th: 1 3 5 M7. The jazz/pop major sound — warm and resolved, but with a wistful top note." },
+    { name: "maj6",            semis: [0, 4, 7, 9],           mode: "mixolydian",
+      note: "Major 6th: 1 3 5 6. Cheerful and old-school — a major triad with a pleasant, stable 6th." },
+    { name: "dom7",            semis: [0, 4, 7, 10],          mode: "mixolydian",
+      note: "The dominant 7th: 1 3 5 ♭7. Needs to resolve somewhere — the bread and butter of blues, jazz, and rock." },
+    { name: "7#5",             semis: [0, 4, 8, 10],          mode: "whole_tone",
+      note: "Augmented dominant: 1 3 #5 ♭7. The raised 5th (augmented triad) plus a dominant 7 — tense and restless." },
+    { name: "mMaj7#5",         semis: [0, 4, 8, 11],          mode: "harmonic_major",
+      note: "Major 7 with a raised 5th: 1 3 #5 M7. The upper part of harmonic major — eerie and luminous." },
+    { name: "7b5",             semis: [0, 4, 6, 10],          mode: "lydian_dominant",
+      note: "Dominant with a flat 5 (a.k.a. #11): 1 3 TT ♭7. Lydian dominant's core — also the tritone substitution sound." }
   ];
 
   // Match a played pc-set against the catch shapes (subset-tolerant, longer
@@ -186,22 +208,95 @@ window.tempoBpm = 0;  // expose on window for durationToVexFlow
     for (var i = 0; i < CATCH_SHAPES.length; i++) {
       var s = CATCH_SHAPES[i];
       var pretty = CATCH_MODE_NAMES[s.mode] || s.mode;
+      var iv = s.semis.map(function (semi) { return INTERVAL_NAMES[semi]; }).join(" ");
       rows += '<tr><td class="cshape">' + s.name + "</td>" +
-              '<td class="cmode">' + pretty + "</td></tr>";
+              '<td class="civ">' + iv + "</td>" +
+              '<td class="cmode"><b>' + pretty + "</b>" +
+              (s.note ? "<i>" + s.note + "</i>" : "") + "</td></tr>";
     }
     tip.innerHTML =
-      '<div class="tt-head">play a chord &#8594; sets its scale</div>' +
-      "<table><tr><th>chord</th><th>scale</th></tr>" + rows + "</table>" +
-      '<div class="tt-foot">Vanilla major / natural-minor come only from a ' +
-      "bare triad &middot; aug triad &#8594; whole tone &middot; a lone note " +
-      "sets just the tonic &middot; matching is loose (subset-tolerant) and the " +
-      "lowest heard note breaks symmetric-chord ties.</div>";
-    var head = document.getElementById("catch-help");
-    if (head) {
-      head.addEventListener("click", function () {
-        tip.classList.toggle("show");
-      });
+      '<div class="tt-head">play a chord &rarr; sets its scale</div>' +
+      '<table><tr><th class="c-shape-col">chord</th>' +
+      '<th class="c-iv-col">tones from root</th>' +
+      '<th class="c-mode-col">scale</th></tr>' + rows + "</table>" +
+      '<div class="tt-foot">' +
+      "Tones listed are semitone distances from the root: " +
+      "<b>m2</b> = flat 2nd, <b>M2</b> = major 2nd, <b>m3</b> = minor 3rd, " +
+      "<b>M3</b> = major 3rd, <b>TT</b> = tritone (sharp 4 / flat 5), " +
+      "<b>P5</b> = perfect 5th, <b>m7</b> = minor 7th, <b>M7</b> = major 7th, etc." +
+      "<br><br>" +
+      "Vanilla major / natural-minor only come from a bare triad. " +
+      "Aug triad &rarr; whole tone. A lone note sets just the tonic. " +
+      "Matching is loose (subset-tolerant) and the lowest heard note " +
+      "breaks symmetric-chord ties (so Cmaj9 and Am11 choose the " +
+      "root you actually played, not whichever is alphabetically first)." +
+      "</div>";
+
+    var btn = document.getElementById("catch-help");
+    if (!btn) return;
+
+    var hideTimer = null;
+    var wasToggled = false; // track click-toggle vs hover
+
+    function hide() { tip.classList.remove("show"); }
+    function scheduleHide() {
+      clearTimeout(hideTimer);
+      hideTimer = setTimeout(hide, 220);
     }
+    function position() {
+      var r = btn.getBoundingClientRect();
+      var tw = tip.offsetWidth || 500;
+      var th = tip.offsetHeight || 440;
+      // Prefer: right-edge of tooltip flush with right-edge of button,
+      // and the tooltip hangs just below the button.
+      var top  = r.bottom + 8;
+      var left = r.right - tw;
+      if (left < 8) left = 8;
+      // If it would go off the bottom, open it above the button instead.
+      if (top + th > window.innerHeight - 8)
+        top = Math.max(8, r.top - th - 8);
+      tip.style.top  = top + "px";
+      tip.style.left = left + "px";
+    }
+    function show() {
+      clearTimeout(hideTimer);
+      tip.classList.add("show");
+      position();
+    }
+
+    btn.addEventListener("mouseenter", function () {
+      wasToggled = false;
+      show();
+    });
+    btn.addEventListener("mouseleave", function () {
+      if (!wasToggled) scheduleHide();
+    });
+    btn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      if (tip.classList.contains("show") && wasToggled) {
+        wasToggled = false;
+        hide();
+      } else {
+        wasToggled = true;
+        show();
+      }
+    });
+    // Keep tooltip open while pointer is over it; close when it leaves.
+    tip.addEventListener("mouseenter", function () { clearTimeout(hideTimer); });
+    tip.addEventListener("mouseleave", function () {
+      if (!wasToggled) scheduleHide(); else hide();
+    });
+    // Close on any click outside the tooltip or the button.
+    document.addEventListener("pointerdown", function (e) {
+      if (!tip.contains(e.target) && !btn.contains(e.target)) {
+        wasToggled = false;
+        hide();
+      }
+    });
+    // Reposition if window resizes while open.
+    window.addEventListener("resize", function () {
+      if (tip.classList.contains("show")) position();
+    });
   }
 
   function resetCatch() {
