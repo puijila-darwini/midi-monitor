@@ -697,6 +697,14 @@ that file lean. History is chronological; most lines start with a version tag.
   (start/done/stopped/error). Stave and replay now always show/play the
   same frozen take. Live verified: REC C-E-G + next note + STOP → 4 notes in
   take → PLAY → C-E-G-D sounds back correctly.
+- Ver 49: RAW MIDI BUFFER CARD. Added a "raw midi buffer" card to the main
+  area that fetches /api/take and renders the stored note_on/note_off events
+  (index, time, kind, channel, note, velocity) in a monospace panel with a
+  clear button and periodic refresh. Backend /api/take returns the
+  raw_take_events buffer and recording state.
+- Ver 50: raw midi buffer card clear fix. Backend POST /api/take/clear now properly
+  empties state.raw_take_events; frontend clearRawTake() posts to endpoint, shows
+  cleared state, and resumes polling to pick up new events after clearing.
 - Hw: MIDIREF.MD created from pssa50_en_mr_a0.pdf (channel routing, Local
   Control, program/control change, SysEx, implementation chart, live USB
   profile, voices table, send-path helpers, open questions).

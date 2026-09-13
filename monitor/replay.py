@@ -111,13 +111,16 @@ class Replay:
             return False
         self._stop.clear()
         self._last_error = None
+        # Detect whether the caller passed raw MIDI events (note_on/note_off dicts)
+        # or quantized note dicts, and plan accordingly.
+        raw = bool(quantized_notes and isinstance(quantized_notes[0], dict) and "type" in quantized_notes[0])
         self._thread = threading.Thread(
-            target=self._run, args=(list(quantized_notes), float(speed), on_event),
+            target=self._run, args=(list(quantized_notes), float(speed), on_event, raw),
             name="replay", daemon=True)
         self._thread.start()
         return True
 
-    def _run(self, notes, speed, on_event):
+    def _run(self, notes, speed, on_event, raw):
         def emit(phase, **kw):
             if on_event is not None:
                 try:
@@ -126,7 +129,10 @@ class Replay:
                     pass
 
         try:
-            events, duration = plan(notes, speed)
+            if raw:
+                events, duration = plan_from_raw(notes, speed)
+            else:
+                events, duration = plan(notes, speed)
             if not events:
                 emit("error", message="nothing to play (take is empty)")
                 return
@@ -167,6 +173,87 @@ class Replay:
 
     def _all_off(self):
         try:
-            self._send("B0 7B 00")
+            self._send("B0 7B 00")  # all notes off
         except Exception:
             pass
+
+
+def plan_from_raw(raw_events, speed=1.0):
+    """Build a replay timeline from raw MIDI events (note_on/note_off dicts).
+    
+    Args:
+        raw_events: list of dicts with keys: type ('note_on'/'note_off'), note, 
+                   velocity (for note_on), time (absolute epoch time)
+        speed: playback speed multiplier (1.0 = normal speed)
+    
+    Returns (events, duration):
+        events: sorted list of [rel_time, kind, [(note, velocity), ...]] where
+               simultaneous strikes are grouped into one chord batch and note-offs are
+               ordered before note-ons when they tie. rel_time is seconds since the
+               first onset (0.0), already scaled by `speed`.
+        duration: the scaled span from first onset to last release.
+    """
+    speed = float(speed) if speed and speed > 0 else 1.0
+    ons = []
+    offs = []
+    t0 = None
+    last = 0.0
+    
+    # Group events by time for chord detection
+    events_by_time = {}
+    for ev in raw_events:
+        if ev["type"] not in ("note_on", "note_off"):
+            continue
+        try:
+            note = int(ev["note"])
+            if not (0 <= note <= 127):
+                continue
+            t = float(ev["time"])
+        except (TypeError, ValueError):
+            continue
+            
+        if t not in events_by_time:
+            events_by_time[t] = []
+        events_by_time[t].append(ev)
+    
+    # Process each timestamp
+    for t in sorted(events_by_time.keys()):
+        # Find note_on and note_off events at this time
+        note_ons = [ev for ev in events_by_time[t] if ev["type"] == "note_on"]
+        note_offs = [ev for ev in events_by_time[t] if ev["type"] == "note_off"]
+        
+        # Process note_ons
+        for ev in note_ons:
+            note = int(ev["note"])
+            try:
+                vel = max(1, min(127, int(ev.get("velocity", 100))))
+            except (TypeError, ValueError):
+                vel = 100
+            if t0 is None:
+                t0 = t
+            rel_on = (t - t0) * speed
+            ons.append((rel_on, "on", (note, vel)))
+            last = max(last, rel_on)
+        
+        # Process note_offs
+        for ev in note_offs:
+            note = int(ev["note"])
+            # Velocity for note_off is typically 0
+            if t0 is None:
+                t0 = t
+            rel_off = (t - t0) * speed
+            offs.append((rel_off, "off", (note, 0)))  # velocity 0 for note_off
+            last = max(last, rel_off)
+    
+    # Merge simultaneous events
+    raw = sorted(ons + offs, key=lambda e: (e[0], 0 if e[1] == "off" else 1))
+    events = []
+    for rel_t, kind, pair in raw:
+        if events and events[-1][0] == rel_t and events[-1][1] == kind:
+            events[-1][2].append(pair)
+        else:
+            events.append([rel_t, kind, [pair]])
+    
+    return events, last if t0 is not None else 0.0
+    
+    return events, last if t0 is not None else 0.0

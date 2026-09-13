@@ -1115,6 +1115,81 @@ function buildCatchTooltip() {
     })
     .catch(function () { /* server just started? SSE will catch us up */ });
 
+  // raw midi buffer card
+  var rawTakeEl = document.getElementById("raw-take");
+  var rawTakeClearBtn = document.getElementById("raw-take-clear");
+  var rawTakeCleared = false;
+
+  function renderRawTake(events) {
+    if (!rawTakeEl) return;
+    if (!events || !events.length) {
+      rawTakeEl.innerHTML = "<pre>no raw events yet</pre>";
+      return;
+    }
+    var lines = events.map(function (ev, i) {
+      var kind = ev.type || "?";
+      var note = typeof ev.note !== "undefined" ? String(ev.note) : "-";
+      var vel = typeof ev.velocity !== "undefined" ? String(ev.velocity) : "-";
+      var time = typeof ev.time !== "undefined" ? String(Math.round(ev.time * 1000)) : "-";
+      var chan = typeof ev.channel !== "undefined" ? String(ev.channel) : "-";
+      return String(i).padStart(3, "0") + "  " + time.padStart(8, " ") + "  " +
+        kind.padEnd(8, " ") + "  ch " + chan.padEnd(2, " ") + "  note " +
+        note.padStart(3, " ") + "  v " + vel;
+    });
+    rawTakeEl.innerHTML = "<pre>" + lines.join("\n") + "</pre>";
+    rawTakeEl.scrollTop = rawTakeEl.scrollHeight;
+  }
+
+function fetchRawTake() {
+  fetch("/api/take")
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      if (data && data.ok) {
+        // If we're in a cleared state, only update if there are new events
+        if (rawTakeCleared && data.raw_events && data.raw_events.length === 0) {
+          // Still empty, keep showing cleared state
+          return;
+        }
+        rawTakeCleared = false;
+        renderRawTake(data.raw_events || []);
+      }
+    })
+    .catch(function () {
+      /* server just started or offline */
+    });
+}
+
+function clearRawTake() {
+  if (rawTakeEl) {
+    rawTakeEl.innerHTML = "<pre>no raw events yet</pre>";
+  }
+  rawTakeCleared = true;
+  fetch("/api/take/clear", { method: "POST" })
+    .then(function (r) { return r.json(); })
+    .catch(function () {
+      /* server just started or offline */
+    });
+  // Temporarily increase polling rate to catch when buffer gets new events
+  clearInterval(rawTakeTimer);
+  rawTakeTimer = setInterval(fetchRawTake, 200);
+  // Resume normal polling after 3 seconds
+  setTimeout(function () {
+    if (rawTakeTimer) {
+      clearInterval(rawTakeTimer);
+      rawTakeTimer = setInterval(fetchRawTake, 1000);
+    }
+  }, 3000);
+}
+
+// ... existing code ...
+
+fetchRawTake();
+var rawTakeTimer = setInterval(fetchRawTake, 1000);
+
+if (rawTakeClearBtn) {
+  rawTakeClearBtn.addEventListener("click", clearRawTake);
+}
+
   // SSE live stream with robust reconnection
   var es = null;
   var esRetryCount = 0;

@@ -11,7 +11,7 @@ from flask import Flask, jsonify, render_template, request, Response
 from .capture import Capture
 from .state import State
 from .analysis import Analyser
-from .replay import Replay
+from .replay import Replay, plan_from_raw
 from . import chords
 
 app = Flask(__name__)
@@ -311,7 +311,12 @@ def api_replay():
     notes = [n for n in state.take_notes if not n.get("rest")]
     if not notes:
         return jsonify({"ok": False, "error": "take is empty"}), 400
-    replayer.play(state.take_notes, speed=speed, on_event=hub.publish)
+    # Try to use raw_take_events if available (exact timing), otherwise fall back to quantized_notes
+    if hasattr(state, "raw_take_events") and state.raw_take_events:
+        raw_notes = state.raw_take_events[-500:]  # limit to last 500 events
+        replayer.play(raw_notes, speed=speed, on_event=hub.publish)
+    else:
+        replayer.play(state.take_notes, speed=speed, on_event=hub.publish)
     return jsonify({"ok": True, "notes": len(notes), "speed": speed})
 
 
@@ -320,6 +325,20 @@ def api_replay_stop():
     """Cancel any in-flight replay and send all-notes-off (panic)."""
     replayer.stop()
     return jsonify({"ok": True, "active": replayer.active})
+
+
+@app.route("/api/take", methods=["GET"])
+def api_take():
+    """Return the raw take events (semi-raw MIDI events) for piano roll display."""
+    raw_events = getattr(state, "raw_take_events", [])
+    return jsonify({"ok": True, "raw_events": raw_events, "recording": state.recording})
+
+
+@app.route("/api/take/clear", methods=["POST"])
+def api_take_clear():
+    """Clear the raw take events buffer."""
+    state.raw_take_events = []
+    return jsonify({"ok": True, "cleared": True})
 
 
 @app.route("/api/events")

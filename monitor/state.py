@@ -52,8 +52,10 @@ class State:
         
         # Quantized note data
         self.quantized_notes = []  # list of quantized note events
+        self.raw_take_events = []  # semi-raw MIDI events for replay / piano roll
         self.take_notes = []  # the frozen take = exactly what the stave shows (for replay)
         self.max_quantized_notes = 500
+        self.max_raw_take_events = 2000
         # Pending-onset based note value derivation (TIME-TO-NEXT-ONSET).
         #
         # Why: the "gap since the previous onset" model marks a metronome-guided
@@ -140,7 +142,9 @@ class State:
                 if grid > 0:
                     steps = max(1, int(round(med / grid)))
                     return steps * grid
-        return None
+        # No history yet (leading note of the phrase): fall back to one beat
+        # at the current tempo.
+        return 60.0 / self.tempo_bpm
 
     def _finalize_pending(self, duration):
         """Append quantized notes for the pending group with the given duration,
@@ -522,6 +526,17 @@ class State:
                 {"type": "note_on", "note": event["note"],
                  "velocity": event["velocity"], "time": event["time"]}
             )
+            # Record raw event immediately for live raw buffer display
+            if self.recording:
+                self.raw_take_events.append({
+                    "type": "note_on",
+                    "note": event["note"],
+                    "velocity": event["velocity"],
+                    "time": event["time"],
+                    "channel": event.get("channel", 0),
+                })
+                if len(self.raw_take_events) > self.max_raw_take_events:
+                    self.raw_take_events = self.raw_take_events[-self.max_raw_take_events:]
             # Track onset for tempo detection
             self.note_onsets.append((now, event["note"]))
             # Keep only last 60 seconds of onsets for tempo detection
@@ -539,6 +554,17 @@ class State:
             self.recent.append(
                 {"type": "note_off", "note": event["note"], "time": event["time"]}
             )
+            # Record raw event immediately for live raw buffer display
+            if self.recording:
+                self.raw_take_events.append({
+                    "type": "note_off",
+                    "note": event["note"],
+                    "velocity": 0,
+                    "time": event["time"],
+                    "channel": event.get("channel", 0),
+                })
+                if len(self.raw_take_events) > self.max_raw_take_events:
+                    self.raw_take_events = self.raw_take_events[-self.max_raw_take_events:]
             # Record the release on the open pending group (if the note is still
             # pending here) so held time is known when the group is finalized.
             if self._pending is not None:
@@ -597,6 +623,7 @@ class State:
             with self._emit_lock:
                 self._pending = None
                 self.quantized_notes = []
+                self.raw_take_events = []
                 self.take_notes = []  # clear the take buffer
                 self.held = {}
                 self.version += 1
@@ -627,4 +654,5 @@ class State:
             "recording": self.recording,
             "quantized_notes": self.quantized_notes[-100:],  # last 100 quantized notes
             "take_notes": self.take_notes[-100:],  # the frozen take for replay
+            "raw_take_events": self.raw_take_events[-500:],  # semi-raw MIDI events for replay / piano roll
         }
