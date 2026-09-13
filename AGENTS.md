@@ -688,3 +688,23 @@ Superseded by the `monitor/` web app, kept for reference:
   10 `.none` gaps in the right places, order matches menu exactly, topIsTooltip
   still true, scrollHeight 1530 > clientHeight 808, 0 console errors. Server
   restarted. Committed agent:, pushed.
+- Ver 46: CHROMATIC = FIRST NON-TRIADIC 3-NOTE CATCH (pin in it). After analysis
+  of which gap scales could be caught by a 3-tone input, the "common scales must
+  stay the easiest" rule was kept: it only makes sense for chromatic (arguably
+  more fundamental than any mode) — giving bebop_dorian (1-♭3-3) or
+  neapolitan_major (1-♭2-6) a 3-note catch would make exotic scales EASIER to
+  enter than dorian/mixolydian (m7/dom7 = 4 notes), inverting the hierarchy.
+  Implementation: new `chrom` shape `semis:[0,1,2]` -> chromatic in CATCH_SHAPES
+  (3-tone section, comment explains the one-exception policy); `chordFromPcs`
+  match guard lowered from `uniq.length >= 4` to `>= 3`. Nothing else
+  regressed — verified exhaustive: chrom cluster at any root resolves
+  chromatic; major/minor/aug triads still fall through to their own 3-note
+  paths (returning null from shapes so the triad path runs); a 4+ chord
+  CONTAINING the cluster {0,1,2,4,7,10} still resolves phrygian_dominant (7b9,
+  longer wins) and Cadd9 stays major_pent with bass tiebreak; gap scales remain
+  unfilled (melodic_minor, double_harmonic, bebop_*, enigmatic, hungarian_minor,
+  neapolitan_* still show ∅). Tooltip: chromatic row now shows `chrom (1 m2 M2)`
+  + a CATCH_NOTES description ("all twelve tones... the root, its ♭2, and its 2
+  stacked together"); gap count 10 -> 9. LIVE verified via piano-injection:
+  catch armed + C–C♯–D cluster -> tonic C + chromatic scale; C–E–G still ->
+  major (no hijack). Console 0 errors. Committed agent:, pushed.

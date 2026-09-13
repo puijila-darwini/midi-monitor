@@ -72,7 +72,10 @@ window.tempoBpm = 0;  // expose on window for durationToVexFlow
   //   - LONGER shapes win (more specific), then table order;
   //   - vanilla ionian ("major") / aeolian ("minor") are still ONLY selectable
   //     by a bare triad (that's the honest core; see chordFromPcs);
-  //   - aug triad -> whole-tone is the one special 3-note case.
+  //   - aug triad -> whole-tone is the special 3-note case (arpeggio path).
+  //   - chromatic (below) is the ONE non-triadic 3-note catch: deliberate
+  //     exotic scales stay 4+ notes so common scales remain the easiest to
+  //     enter (m7/dom7=4 vs any exotic=4+).
   var CATCH_SHAPES = [
     // -- 6 tones ---------------------------------------------------------
     { name: "blues",           semis: [0, 3, 5, 6, 7, 10],    mode: "blues" },
@@ -98,7 +101,9 @@ window.tempoBpm = 0;  // expose on window for durationToVexFlow
     { name: "dom7",            semis: [0, 4, 7, 10],          mode: "mixolydian" },
     { name: "7#5",             semis: [0, 4, 8, 10],          mode: "whole_tone" },
     { name: "mMaj7#5",         semis: [0, 4, 8, 11],          mode: "harmonic_major" },
-    { name: "7b5",             semis: [0, 4, 6, 10],          mode: "lydian_dominant" }
+    { name: "7b5",             semis: [0, 4, 6, 10],          mode: "lydian_dominant" },
+    // -- 3 tones (deliberately ONLY chromatic; keeps common scales easier) --
+    { name: "chrom",            semis: [0, 1, 2],           mode: "chromatic" }
   ];
 
   // Plain-language description of each TARGET scale (what it sounds like), keyed
@@ -120,7 +125,8 @@ window.tempoBpm = 0;  // expose on window for durationToVexFlow
     "locrian": "The darkest minor: \u266d2 and \u266d5 make it unstable; its home chord is half-diminished.",
     "harmonic_minor": "Natural minor with its leading tone raised: 1 2 \u266d3 4 5 \u266d6 7 — dramatic and dreamy.",
     "lydian": "A major scale with a raised 4th: 1 2 3 \u266f4 5 6 7 — bright, floating, cinematic.",
-    "harmonic_major": "Major with a flattened 6th: 1 2 3 4 5 \u266d6 7. Brilliant, slightly bittersweet."
+    "harmonic_major": "Major with a flattened 6th: 1 2 3 4 5 \u266d6 7. Brilliant, slightly bittersweet.",
+    "chromatic": "All twelve tones, one after the other. Catch it with the tightest cluster there is: the root, its \u266d2, and its 2 stacked together."
   };
 
   // Match a played pc-set against the catch shapes (subset-tolerant, longer
@@ -134,7 +140,7 @@ window.tempoBpm = 0;  // expose on window for durationToVexFlow
       p = p % 12;
       if (!set[p]) { set[p] = true; uniq.push(p); }
     });
-    if (uniq.length >= 4) {
+    if (uniq.length >= 3) {
       // Collect EVERY (shape, root) match so the best one wins globally.
       // Many chords are subsets of themselves under a different root (Cm6 is
       // Am7b5, Cadd9 is A minor pent, ...), so we can't return early per shape.
