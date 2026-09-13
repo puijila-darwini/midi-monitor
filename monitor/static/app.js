@@ -21,6 +21,7 @@
 
   var keyEls = {};
   var held = new Set();
+  var replayActive = false;  // a take is currently playing back out the keyboard
   var tempoBpm = 0;  // global tempo for quantization
 window.tempoBpm = 0;  // expose on window for durationToVexFlow
   // Time signature (beats per measure). Exposed on window for stave (measure
@@ -662,6 +663,37 @@ function buildCatchTooltip() {
       case "capture_error":
         showCaptureError(ev.message, ev.restarts);
         break;
+      case "replay":
+        if (ev.phase === "start") {
+          replayActive = true;
+          if (setReplayBtn) setReplayBtn();
+          addFeed('<span class="time">' + fmtTime(ev.time || 0) +
+            "</span>  REPLAY  playing back " + ev.count + " note" +
+            (ev.count === 1 ? "" : "s") + " (~" + (ev.duration * 1000) +
+            " ms)" , "replay");
+        } else if (ev.phase === "step") {
+          // Light the keys as notes sound back out the keyboard.
+          ev.notes.forEach(function (n) {
+            activate(n);
+            setTimeout(function () { deactivate(n); }, 250);
+          });
+        } else if (ev.phase === "done") {
+          replayActive = false;
+          if (setReplayBtn) setReplayBtn();
+          addFeed('<span class="time">' + fmtTime(ev.time || 0) +
+            "</span>  REPLAY  done", "replay");
+        } else if (ev.phase === "stopped") {
+          replayActive = false;
+          if (setReplayBtn) setReplayBtn();
+          addFeed('<span class="time">' + fmtTime(ev.time || 0) +
+            "</span>  REPLAY  stopped", "replay");
+        } else if (ev.phase === "error") {
+          replayActive = false;
+          if (setReplayBtn) setReplayBtn();
+          addFeed('<span class="time">' + fmtTime(ev.time || 0) +
+            "</span>  REPLAY  " + ev.message, "replay");
+        }
+        break;
     }
   }
 
@@ -791,6 +823,43 @@ function buildCatchTooltip() {
       var feedList = document.getElementById("feed-list");
       if (feedList) feedList.innerHTML = "";
     });
+  })();
+  // Play/stop take replay. POSTs /api/replay (which serializes the quantized
+  // buffer back to the keyboard's internal voices on a background thread);
+  // while a replay is active the button becomes a STOP that cancels it.
+  // The SSE handler flips replayActive + feeds it back through setReplayBtn().
+  var setReplayBtn = null;
+  (function () {
+    var btn = document.getElementById("replay-btn");
+    var lab = document.getElementById("replay-btn-label");
+    var glyph = document.getElementById("replay-btn-glyph");
+    if (!btn) return;
+
+    function render() {
+      btn.classList.toggle("playing", replayActive);
+      if (glyph) glyph.textContent = replayActive ? "\u25a0" : "\u25b6";
+      if (lab) lab.textContent = replayActive ? "stop" : "play take";
+    }
+    setReplayBtn = render;
+
+    btn.addEventListener("click", function () {
+      if (replayActive) {
+        fetch("/api/replay/stop", { method: "POST" })
+          .catch(function () { /* transient */ });
+        return;
+      }
+      fetch("/api/replay", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({})
+      }).then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (!res.ok) addFeed("REPLAY  " + (res.error || "failed"), "replay");
+        })
+        .catch(function () { /* transient */ });
+    });
+
+    render();
   })();
 
   // Tonic + scale selector: shade in-scale keys + interval labels on the piano,
@@ -1065,7 +1134,7 @@ function buildCatchTooltip() {
     esIsConnecting = true;
     console.log("SSE: Connecting (attempt " + (esRetryCount + 1) + "/" + esMaxRetries + ")");
     
-    var newEs = new EventSource("/events");
+    var newEs = new EventSource("/api/events");
     
     newEs.onopen = function() {
       console.log("SSE: Connected");

@@ -11,6 +11,7 @@ from flask import Flask, jsonify, render_template, request, Response
 from .capture import Capture
 from .state import State
 from .analysis import Analyser
+from .replay import Replay
 from . import chords
 
 app = Flask(__name__)
@@ -88,6 +89,7 @@ class Hub:
 hub = Hub()
 state = State()
 analyser = Analyser()
+replayer = Replay()  # plays the quantized take back out to the keyboard
 
 
 def _note_name(n):
@@ -285,7 +287,42 @@ def api_timesig():
 
 
 
-@app.route("/events")
+@app.route("/api/replay", methods=["POST"])
+def api_replay():
+    """Play the current quantized take back through the keyboard's internal
+    voices (raw MIDI out to hw:2,0,0 via amidi).
+
+    Requires a connected keyboard and a non-empty take. Runs in a background
+    thread; progress is published on SSE ('replay' events) so the on-screen
+    keys light up as notes sound. Replays the whole buffer at a user-selectable
+    speed multiplier (default 1.0 = original timing).
+    """
+    if replayer.active:
+        return jsonify({"ok": False, "error": "already replaying"}), 409
+    if not state.online:
+        return jsonify({"ok": False, "error": "keyboard offline"}), 503
+    body = request.get_json(silent=True) or {}
+    try:
+        speed = float(body.get("speed", 1.0))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "speed must be a number"}), 400
+    if speed <= 0:
+        return jsonify({"ok": False, "error": "speed must be > 0"}), 400
+    notes = [n for n in state.take_notes if not n.get("rest")]
+    if not notes:
+        return jsonify({"ok": False, "error": "take is empty"}), 400
+    replayer.play(state.take_notes, speed=speed, on_event=hub.publish)
+    return jsonify({"ok": True, "notes": len(notes), "speed": speed})
+
+
+@app.route("/api/replay/stop", methods=["POST"])
+def api_replay_stop():
+    """Cancel any in-flight replay and send all-notes-off (panic)."""
+    replayer.stop()
+    return jsonify({"ok": True, "active": replayer.active})
+
+
+@app.route("/api/events")
 def events():
     q = hub.subscribe()
     def gen():

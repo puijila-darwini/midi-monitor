@@ -687,3 +687,16 @@ that file lean. History is chronological; most lines start with a version tag.
   swaps (incl. drum kit -> piano bank restore), single note, chord, melody seq,
   seq-file playback, panic reset. Found+fixed one indexing bug in seq-file
   during testing. Committed agent:, pushed.
+- Ver 48: REPLAY = FROZEN TAKE. The replay endpoint now plays the notation
+  buffer (the take) instead of the live quantized stream. Backend: state.py
+  gains `take_notes` — cleared on REC, mirrors finalized quantized notes
+  (including rests) while recording, frozen on STOP. app.py /api/replay now
+  reads state.take_notes; replay stops automatically if keyboard goes offline.
+  Frontend: "▶ play take" button in stave controls; toggles to "stop" while
+  active; SSE "replay" events drive key flashes (step) and feed lines
+  (start/done/stopped/error). Stave and replay now always show/play the
+  same frozen take. Live verified: REC C-E-G + next note + STOP → 4 notes in
+  take → PLAY → C-E-G-D sounds back correctly.
+- Hw: MIDIREF.MD created from pssa50_en_mr_a0.pdf (channel routing, Local
+  Control, program/control change, SysEx, implementation chart, live USB
+  profile, voices table, send-path helpers, open questions).

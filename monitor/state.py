@@ -52,6 +52,7 @@ class State:
         
         # Quantized note data
         self.quantized_notes = []  # list of quantized note events
+        self.take_notes = []  # the frozen take = exactly what the stave shows (for replay)
         self.max_quantized_notes = 500
         # Pending-onset based note value derivation (TIME-TO-NEXT-ONSET).
         #
@@ -173,6 +174,8 @@ class State:
                 "duration": off - p["qon"],
             }
             self.quantized_notes.append(qn)
+            if self.recording:
+                self.take_notes.append(qn)
             new.append(qn)
         if rest_dur is not None and rest_dur > 0:
             rstart = p["qon"] + note_dur
@@ -185,6 +188,8 @@ class State:
                 "rest": True,
             }
             self.quantized_notes.append(rn)
+            if self.recording:
+                self.take_notes.append(rn)
             new.append(rn)
         if len(self.quantized_notes) > self.max_quantized_notes:
             self.quantized_notes = self.quantized_notes[-self.max_quantized_notes:]
@@ -592,6 +597,7 @@ class State:
             with self._emit_lock:
                 self._pending = None
                 self.quantized_notes = []
+                self.take_notes = []  # clear the take buffer
                 self.held = {}
                 self.version += 1
             self.recording = True
@@ -620,4 +626,5 @@ class State:
             "time_signature": self.time_signature,
             "recording": self.recording,
             "quantized_notes": self.quantized_notes[-100:],  # last 100 quantized notes
+            "take_notes": self.take_notes[-100:],  # the frozen take for replay
         }

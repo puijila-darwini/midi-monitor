@@ -715,6 +715,14 @@ li.tonic {
 }
 .record-btn-label { line-height: 1; }
 
+.replay-btn.playing {
+  border-color: var(--ok);
+  border-left: 3px solid var(--ok);
+  background: var(--phthalo-card);
+  color: var(--ok);
+}
+.replay-glyph { font-size: 10px; line-height: 1; }
+
 #stave {
   background: var(--paper);
   border: 1px solid var(--straw-gold);
