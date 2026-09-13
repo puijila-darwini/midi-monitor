@@ -13,6 +13,16 @@ PSS-A50 USB keyed into this machine.
   only `Note on` / `Note off` events (plus Clock/Active Sensing).
   No Control Change, Pitch Bend, Channel Pressure, SysEx, or other
   controller data is emitted over USB.
+- The PSS-A50 ALSO RECEIVES over the same USB (bidirectional). It plays its
+  INTERNAL voices (no softsynth needed): note on/off and full chords sound via
+  its own speakers. Send path is the raw device `hw:2,0,0` (amidi) because ALSA
+  seq exposes ONLY the capture port `24:0` — there is no seq output port to
+  route to. `amidi -p hw:2,0,0 -S '90 3C 7F ...'` sends note-ons (ch1 works).
+  This opens up "output" features on the cheap: replay a recorded take back
+  through the keyboard.
+- The board has a LOCAL CONTROL setting (local ON = keys sound their own
+  engine; OFF = keys only emit MIDI, sound must come back from a computer)
+  — the standard caution for pass-through/echo modes (avoid double sounding).
 
 ## Current architecture: monitor web app
 The one-off CLI scripts (fast.py/listen.py/arpeggio.py/melody.py) were

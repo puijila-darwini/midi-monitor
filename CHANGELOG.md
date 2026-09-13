@@ -663,3 +663,15 @@ that file lean. History is chronological; most lines start with a version tag.
   stacked together"); gap count 10 -> 9. LIVE verified via piano-injection:
   catch armed + C–C♯–D cluster -> tonic C + chromatic scale; C–E–G still ->
   major (no hijack). Console 0 errors. Committed agent:, pushed.
+- Hw: PSS-A50 IS BIDIRECTIONAL (receive confirmed). Live-tested from the shell:
+  `amidi -p hw:2,0,0 -S '90 3C 7F 40 7F 43 7F'` (C4-E4-G4 note-ons) sounded a full
+  C major triad through the board's speakers, then note-offs silenced it. USB
+  descriptor shows both MIDI streaming endpoints (EP1 OUT host->device,
+  EP2 IN device->host); `amidi -l` lists hw:2,0,0 as IO. Consequence: ALSA seq
+  still only exposes capture port 24:0 (no seq output port), so sending must go
+  to the raw device hw:2,0,0. The board plays its INTERNAL voices on received
+  MIDI — no softsynth/fluidsynth needed; this is the cheap "output" path (replay
+  a recorded take back through the keyboard). Also noted: LOCAL CONTROL setting
+  exists on the board — leave ON for pure capture; flip OFF only for
+  pass-through/echo modes to avoid double sounding. Docs updated (AGENTS.md
+  Hardware section). Committed agent:, pushed.
