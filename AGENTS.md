@@ -641,4 +641,27 @@ Superseded by the `monitor/` web app, kept for reference:
   500px with `table-layout: fixed` column widths; max-height 64vh scrolls the
   long table. Verified: all 22 rows render with spellings + descriptions,
   scrollHeight 1680 > clientHeight 808 (scrolls), foot text correct, node
-  --check clean, server restarted. Committed agent:, pushed.
+   --check clean, server restarted. Committed agent:, pushed.
+- Ver 44: TOOLTIP REVERSED TO SCALE-FIRST (DATA-ENTRY DIRECTION). The table
+  now reads "want this scale → play this chord" instead of the opposite, since
+  the catch button is a data-entry tool ("i want this scale, what chord do
+  i play?"). Reversed: `CATCH_SHAPES` stays as the matching engine (unchanged
+  detection logic); the tooltip builder regroups shapes BY TARGET SCALE,
+  sorted alphabetically by pretty scale name (Blues → Dorian → Mixolydian →
+  … → Whole tone). Each scale row has a two-column layout: `scale` (name +
+  italic plain-language description) | `any of these catches it` (inline
+  chord picks, simplest first — fewest tones before extensions; each pick is
+  `m7 (1 m3 P5 m7)` format). Per-scale descriptions keyed in a new
+  `CATCH_NOTES` map (no longer on individual shapes), written from the
+  "what does this scale sound like?" angle: "Dorian — the brighter minor: a
+  natural 6th, 1 2 ♭3 4 5 6 ♭7"; "Hirajoshi — Japanese pentatonic, the In
+  scale: 1 2 ♭3 5 ♭6, a minor-ish colour that is not Western minor"; "Altered
+  dominant — every colour-tone: 1 ♭9 ♯9 3 ♭5 ♯5 ♭7", etc. Footer rewritten
+  as "How to enter: set the tonic, press ♬ catch, then play one of the
+  chords in that scale's row" + interval abbreviations + honest edges.
+  Tooltip stacking unchanged (position:fixed/z:9999/child of body). CSS:
+  `.cscale`/`.cplay`/`.pick` replace old `.cshape`/`.civ`/`.cmode` rules;
+  two column widths `c-scale-col:46%`/`c-play-col:54%`. Verified: 16 scales,
+  22 picks total, sorted alphabetically, scrollHeight 1091 > clientHeight
+  (scrolls), topIsTooltip true via elementFromPoint, console 0 errors.
+  Committed agent:, pushed.

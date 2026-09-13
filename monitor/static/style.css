@@ -588,38 +588,42 @@ li.tonic {
   padding: 3px 6px;
   border-bottom: 1px solid rgba(212, 196, 122, 0.35);
 }
-.catch-tooltip th.c-shape-col { width: 22%; }
-.catch-tooltip th.c-iv-col   { width: 40%; }
-.catch-tooltip th.c-mode-col { width: 38%; }
+.catch-tooltip th.c-scale-col { width: 46%; }
+.catch-tooltip th.c-play-col  { width: 54%; }
 .catch-tooltip td {
   padding: 3px 6px;
   border-bottom: 1px solid rgba(42, 79, 68, 0.6);
   vertical-align: top;
 }
-.catch-tooltip td.cshape {
-  color: var(--royal-soft);
-  font-weight: 700;
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
-  white-space: nowrap;
-}
-.catch-tooltip td.civ {
-  color: var(--text);
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
-  white-space: nowrap;
-}
-.catch-tooltip td.cmode {
-  color: var(--straw-soft);
-}
-.catch-tooltip td.cmode b {
+.catch-tooltip td.cscale b {
   color: var(--straw);
   font-weight: 600;
 }
-.catch-tooltip td.cmode i {
+.catch-tooltip td.cscale i {
   display: block;
   color: var(--muted);
   font-style: italic;
   font-weight: 400;
-  margin-top: 1px;
+  margin-top: 2px;
+  line-height: 1.4;
+}
+.catch-tooltip td.cplay {
+  line-height: 1.5;
+}
+.catch-tooltip td.cplay .pick {
+  display: inline-block;
+  margin-right: 10px;
+  white-space: nowrap;
+}
+.catch-tooltip td.cplay .pick b {
+  color: var(--royal-soft);
+  font-weight: 700;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+}
+.catch-tooltip td.cplay .pick .tones {
+  color: var(--text);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  margin-left: 2px;
 }
 .catch-tooltip .tt-foot {
   margin-top: 7px;

@@ -75,53 +75,53 @@ window.tempoBpm = 0;  // expose on window for durationToVexFlow
   //   - aug triad -> whole-tone is the one special 3-note case.
   var CATCH_SHAPES = [
     // -- 6 tones ---------------------------------------------------------
-    { name: "blues",           semis: [0, 3, 5, 6, 7, 10],    mode: "blues",
-      note: "Six-note blues sound — the blue note sits between P4 and P5." },
-    { name: "whole_tone",      semis: [0, 2, 4, 6, 8, 10],    mode: "whole_tone",
-      note: "Ambient and floating; every interval is a whole step — no strong pull to any one note." },
+    { name: "blues",           semis: [0, 3, 5, 6, 7, 10],    mode: "blues" },
+    { name: "whole_tone",      semis: [0, 2, 4, 6, 8, 10],    mode: "whole_tone" },
     // -- 5 tones ---------------------------------------------------------
-    { name: "hirajoshi",       semis: [0, 2, 3, 7, 8],        mode: "hirajoshi",
-      note: "Japanese pentatonic (the In scale). Think of a minor-ish mood: the major 2nd and minor 3rd keep it from sounding Western-minor." },
-    { name: "minor_pent",      semis: [0, 3, 5, 7, 10],       mode: "minor_pent",
-      note: "The classic rock/blues minor pentatonic: 1 ♭3 P4 P5 ♭7. No 2nd, no 6th — instantly familiar." },
-    { name: "add9",            semis: [0, 2, 4, 7, 9],        mode: "major_pent",
-      note: "Major pentatonic — 1 2 3 5 6. A bright, open major sound without the tendency tones (4th and 7th). Think C D E G A." },
-    { name: "7alt",            semis: [0, 1, 4, 6, 10],       mode: "super_locrian",
-      note: "The altered dominant. Every colour-tone is crammed in: b9 #9 3 b5(#11) b7. Maximum tension before resolution." },
-    { name: "m7b9",            semis: [0, 1, 3, 7, 10],       mode: "phrygian",
-      note: "Minor 7 plus a flat 2nd — Phrygian's dark, Spanish-flamenco colour: ♭2 ♭3 5 ♭7." },
-    { name: "m9",              semis: [0, 2, 3, 7, 10],       mode: "dorian",
-      note: "Minor 9th — a lush minor 7 with a natural 2nd (9th on top). Dorian's brighter minor colour: 1 2 ♭3 5 ♭7." },
-    { name: "7b9",             semis: [0, 1, 4, 7, 10],       mode: "phrygian_dominant",
-      note: "Dominant 7 plus a b9: 1 ♭9 3 5 ♭7. A dominant chord with a sharp, darkened top — Phrygian dominant (Spanish dominant)." },
-    { name: "7#11",            semis: [0, 4, 6, 7, 10],       mode: "lydian_dominant",
-      note: "Dominant 7 plus a #11 (a.k.a. b5): 1 3 TT P5 ♭7. Lydian dominant — a dominant with the bright upper-sharp, no b9." },
-    { name: "dom9",            semis: [0, 2, 4, 7, 10],       mode: "mixolydian",
-      note: "A full ninth chord: 1 2 3 5 ♭7. The dominant stack, open and bluesy, the bread and butter of funk/jazz." },
+    { name: "hirajoshi",       semis: [0, 2, 3, 7, 8],        mode: "hirajoshi" },
+    { name: "minor_pent",      semis: [0, 3, 5, 7, 10],       mode: "minor_pent" },
+    { name: "add9",            semis: [0, 2, 4, 7, 9],        mode: "major_pent" },
+    { name: "7alt",            semis: [0, 1, 4, 6, 10],       mode: "super_locrian" },
+    { name: "m7b9",            semis: [0, 1, 3, 7, 10],       mode: "phrygian" },
+    { name: "m9",              semis: [0, 2, 3, 7, 10],       mode: "dorian" },
+    { name: "7b9",             semis: [0, 1, 4, 7, 10],       mode: "phrygian_dominant" },
+    { name: "7#11",            semis: [0, 4, 6, 7, 10],       mode: "lydian_dominant" },
+    { name: "dom9",            semis: [0, 2, 4, 7, 10],       mode: "mixolydian" },
     // -- 4 tones ---------------------------------------------------------
-    { name: "dim7",            semis: [0, 3, 6, 9],           mode: "diminished",
-      note: "Stacked minor thirds. Fully symmetrical — sounds like it belongs to all keys at once; very useful as a pivot." },
-    { name: "m7b5",            semis: [0, 3, 6, 10],          mode: "locrian",
-      note: "Half-diminished. The ii chord in a minor key: minor 3rd + diminished 5th + minor 7. 1 ♭3 TT ♭7." },
-    { name: "mMaj7",           semis: [0, 3, 7, 11],          mode: "harmonic_minor",
-      note: "Minor triad with a major 7 on top: 1 ♭3 5 M7. Haunting and dreamy — the sound of harmonic minor as a chord." },
-    { name: "m6",              semis: [0, 3, 7, 9],           mode: "dorian",
-      note: "Minor 6th: 1 ♭3 5 6. Warm, slightly jazzy minor — Dorian's home colour (no flat 6 to darken it)." },
-    { name: "m7",              semis: [0, 3, 7, 10],          mode: "dorian",
-      note: "The workhorse minor 7th: 1 ♭3 5 ♭7. Works in any key; Dorian when the 6th is natural." },
-    { name: "maj7",            semis: [0, 4, 7, 11],          mode: "lydian",
-      note: "Major 7th: 1 3 5 M7. The jazz/pop major sound — warm and resolved, but with a wistful top note." },
-    { name: "maj6",            semis: [0, 4, 7, 9],           mode: "mixolydian",
-      note: "Major 6th: 1 3 5 6. Cheerful and old-school — a major triad with a pleasant, stable 6th." },
-    { name: "dom7",            semis: [0, 4, 7, 10],          mode: "mixolydian",
-      note: "The dominant 7th: 1 3 5 ♭7. Needs to resolve somewhere — the bread and butter of blues, jazz, and rock." },
-    { name: "7#5",             semis: [0, 4, 8, 10],          mode: "whole_tone",
-      note: "Augmented dominant: 1 3 #5 ♭7. The raised 5th (augmented triad) plus a dominant 7 — tense and restless." },
-    { name: "mMaj7#5",         semis: [0, 4, 8, 11],          mode: "harmonic_major",
-      note: "Major 7 with a raised 5th: 1 3 #5 M7. The upper part of harmonic major — eerie and luminous." },
-    { name: "7b5",             semis: [0, 4, 6, 10],          mode: "lydian_dominant",
-      note: "Dominant with a flat 5 (a.k.a. #11): 1 3 TT ♭7. Lydian dominant's core — also the tritone substitution sound." }
+    { name: "dim7",            semis: [0, 3, 6, 9],           mode: "diminished" },
+    { name: "m7b5",            semis: [0, 3, 6, 10],          mode: "locrian" },
+    { name: "mMaj7",           semis: [0, 3, 7, 11],          mode: "harmonic_minor" },
+    { name: "m6",              semis: [0, 3, 7, 9],           mode: "dorian" },
+    { name: "m7",              semis: [0, 3, 7, 10],          mode: "dorian" },
+    { name: "maj7",            semis: [0, 4, 7, 11],          mode: "lydian" },
+    { name: "maj6",            semis: [0, 4, 7, 9],           mode: "mixolydian" },
+    { name: "dom7",            semis: [0, 4, 7, 10],          mode: "mixolydian" },
+    { name: "7#5",             semis: [0, 4, 8, 10],          mode: "whole_tone" },
+    { name: "mMaj7#5",         semis: [0, 4, 8, 11],          mode: "harmonic_major" },
+    { name: "7b5",             semis: [0, 4, 6, 10],          mode: "lydian_dominant" }
   ];
+
+  // Plain-language description of each TARGET scale (what it sounds like), keyed
+  // by mode id. The tooltip reads target-first — "want this scale -> play this
+  // chord" — so all the explanation hangs off the scale, not the catch shape.
+  var CATCH_NOTES = {
+    "blues": "The 6-tone blues scale: 1 \u266d3 4 \u266d5 5 \u266d7 (C E\u266d F F\u266d/G\u266d G B\u266d).",
+    "whole_tone": "Six whole steps, no perfect 5th — floating and ambiguous, any triad sound does.",
+    "hirajoshi": "Japanese pentatonic (the In scale): 1 2 \u266d3 5 \u266d6. A minor-ish colour that is not Western minor.",
+    "minor_pent": "The rock/blues minor pentatonic: 1 \u266d3 4 5 \u266d7 (C E\u266d F G B\u266d).",
+    "major_pent": "The bright, open major pentatonic: 1 2 3 5 6 (C D E G A).",
+    "super_locrian": "The altered dominant — every colour-tone in one chord: 1 \u266d9 \u266f9 3 \u266d5 \u266f5 \u266d7.",
+    "phrygian": "The dark Spanish/flamenco minor: \u266d2, \u266d3, \u266d6, \u266d7 over a minor 7.",
+    "dorian": "The brighter minor — its 6th is natural, not \u266d6: 1 2 \u266d3 4 5 6 \u266d7 (D E F G A B C).",
+    "phrygian_dominant": "Spanish dominant — a Phrygian scale with a major 3rd: \u266d9 and 3 both ring at once.",
+    "lydian_dominant": "The dominant with a \u266f4 (a.k.a. b5) instead of a \u266d9: 1 2 3 \u266f4 5 6 \u266d7.",
+    "mixolydian": "The folk/bluesy major: a plain major scale with a \u266d7 (1 2 3 4 5 6 \u266d7).",
+    "diminished": "The symmetric diminished scale — its home chord is the fully diminished 7th.",
+    "locrian": "The darkest minor: \u266d2 and \u266d5 make it unstable; its home chord is half-diminished.",
+    "harmonic_minor": "Natural minor with its leading tone raised: 1 2 \u266d3 4 5 \u266d6 7 — dramatic and dreamy.",
+    "lydian": "A major scale with a raised 4th: 1 2 3 \u266f4 5 6 7 — bright, floating, cinematic.",
+    "harmonic_major": "Major with a flattened 6th: 1 2 3 4 5 \u266d6 7. Brilliant, slightly bittersweet."
+  };
 
   // Match a played pc-set against the catch shapes (subset-tolerant, longer
   // first) and return {root, quality, mode}, or null -> callers fall back to
@@ -201,35 +201,61 @@ window.tempoBpm = 0;  // expose on window for durationToVexFlow
 
   // Build the "how does catch work" tooltip from the CATCH_SHAPES data itself,
   // so the docs can never drift from the table they describe.
-  function buildCatchTooltip() {
+function buildCatchTooltip() {
     var tip = document.getElementById("catch-tooltip");
     if (!tip) return;
+    // Group the shapes BY TARGET SCALE so the table reads "want this scale ->
+    // play this chord" (the data-entry direction) rather than the reverse.
+    var groups = {}; // mode id -> { scale, note, play: [{name, tones}] }
+    CATCH_SHAPES.forEach(function (s) {
+      if (!groups[s.mode]) {
+        groups[s.mode] = {
+          scale: CATCH_MODE_NAMES[s.mode] || s.mode,
+          note: CATCH_NOTES[s.mode] || "",
+          play: []
+        };
+      }
+      groups[s.mode].play.push({
+        name: s.name,
+        tones: s.semis.map(function (semi) { return INTERVAL_NAMES[semi]; }).join(" "),
+        n: s.semis.length
+      });
+    });
+    // Simpler chords first within a scale (fewest tones), then in table order;
+    // scales sorted by name so the row you want is easy to find.
+    var order = Object.keys(groups).sort(function (a, b) {
+      return groups[a].scale.localeCompare(groups[b].scale);
+    });
     var rows = "";
-    for (var i = 0; i < CATCH_SHAPES.length; i++) {
-      var s = CATCH_SHAPES[i];
-      var pretty = CATCH_MODE_NAMES[s.mode] || s.mode;
-      var iv = s.semis.map(function (semi) { return INTERVAL_NAMES[semi]; }).join(" ");
-      rows += '<tr><td class="cshape">' + s.name + "</td>" +
-              '<td class="civ">' + iv + "</td>" +
-              '<td class="cmode"><b>' + pretty + "</b>" +
-              (s.note ? "<i>" + s.note + "</i>" : "") + "</td></tr>";
+    for (var g = 0; g < order.length; g++) {
+      var grp = groups[order[g]];
+      grp.play.sort(function (a, b) {
+        return a.n - b.n;
+      });
+      var picks = grp.play.map(function (p) {
+        return '<span class="pick"><b>' + p.name + "</b>" +
+               '<span class="tones">(' + p.tones + ")</span></span>";
+      }).join("");
+      rows += '<tr><td class="cscale"><b>' + grp.scale + "</b>" +
+              (grp.note ? "<i>" + grp.note + "</i>" : "") + "</td>" +
+              '<td class="cplay">' + picks + "</td></tr>";
     }
     tip.innerHTML =
-      '<div class="tt-head">play a chord &rarr; sets its scale</div>' +
-      '<table><tr><th class="c-shape-col">chord</th>' +
-      '<th class="c-iv-col">tones from root</th>' +
-      '<th class="c-mode-col">scale</th></tr>' + rows + "</table>" +
+      '<div class="tt-head">want this scale &#8594; play this chord</div>' +
+      '<table><tr><th class="c-scale-col">scale</th>' +
+      '<th class="c-play-col">any of these catches it</th></tr>' +
+      rows + "</table>" +
       '<div class="tt-foot">' +
-      "Tones listed are semitone distances from the root: " +
-      "<b>m2</b> = flat 2nd, <b>M2</b> = major 2nd, <b>m3</b> = minor 3rd, " +
-      "<b>M3</b> = major 3rd, <b>TT</b> = tritone (sharp 4 / flat 5), " +
-      "<b>P5</b> = perfect 5th, <b>m7</b> = minor 7th, <b>M7</b> = major 7th, etc." +
+      "How to enter: set the tonic, press <b>\u266a catch</b>, then play one " +
+      "of the chords in that scale&rsquo;s row (any octave, any order — only the " +
+      "pitch classes matter). Tones in brackets are semitone distances from the " +
+      "root: <b>m2</b> = flat 2nd, <b>M3</b> = major 3rd, <b>TT</b> = tritone, etc." +
       "<br><br>" +
       "Vanilla major / natural-minor only come from a bare triad. " +
-      "Aug triad &rarr; whole tone. A lone note sets just the tonic. " +
-      "Matching is loose (subset-tolerant) and the lowest heard note " +
-      "breaks symmetric-chord ties (so Cmaj9 and Am11 choose the " +
-      "root you actually played, not whichever is alphabetically first)." +
+      "Aug triad &#8594; whole tone. A lone note sets just the tonic. " +
+      "Matching is loose (subset-tolerant) and the lowest note you play " +
+      "breaks symmetric-chord ties (so Cmaj9 and Am11 pick the root you " +
+      "actually played, not whichever is alphabetically first)." +
       "</div>";
 
     var btn = document.getElementById("catch-help");
