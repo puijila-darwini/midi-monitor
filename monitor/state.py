@@ -3,6 +3,8 @@ import time
 import statistics
 import threading
 
+from .replay import VOICES as VOICES_BY_PROGRAM
+
 
 class State:
     """Tracks the current picture of what is being played.
@@ -32,6 +34,10 @@ class State:
         self.online = False
         self.program = 0  # current MIDI program (0-127)
         self.bank = 0     # current bank select MSB (0 = normal, 127 = drums)
+        # Receive voice (used for playback of stored/received MIDI). This is
+        # separate from the panel voice (used for keys pressed on the keyboard).
+        self.receive_program = 0  # current receive MIDI program (0-127)
+        self.receive_bank = 0     # current receive bank select MSB
         # Time signature (numerator/denominator beats per measure). User-set via
         # set_time_signature; drives measure (bar-line) rendering on the stave
         # and the metronome's accent grouping (accent every `numer` beats).
@@ -582,6 +588,8 @@ class State:
         elif etype == "program_change":
             self.program = event["program"]
             self.bank = event.get("bank", 0)
+            self.receive_program = event["program"]
+            self.receive_bank = self.bank
             self.recent.append(
                 {"type": "program_change", "program": event["program"],
                  "bank": self.bank, "channel": event.get("channel", 0), "time": event["time"]}
@@ -636,6 +644,10 @@ class State:
                 self.version += 1
             self.recording = False
 
+    def _get_receive_voice_name(self):
+        """Return the name of the current receive voice from bank/program."""
+        return VOICES_BY_PROGRAM.get((self.receive_bank, self.receive_program), "Unknown")
+
     def snapshot(self):
         return {
             "online": self.online,
@@ -646,6 +658,9 @@ class State:
             "version": self.version,
             "program": self.program,
             "bank": self.bank,
+            "receive_program": self.receive_program,
+            "receive_bank": self.receive_bank,
+            "receive_voice": self._get_receive_voice_name(),
             "tempo_bpm": round(self.tempo_bpm, 1) if self.tempo_bpm > 0 else 0,
             "detected_bpm": round(self.detected_bpm, 1) if self.detected_bpm > 0 else 0,
             "user_tempo_bpm": round(self.user_tempo_bpm, 1) if self.user_tempo_bpm > 0 else 0,

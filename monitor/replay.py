@@ -14,6 +14,65 @@ import time
 
 DEVICE = "hw:2,0,0"
 
+# PSS-A50 voice list, keyed by (bank select MSB, program) -> name.
+# The PSS-A50 is NOT full GM: it has exactly 42 presets (40 normal voices +
+# 2 drum kits). Normal voices use GM1-compatible program numbers (Bank MSB 0);
+# the two drum kits use XG/XGlite numbering with Bank MSB 127.
+VOICES = {
+    (0, 0): "Grand Piano",
+    (0, 4): "Electric Piano 1",
+    (0, 5): "Electric Piano 2",
+    (0, 2): "Electric Grand Piano",
+    (0, 16): "Drawbar Organ",
+    (0, 18): "Rock Organ",
+    (0, 21): "Accordion",
+    (0, 22): "Harmonica",
+    (0, 24): "Nylon Guitar",
+    (0, 25): "Steel Guitar",
+    (0, 26): "Jazz Guitar",
+    (0, 27): "Clean Guitar",
+    (0, 29): "Overdriven Guitar",
+    (0, 32): "Acoustic Bass",
+    (0, 33): "Finger Bass",
+    (0, 36): "Slap Bass",
+    (0, 38): "Synth Bass",
+    (0, 48): "Strings",
+    (0, 45): "Pizzicato Strings",
+    (0, 40): "Violin",
+    (0, 42): "Cello",
+    (0, 46): "Orchestral Harp",
+    (0, 68): "Oboe",
+    (0, 71): "Clarinet",
+    (0, 73): "Flute",
+    (0, 66): "Tenor Sax",
+    (0, 61): "Brass Section",
+    (0, 56): "Trumpet",
+    (0, 57): "Trombone",
+    (0, 60): "French Horn",
+    (0, 62): "Synth Brass",
+    (0, 82): "Gemini",
+    (0, 84): "Punchy Chordz",
+    (0, 80): "Square Lead",
+    (0, 81): "Sawtooth Lead",
+    (0, 88): "New Age Pad",
+    (0, 89): "Warm Pad",
+    (0, 100): "Brightness",
+    (127, 0): "Standard Kit",
+    (127, 27): "Dance Kit",
+    (0, 11): "Vibraphone",
+    (0, 12): "Marimba",
+}
+
+def _send(hexstr):
+    subprocess.run(["amidi", "-p", DEVICE, "-S", hexstr], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+def program_change(bank, pc):
+    """Send a program change for (bank, pc) to the keyboard."""
+    _send("B0 00 %02X" % bank)
+    time.sleep(0.02)
+    _send("C0 %02X" % pc)
+    time.sleep(0.02)
+
 
 def plan(quantized_notes, speed=1.0):
     """Build a replay timeline from quantized-note dicts.
@@ -100,11 +159,12 @@ class Replay:
         except Exception:
             pass
 
-    def play(self, quantized_notes, speed=1.0, on_event=None):
+    def play(self, quantized_notes, speed=1.0, on_event=None, voice=None):
         """Start playback on a background thread. Returns True if started.
 
         on_event receives dicts ({type:'replay', phase: ..., ...}) as progress
         is made (start/step/done/stopped/error); it may be the SSE hub publish.
+        voice: (bank, pc) program change to send before playback; None = skip.
         Raises nothing; playback errors are reported via on_event instead.
         """
         if self.active:
@@ -115,12 +175,12 @@ class Replay:
         # or quantized note dicts, and plan accordingly.
         raw = bool(quantized_notes and isinstance(quantized_notes[0], dict) and "type" in quantized_notes[0])
         self._thread = threading.Thread(
-            target=self._run, args=(list(quantized_notes), float(speed), on_event, raw),
+            target=self._run, args=(list(quantized_notes), float(speed), on_event, raw, voice),
             name="replay", daemon=True)
         self._thread.start()
         return True
 
-    def _run(self, notes, speed, on_event, raw):
+    def _run(self, notes, speed, on_event, raw, voice=None):
         def emit(phase, **kw):
             if on_event is not None:
                 try:
@@ -129,6 +189,9 @@ class Replay:
                     pass
 
         try:
+            if voice is not None:
+                bank, pc = voice
+                program_change(bank, pc)
             if raw:
                 events, duration = plan_from_raw(notes, speed)
             else:

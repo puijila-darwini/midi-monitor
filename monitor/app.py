@@ -11,7 +11,7 @@ from flask import Flask, jsonify, render_template, request, Response
 from .capture import Capture
 from .state import State
 from .analysis import Analyser
-from .replay import Replay, plan_from_raw
+from .replay import Replay, plan_from_raw, VOICES
 from . import chords
 
 app = Flask(__name__)
@@ -170,7 +170,7 @@ def index():
 @app.route("/api/state")
 def api_state():
     snap = state.snapshot()
-    snap["capture"] = capture_health_snapshot()
+    snap["capture"] = _capture_health_snapshot()
     return jsonify(snap)
 
 
@@ -311,13 +311,20 @@ def api_replay():
     notes = [n for n in state.take_notes if not n.get("rest")]
     if not notes:
         return jsonify({"ok": False, "error": "take is empty"}), 400
+    # Optional voice selection: send a program change before playback so the
+    # keyboard uses the chosen voice instead of whatever it was last on.
+    voice = _voice_to_bank_pc(body.get("voice", "auto"))
+    # If a specific voice is selected, update the receive voice state.
+    if voice is not None:
+        state.receive_program = voice[1]
+        state.receive_bank = voice[0]
     # Try to use raw_take_events if available (exact timing), otherwise fall back to quantized_notes
     if hasattr(state, "raw_take_events") and state.raw_take_events:
         raw_notes = state.raw_take_events[-500:]  # limit to last 500 events
-        replayer.play(raw_notes, speed=speed, on_event=hub.publish)
+        replayer.play(raw_notes, speed=speed, on_event=hub.publish, voice=voice)
     else:
-        replayer.play(state.take_notes, speed=speed, on_event=hub.publish)
-    return jsonify({"ok": True, "notes": len(notes), "speed": speed})
+        replayer.play(state.take_notes, speed=speed, on_event=hub.publish, voice=voice)
+    return jsonify({"ok": True, "notes": len(notes), "speed": speed, "voice": body.get("voice", "auto")})
 
 
 @app.route("/api/replay/stop", methods=["POST"])
@@ -359,7 +366,19 @@ def events():
     return resp
 
 
-def capture_health_snapshot():
+def _voice_to_bank_pc(voice_name):
+    """Convert voice name to (bank, pc) tuple for PSS-A50."""
+    if voice_name == "auto":
+        return None
+    return {name: (bank, pc) for (bank, pc), name in VOICES.items()}.get(voice_name)
+
+
+def _bank_pc_to_voice(bank, pc):
+    """Convert (bank, pc) tuple to voice name for PSS-A50."""
+    return VOICES.get((bank, pc), "Unknown")
+
+
+def _capture_health_snapshot():
     """Copy for /api/state so the supervisor + UI can see capture health."""
     with _capture_lock:
         return dict(_capture_health)

@@ -705,6 +705,20 @@ that file lean. History is chronological; most lines start with a version tag.
 - Ver 50: raw midi buffer card clear fix. Backend POST /api/take/clear now properly
   empties state.raw_take_events; frontend clearRawTake() posts to endpoint, shows
   cleared state, and resumes polling to pick up new events after clearing.
+- Ver 51: voice-memory clarification. Verified from the PSS-A50 MIDI reference that
+  incoming program changes update the receive voice (used for playback of stored/
+  received MIDI), while the panel voice (used for keys pressed on the keyboard) is
+  maintained. UI now labels the "auto" option as "auto (current receive voice)";
+  MIDIREF.md updated to describe the two voice settings and mark the receive-voice
+  behavior as verified. Backend/replay code unchanged; auto already leaves the receive
+  voice untouched so "auto" inherits the current receive voice.
+- Ver 52: voice selector for playback. Added a voice dropdown (42 PSS-A50 voices +
+  "auto") to the replay controls. Selecting a specific voice sends a program change
+  before playback; "auto" uses the current receive voice (no program change). The
+  dropdown reorders at load time so the current receive voice is first, "auto" second,
+  then the remaining voices. State tracks receive_program/receive_bank separately from
+  panel program/bank. MIDIREF.md updated with verified notes from pssa50_en_om_e0.pdf.
+  Manuals added to .gitignore.
 - Hw: MIDIREF.MD created from pssa50_en_mr_a0.pdf (channel routing, Local
   Control, program/control change, SysEx, implementation chart, live USB
   profile, voices table, send-path helpers, open questions).

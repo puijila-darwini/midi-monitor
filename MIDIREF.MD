@@ -26,9 +26,14 @@ Panel settings (voices etc.) are **not** affected by incoming MIDI.
 ## Program Change / Control Change
 
 - Both transmit AND receive can be individually enabled/disabled.
-- With transmit+receive ON, voice changes on the board can be driven
-  from the computer (and vice versa); the currently selected panel voice
-  is maintained regardless.
+- The keyboard maintains two separate voice settings:
+    * Panel voice: used when playing notes from the keyboard keys.
+    * Receive voice: used when playing notes received via MIDI (USB or otherwise).
+- With transmit+receive ON:
+    * Voice changes made via the keyboard panel affect the panel voice.
+    * Voice changes sent from the computer (program change) affect the receive voice.
+    * The panel voice is not affected by incoming MIDI program changes.
+    * The receive voice is not affected by keyboard panel voice changes.
 
 ## MIDI data format
 
@@ -118,8 +123,10 @@ python3 midiout.py alloff                     # panic (CC123)
 - Wait ≥ 6 s between power toggle and plug/unplug cycles.
 - If frozen: restart the app/computer or power-cycle the board.
 
-## Open questions / not yet verified
+## Verified notes / remaining open questions
 
-- Whether the board also *receives* program changes (it does — but we haven't tested changing the panel voice from the computer live).
+- The board receives program changes over USB and updates its receive voice state accordingly. Changing the receive voice from the computer updates the keyboard's MIDI playback voice; the panel voice used for keyboard keys is maintained and does not change.
+- The PSS-A50 owner's manual (pssa50_en_om_e0.pdf) confirms the dual-voice model: recorded phrases playback using the *last selected Voice during recording*, independent of the current panel voice. This is the same mechanism by which our `/api/replay` program change selects the voice for stored/received MIDI playback while leaving the keyboard's panel voice untouched.
 - Actual receive channel behavior (the sheet says data received on the keyboard's MIDI out channel is sent to its internal voice; our raw-device send path worked on ch1 already).
+- Local Control toggle behavior during pass-through (not yet exercised).
 - Local Control toggle behavior during pass-through (not yet exercised).

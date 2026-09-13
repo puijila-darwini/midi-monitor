@@ -11,6 +11,14 @@ monitor.log		# Main server log in ~/ai/tmp/keymon/
 # Local AI security config (not part of source code)
 opencode.json		# Bash permission wall at root
 
+# Manuals (large PDFs, not part of source code)
+pssa50_en_mr_a0.pdf
+pssa50_en_om_e0.pdf
+
+# PDF text extractions (temporary)
+pssa50.txt
+pssa50_om.txt
+
 # Exclude IDE / editor artifacts (prevent accidental commits)
 .vscode/
 .idea/

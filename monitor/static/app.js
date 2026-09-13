@@ -848,10 +848,12 @@ function buildCatchTooltip() {
           .catch(function () { /* transient */ });
         return;
       }
+      var voiceSel = document.getElementById("replay-voice");
+      var voiceVal = voiceSel ? voiceSel.value : "auto";
       fetch("/api/replay", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({})
+        body: JSON.stringify({ speed: 1.0, voice: voiceVal })
       }).then(function (r) { return r.json(); })
         .then(function (res) {
           if (!res.ok) addFeed("REPLAY  " + (res.error || "failed"), "replay");
@@ -1070,11 +1072,34 @@ function buildCatchTooltip() {
     });
   })();
 
+  // Reorder the replay voice selector so the current receive voice is first,
+  // then "auto", then the remaining voices.
+  function orderReplayVoices(currentVoice) {
+    var sel = document.getElementById("replay-voice");
+    if (!sel || !currentVoice || currentVoice === "Unknown") return;
+    var opts = Array.prototype.slice.call(sel.options);
+    var current = null;
+    var auto = null;
+    for (var i = 0; i < opts.length; i++) {
+      if (opts[i].value === currentVoice) current = opts[i];
+      if (opts[i].value === "auto") auto = opts[i];
+    }
+    if (!current || !auto) return;
+    // Rebuild in correct order: current voice, then auto, then rest
+    var remaining = opts.filter(function (opt) { return opt !== current && opt !== auto; });
+    sel.innerHTML = "";
+    sel.appendChild(current);
+    sel.appendChild(auto);
+    remaining.forEach(function (opt) { sel.appendChild(opt); });
+    sel.value = currentVoice;
+  }
+
   // initial state
   fetch("/api/state")
     .then(function (r) { return r.json(); })
     .then(function (s) {
       setStatus(s.online);
+      orderReplayVoices(s.receive_voice);
       if (typeof s.program !== "undefined") {
         var pname = PSSA50_VOICES[(s.bank || 0) + ":" + s.program] || "Unknown";
         setInstrument(s.program, pname);
