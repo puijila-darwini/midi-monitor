@@ -675,3 +675,15 @@ that file lean. History is chronological; most lines start with a version tag.
   exists on the board — leave ON for pure capture; flip OFF only for
   pass-through/echo modes to avoid double sounding. Docs updated (AGENTS.md
   Hardware section). Committed agent:, pushed.
+- Ver 47: midiout.py glue script (stdlib only). Every playback test so far had
+  been hand-typed amidi hex; folded the whole send path into one repeatable
+  tool. Commands: `voices` (all 42, bank/pc), `voice "Name"` (fuzzy; always
+  sends bank-select + program change so drum-kit/normal swaps can't leave the
+  board on the wrong bank), `note C4 [vel] [dur]`, `chord "C4 E4 G4" ...`,
+  `seq "C4 E4 G4 C5"` (one note per beat, --bpm), `seq-file TAKE.txt`
+  (lines `note dur` / rests `r 0.5`), `alloff` (CC123 panic). Note-name parsing
+  (C4, D#3, Bb2), drums via GM numbers. Debuted with a demo take
+  `examples/take-frag.txt` (C-E-G rests + finish on C5). Verified live: voice
+  swaps (incl. drum kit -> piano bank restore), single note, chord, melody seq,
+  seq-file playback, panic reset. Found+fixed one indexing bug in seq-file
+  during testing. Committed agent:, pushed.
