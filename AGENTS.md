@@ -562,3 +562,53 @@ Superseded by the `monitor/` web app, kept for reference:
   directly). Deleted the dead `catchLast` line; single-note catch now sets tonic
   only (verified live: C4 -> tonic C, scale untouched).
   Committed agent:, pushed.
+- Ver 41: WACKY CHORD -> WACKY SCALE CATCHES (DATA ENTRY). The catch button is
+  explicitly a DATA-ENTRY tool, not key detection (user: "essentially a data
+  entry thing"), so mappings were made generous. `chordFromPcs()` in app.js now
+  matches a played pc-set against the `CATCH_SHAPES` table (subset-tolerant:
+  the played set may CONTAIN a shape; longer/more-specific shapes win; then
+  table order). Bass-pc is a GLOBAL tiebreak (+1000 score when the shape's root
+  equals the lowest heard pc) so musically-valid alternative roots resolve to
+  what was actually played: Cm6 = Am7b5 as C dorian only when bass is C, Cadd9
+  stays C major-pent not A minor-pent, C7#11 stays lydian-dominant not F#7alt.
+  New 5-6 tone shapes: 7alt->super_locrian, 7b9->phrygian_dominant,
+  7#11/7b5->lydian_dominant, m7b9->phrygian, m9->dorian, dom9->mixolydian,
+  add9->major_pent, 5/6-tone minor_pent/blues/hirajoshi/whole_tone hex rec,
+  7#5->whole_tone, mMaj7#5->harmonic_major. Vanilla major/aeolian remain ONLY
+  settable by a bare triad; aug->whole_tone stays the one special 3-note case;
+  sus4 -> no scale (tonic only). Verified: 28-case headless + live C7b9 flash
+  -> phrygian_dominant, C7#11 -> lydian_dominant, C9 -> mixolydian.
+  Committed agent:, pushed.
+- Ver 42: CLICKABLE PIANO INJECTS MIDI + TEMPO CARD + CATCH TABLE TOOLTIP.
+  (a) ON-SCREEN KEYBOARD PLAYS: pointerdown/pointerup on the 88-key piano now
+  injects synthetic note_on/note_off into the notestream via new POST /api/note.
+  Notes are queued onto the LIVE Capture instance (`_capture_instance` global,
+  set by the supervisor thread) through `Capture.inject_note()`, stamped with
+  the capture-relative clock, and drained by the capture loop BEFORE the
+  offline/reconnect branch — so they ride the SAME pipeline as real MIDI:
+  state/analyser/quantization/SSE/stave/catch. Velocity is imputed (const 90);
+  the note_on duration is honest time-to-note_off. Frontend: `bindPianoClick()`
+  sends one POST per press and one per release (per-pointerId map so drags &
+  multitouch release correctly; `mouseHeld` guard blocks double-on; primary
+  button only). Works even with no keyboard attached (injection is network
+  traffic, not MIDI). Verified: click -> feed "C4 on (v90)"/"C4 off", key
+  lights purple during press, and clicking a C-E-G roll with catch armed
+  flashes "ARP: C4 maj" and sets tonic C + major. (b) TEMPO CARD:
+  the tempo/metronome/time-signature controls MOVED OUT of the header into a
+  `#tempo-card` ("tempo & meter") that sits in a `.control-row` flex LEFT of
+  the "tonic & scale" card — neither card is full-width anymore (tempo-card
+  flex 1 1 300px, keysec flex 2 1 420px, wrap on narrow screens). Header is
+  just title/badge/status/instrument again. All IDs kept (#tempo-input, #tempo-
+  tag, #tempo-detected, #metronome-btn, #metro-beat, #timesig) so JS handlers
+  work unchanged; `renderTempo()` guard switched from the deleted `#tempo` div
+  to `#tempo-input`. CSS: `.control-row`/`.tempo-card`/`.tempo-card-body`/
+  `.tempo-row` replace the old `#tempo` rules. (c) CATCH TABLE TOOLTIP:
+  a `?` button (`#catch-help`) in the tonic & scale pill-head and a
+  `#catch-tooltip` popover document the catch mappings. The table is rendered
+  from `CATCH_SHAPES`/`CATCH_MODE_NAMES` at load (`buildCatchTooltip()`) so the
+  docs can never drift from the data; shows on hover/focus (CSS) and toggles on
+  click (.show). Footer notes the honest edges: vanillas only via bare triad,
+  aug->whole tone, lone note = tonic only, loose subset matching, bass breaks
+  symmetric ties. Verified: tooltip hover shows all 22 shapes in a table + foot,
+  click toggles; timesig 3/4 + fixed-tempo 100 still persist server-side from
+  the relocated controls; zero JS errors/warnings. Committed agent:, pushed.

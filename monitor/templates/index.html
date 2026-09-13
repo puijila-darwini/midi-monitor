@@ -15,27 +15,6 @@
     </div>
     <div id="status" class="status offline">keyboard offline</div>
     <div id="instrument" class="instrument">instrument: &mdash;</div>
-    <div id="tempo" class="tempo">
-      <span>tempo:</span>
-      <input type="number" id="tempo-input" class="tempo-input" min="30" max="300" step="1"
-             placeholder="auto" title="Set a fixed tempo (BPM) to lock quantization; blank = auto-detect">
-      <span id="tempo-tag" class="tempo-tag">auto</span>
-      <span id="tempo-detected" class="tempo-detected"></span>
-      <button id="metronome-btn" class="metro-btn" type="button" title="Click at the tempo">&#9835; metronome</button>
-      <span id="metro-beat" class="metro-beat" aria-hidden="true"></span>
-      <label class="timesig-label"><span>time:</span>
-        <select id="timesig" title="Set the time signature (beats per measure)">
-          <option value="2/4">2/4</option>
-          <option value="3/4">3/4</option>
-          <option value="4/4" selected>4/4</option>
-          <option value="5/4">5/4</option>
-          <option value="6/8">6/8</option>
-          <option value="7/8">7/8</option>
-          <option value="9/8">9/8</option>
-          <option value="12/8">12/8</option>
-        </select>
-      </label>
-    </div>
   </header>
 
   <div id="capture-error" class="capture-error" role="alert"></div>
@@ -56,10 +35,46 @@
         <div id="piano"></div>
       </section>
 
-      <section id="key" class="keysec card">
-        <div class="keysec-head">
-          <span class="keysec-title">tonic &amp; scale</span>
-        </div>
+      <div class="control-row">
+        <!-- tempo & meter: quantization tempo, metronome, time signature -->
+        <section id="tempo-card" class="tempo-card card">
+          <div class="keysec-head">
+            <span class="keysec-title">tempo &amp; meter</span>
+          </div>
+          <div class="tempo-card-body">
+            <div class="tempo-row">
+              <span>tempo:</span>
+              <input type="number" id="tempo-input" class="tempo-input" min="30" max="300" step="1"
+                     placeholder="auto" title="Set a fixed tempo (BPM) to lock quantization; blank = auto-detect">
+              <span id="tempo-tag" class="tempo-tag">auto</span>
+              <span id="tempo-detected" class="tempo-detected"></span>
+            </div>
+            <div class="tempo-row">
+              <button id="metronome-btn" class="metro-btn" type="button" title="Click at the tempo">&#9835; metronome</button>
+              <span id="metro-beat" class="metro-beat" aria-hidden="true"></span>
+              <label class="timesig-label"><span>time:</span>
+                <select id="timesig" title="Set the time signature (beats per measure)">
+                  <option value="2/4">2/4</option>
+                  <option value="3/4">3/4</option>
+                  <option value="4/4" selected>4/4</option>
+                  <option value="5/4">5/4</option>
+                  <option value="6/8">6/8</option>
+                  <option value="7/8">7/8</option>
+                  <option value="9/8">9/8</option>
+                  <option value="12/8">12/8</option>
+                </select>
+              </label>
+            </div>
+          </div>
+        </section>
+
+        <section id="key" class="keysec card">
+          <div class="keysec-head">
+            <span class="keysec-title">tonic &amp; scale</span>
+            <button id="catch-help" class="help-btn" type="button"
+                    title="How the catch button turns a played chord into a scale">?</button>
+            <div id="catch-tooltip" class="catch-tooltip" role="tooltip"></div>
+          </div>
         <div class="keysec-controls">
           <label>
             <span>tonic:</span>
@@ -126,7 +141,8 @@
           <button id="listen-tonic" class="listen-btn" type="button"
                   title="Wait for the next note you play and set the tonic to it">&#9834; catch</button>
         </div>
-      </section>
+        </section>
+      </div>
 
       <section id="stave-wrap" class="stave-wrap card">
         <div class="stave-head">

@@ -6,6 +6,7 @@ is no keyboard, events gracefully yield an explicit "offline" state.
 """
 import re
 import subprocess
+import threading
 import time
 
 PORT = "24:0"
@@ -162,6 +163,34 @@ class Capture:
         self._online = False
         self._program = 0  # current program number (0-127)
         self._bank = 0     # current bank select MSB (0 = normal, 127 = drums)
+        # Synthetic note events queued by the on-screen piano (POST /api/note).
+        # The capture loop drains them so they ride the exact same pipeline as
+        # real MIDI notes (state / analyser / quantization / SSE).
+        self._inject_lock = threading.Lock()
+        self._inject_queue = []
+
+    def inject_note(self, note, velocity, on):
+        """Queue a synthetic note_on/note_off for the capture loop to yield.
+
+        Used to play the on-screen piano into the notestream. Times are stamped
+        with self._now() at the moment of the click/release so the capture-
+        relative clock (and therefore quantization) stays consistent with the
+        real keyboard's notes.
+        """
+        with self._inject_lock:
+            self._inject_queue.append({
+                "type": "note_on" if on else "note_off",
+                "note": int(note),
+                "velocity": int(velocity),
+                "channel": 0,  # UI-passed notes aren't on a hardware channel
+                "time": self._now(),
+            })
+
+    def _pop_inject(self):
+        with self._inject_lock:
+            if not self._inject_queue:
+                return None
+            return self._inject_queue.pop(0)
 
     def _now(self):
         return time.time() - self._start
@@ -234,6 +263,10 @@ class Capture:
     def _iterate(self):
         self._reported_online = False
         while True:
+            injected = self._pop_inject()
+            if injected is not None:
+                yield injected
+                continue
             self._ensure_online()
             if not _running(self._proc):
                 # keyboard unavailable

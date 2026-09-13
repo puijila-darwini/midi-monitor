@@ -155,6 +155,55 @@ window.tempoBpm = 0;  // expose on window for durationToVexFlow
     return null;
   }
 
+  // Pretty scale names for the catch-table tooltip.
+  var CATCH_MODE_NAMES = {
+    "blues": "Blues",
+    "whole_tone": "Whole tone",
+    "hirajoshi": "Hirajoshi",
+    "minor_pent": "Minor pentatonic",
+    "major_pent": "Major pentatonic",
+    "super_locrian": "Super Locrian (altered)",
+    "phrygian": "Phrygian",
+    "dorian": "Dorian",
+    "phrygian_dominant": "Phrygian dominant",
+    "lydian_dominant": "Lydian dominant",
+    "mixolydian": "Mixolydian",
+    "diminished": "Diminished",
+    "locrian": "Locrian",
+    "harmonic_minor": "Harmonic minor",
+    "lydian": "Lydian",
+    "harmonic_major": "Harmonic major",
+    "major": "Major (Ionian)",
+    "aeolian": "Natural minor"
+  };
+
+  // Build the "how does catch work" tooltip from the CATCH_SHAPES data itself,
+  // so the docs can never drift from the table they describe.
+  function buildCatchTooltip() {
+    var tip = document.getElementById("catch-tooltip");
+    if (!tip) return;
+    var rows = "";
+    for (var i = 0; i < CATCH_SHAPES.length; i++) {
+      var s = CATCH_SHAPES[i];
+      var pretty = CATCH_MODE_NAMES[s.mode] || s.mode;
+      rows += '<tr><td class="cshape">' + s.name + "</td>" +
+              '<td class="cmode">' + pretty + "</td></tr>";
+    }
+    tip.innerHTML =
+      '<div class="tt-head">play a chord &#8594; sets its scale</div>' +
+      "<table><tr><th>chord</th><th>scale</th></tr>" + rows + "</table>" +
+      '<div class="tt-foot">Vanilla major / natural-minor come only from a ' +
+      "bare triad &middot; aug triad &#8594; whole tone &middot; a lone note " +
+      "sets just the tonic &middot; matching is loose (subset-tolerant) and the " +
+      "lowest heard note breaks symmetric-chord ties.</div>";
+    var head = document.getElementById("catch-help");
+    if (head) {
+      head.addEventListener("click", function () {
+        tip.classList.toggle("show");
+      });
+    }
+  }
+
   function resetCatch() {
     tonicListenActive = false;
     catchBuffer = [];
@@ -527,17 +576,14 @@ window.tempoBpm = 0;  // expose on window for durationToVexFlow
   // detected  = the live estimate, shown as a guide when a user tempo is set;
   // user      = the user-fixed value (0 = auto).
   function renderTempo(effective, detected, user) {
-    var el = document.getElementById("tempo");
-    if (!el) return;
     var input = document.getElementById("tempo-input");
+    if (!input) return;
     var tag = document.getElementById("tempo-tag");
     var det = document.getElementById("tempo-detected");
 
-    if (input) {
-      // Don't clobber what the user is typing.
-      if (document.activeElement !== input) {
-        input.value = user > 0 ? String(Math.round(user)) : "";
-      }
+    // Don't clobber what the user is typing.
+    if (document.activeElement !== input) {
+      input.value = user > 0 ? String(Math.round(user)) : "";
     }
     if (tag) {
       tag.textContent = (user > 0 ? "fixed " : "auto ") +
@@ -965,5 +1011,57 @@ window.tempoBpm = 0;  // expose on window for durationToVexFlow
   
   connectSSE();
 
+  // On-screen piano: pointer-clicks PLAY notes. Each press/release POSTs a
+  // synthetic MIDI note (via /api/note) that the backend queues onto the live
+  // capture stream, so an injected note goes through the SAME pipeline as a
+  // real key press: state/feed/analysis/quantization/SSE/stave. Velocity is
+  // imputed (this UI has no touch), and the SSE echo lights the keys. Guarded
+  // so a held mouse click can't double-inject a note_on.
+  var mouseHeld = new Set();
+  var pointerNotes = {};  // pointerId -> note (so drags/multitouch each release)
+
+  function injectNote(note, on) {
+    if (on) {
+      if (mouseHeld.has(note)) return;
+      mouseHeld.add(note);
+    } else {
+      if (!mouseHeld.has(note)) return;
+      mouseHeld.delete(note);
+    }
+    fetch("/api/note", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ note: note, velocity: 90, on: on })
+    }).catch(function () { /* transient; SSE catches up */ });
+  }
+
+  function bindPianoClick() {
+    var piano = document.getElementById("piano");
+    if (!piano) return;
+    piano.addEventListener("pointerdown", function (e) {
+      if (e.button !== 0 && e.pointerType === "mouse") return;
+      var k = e.target.closest ? e.target.closest(".key") : null;
+      if (!k || !k.dataset.note) return;
+      e.preventDefault();
+      var note = parseInt(k.dataset.note, 10);
+      pointerNotes[e.pointerId] = note;
+      injectNote(note, true);
+    });
+    function release(e) {
+      var note = pointerNotes[e.pointerId];
+      if (note !== undefined) {
+        delete pointerNotes[e.pointerId];
+        injectNote(note, false);
+      }
+    }
+    piano.addEventListener("pointerup", release);
+    piano.addEventListener("pointercancel", release);
+    // An injected note off can't fire on the piano itself if the pointer left
+    // it mid-press; catch stragglers on the window so nothing stays stuck.
+    window.addEventListener("pointerup", release);
+  }
+
+  buildCatchTooltip();
   buildPiano();
+  bindPianoClick();
 })();

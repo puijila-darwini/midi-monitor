@@ -36,6 +36,10 @@ _capture_health = {
     "restarts": 0,        # cumulative capture-loop restarts
     "last_error_time": None,
 }
+# The live Capture instance, so the on-screen piano (/api/note) can inject
+# synthetic notes into the same stream as the real keyboard. Set by the
+# supervisor thread on each (re)start of the capture loop.
+_capture_instance = None
 
 
 # buffer of recent events/flashes for late-joining SSE clients
@@ -90,9 +94,10 @@ def _note_name(n):
     return chords.nm(n)
 
 
-def _run_capture():
-    """Background: read MIDI, update state + analyser, publish to hub."""
-    for event in Capture():
+def _run_capture(cap):
+    """Background: read MIDI (from the given Capture), update state + analyser,
+    publish to hub. Guarded by the supervisor so any crash self-heals."""
+    for event in cap:
         etype = event["type"]
         t = event["time"]
         if etype == "note_on":
@@ -165,6 +170,36 @@ def api_state():
     snap = state.snapshot()
     snap["capture"] = capture_health_snapshot()
     return jsonify(snap)
+
+
+@app.route("/api/note", methods=["POST"])
+def api_note():
+    """Inject a synthetic note_on/note_off (played on the on-screen piano) into
+    the notestream.
+
+    The event is queued onto the live Capture's injection queue, so it is
+    processed by the SAME pipeline as a real key press: state tracking, tempo
+    detection, quantization, chord/arpeggio analysis, SSE feed and stave. Only
+    the velocity is synthetic (this UI has no touch), imputed as a constant.
+    """
+    body = request.get_json(silent=True) or {}
+    raw_note = body.get("note")
+    if isinstance(raw_note, bool) or not isinstance(raw_note, int):
+        return jsonify({"ok": False, "error": "note must be an int"}), 400
+    if raw_note < 0 or raw_note > 127:
+        return jsonify({"ok": False, "error": "note out of range 0-127"}), 400
+    on = bool(body.get("on", True))
+    try:
+        velocity = int(body.get("velocity", 90))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "velocity must be an int"}), 400
+    velocity = 90 if not (1 <= velocity <= 127) else velocity
+    cap = _capture_instance
+    if cap is None:
+        return jsonify({"ok": False, "error": "capture not started"}), 503
+    cap.inject_note(raw_note, velocity, on)
+    return jsonify({"ok": True, "note": raw_note, "on": on,
+                    "velocity": velocity})
 
 
 @app.route("/api/key/reset", methods=["POST"])
@@ -288,7 +323,10 @@ def _run_capture_supervised():
             _capture_health["error"] = None
             _capture_health["alive"] = True
         try:
-            _run_capture()
+            cap = Capture()
+            global _capture_instance
+            _capture_instance = cap
+            _run_capture(cap)
         except BaseException as exc:  # noqa: BLE001 - deliberate full restart
             # Mark dead and surface immediately so the UI isn't left guessing.
             with _capture_lock:
