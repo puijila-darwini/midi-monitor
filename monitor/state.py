@@ -18,13 +18,22 @@ class State:
     - tempo_bpm: estimated tempo in BPM
     """
 
-    # Quantization grid settings.
-    # Divisions = how finely each beat (quarter note) is subdivided into grid
-    # steps. This doubles as the "strictness"/coarseness control for the stave:
-    #   - loose   (2) = 8th-note grid  -> fewer tiny beamed notes, quarters easy
-    #   - normal  (4) = 16th-note grid (default)
-    #   - tight   (8) = 32nd-note grid -> captures fast passages in detail
-    # Tunable live from the UI via State.set_quantization().
+    # Quantization grid settings. Divisions = grid steps per beat, labelled
+    # explicitly in musical values (no cute tight/loose words):
+    #   16 = 64ths, 8 = 32nds, 4 = 16ths (default), 2 = 8ths, 1 = quarters,
+    #   0.5 = halves, 0.25 = wholes. Finer grids catch fast passages; coarser
+    #   grids complete fragments into whole values ("extend to whole notes").
+    # Tunable live from the UI via State.set_quantization() (0 = bypass).
+    VALID_GRIDS = (0.25, 0.5, 1, 2, 4, 8, 16)
+
+    def _grid_step(self, beat):
+        """Grid step in seconds for the current resolution. Fractional
+        divisions reach coarser-than-quarter grids; non-positive falls back
+        to a whole beat (never zero — no division by zero)."""
+        div = self.quantization_divisions
+        if not isinstance(div, (int, float)) or div <= 0:
+            return beat
+        return beat / div
     def __init__(self, recent_keep=120, melody_keep=400, quantization_divisions=4):
         self.quantization_divisions = quantization_divisions
         self.recent_keep = recent_keep
@@ -48,12 +57,13 @@ class State:
         
         # Tempo. tempo_bpm is the EFFECTIVE grid tempo used for quantization.
         # detected_bpm is the live on-the-fly estimate (a suggestion/guide).
-        # If the user fixes a tempo, tempo_bpm is locked to that value and no
-        # longer tracks detected_bpm, so note values stop flapping mid-take.
+        # The user tempo defaults to a FIXED 120 BPM (not auto): the grid is
+        # stable from boot, and detected_bpm remains available as a suggestion.
+        # Blank the tempo input (0) to revert to the live detected estimate.
         self.note_onsets = []  # list of (time, note) for tempo detection
-        self.tempo_bpm = 0.0
+        self.tempo_bpm = 120.0
         self.detected_bpm = 0.0   # live estimate (suggestion)
-        self.user_tempo_bpm = 0.0  # 0 = auto (use detected); >0 = fixed by user
+        self.user_tempo_bpm = 120.0  # >0 = fixed by user (default 120)
         self.last_tempo_update = 0
         self.tempo_update_interval = 2.0  # update tempo every 2 seconds
         
@@ -72,6 +82,10 @@ class State:
         # Bypass switch for the quantizer stage ("no quantization" option):
         # False = exact on/off pairs straight from the raw buffer.
         self.quantize_enabled = True
+        # Transposer stage (semitones, -24..+24): pitch shift applied to the
+        # quantized take, so OUT and notation hear the same transposed take.
+        # Out-of-range notes clamp to 0/127.
+        self.transpose_semitones = 0
         # Near-simultaneous window (seconds) for grouping chord members when
         # bypassing (no grid to snap them together). Grouping ALSO requires
         # overlap (next onset lands while the group still sounds) so fast
@@ -163,7 +177,7 @@ class State:
             if recent:
                 med = statistics.median(recent)
                 beat = 60.0 / self.tempo_bpm
-                grid = beat / max(1, self.quantization_divisions)
+                grid = self._grid_step(beat)
                 if grid > 0:
                     steps = max(1, int(round(med / grid)))
                     return steps * grid
@@ -284,7 +298,7 @@ class State:
         held_snapped = held
         if self.tempo_bpm > 0:
             beat = 60.0 / self.tempo_bpm
-            grid = beat / max(1, self.quantization_divisions)
+            grid = self._grid_step(beat)
             if grid > 0:
                 held_snapped = max(1, int(round(held / grid))) * grid
         note_dur = min(gap, max(prev, held_snapped))
@@ -296,7 +310,7 @@ class State:
         # would render as 32nd slivers on the stave).
         if self.tempo_bpm > 0:
             beat = 60.0 / self.tempo_bpm
-            grid = beat / max(1, self.quantization_divisions)
+            grid = self._grid_step(beat)
             if grid > 0 and rest_dur < grid:
                 return gap, None
         return note_dur, rest_dur
@@ -323,9 +337,20 @@ class State:
         if not raw:
             return self.quantized_take
         if self.quantize_enabled:
-            self.quantized_take = self._requantize_gridded(raw)
+            qns = self._requantize_gridded(raw)
         else:
-            self.quantized_take = self._requantize_exact(raw)
+            qns = self._requantize_exact(raw)
+        # Transposer stage: shift every quantized pitch (both paths), so the
+        # notation labels and OUT hear the same transposed take.
+        st = self.transpose_semitones
+        if st:
+            for qn in qns:
+                if not qn.get("rest") and qn.get("note") is not None:
+                    try:
+                        qn["note"] = max(0, min(127, int(qn["note"]) + st))
+                    except (TypeError, ValueError):
+                        continue
+        self.quantized_take = qns
         self.transformed_events = self._expand_midi(self.quantized_take)
         return self.quantized_take
 
@@ -672,7 +697,7 @@ class State:
         if self.tempo_bpm <= 0:
             return on_time, 0.0
         beat_duration = 60.0 / self.tempo_bpm
-        grid_step = beat_duration / max(1, self.quantization_divisions)
+        grid_step = self._grid_step(beat_duration)
         relative_time = on_time - self._start
         quantized_relative = round(relative_time / grid_step) * grid_step
         quantized_time = self._start + quantized_relative
@@ -813,25 +838,41 @@ class State:
             self.recent.append({"type": "online", "time": event["time"]})
 
     def set_quantization(self, divisions):
-        """Set the quantization grid fineness (divisions per beat).
-
-        Loose (2) = 8th-note grid, Normal (4) = 16th grid, Tight (8) = 32nd grid.
+        """Set the quantization grid resolution (steps per beat), labelled in
+        explicit note values: 16 = 64ths, 8 = 32nds, 4 = 16ths (default),
+        2 = 8ths, 1 = quarters, 0.5 = halves, 0.25 = wholes.
         0 = bypass ("no quantization"): the transform chain passes exact
-        on/off timing through. Resets the pending-onset anchor so the next note
+        timing through. Resets the pending-onset anchor so the next note
         is treated as a fresh phrase after the grid changes.
         """
         try:
-            divisions = int(divisions)
+            divisions = float(divisions)
         except (TypeError, ValueError):
             return False
         if divisions == 0:
             self.quantize_enabled = False
-        elif 1 <= divisions <= 16:
+        elif divisions in self.VALID_GRIDS:
             self.quantize_enabled = True
             self.quantization_divisions = divisions
         else:
             return False
         self._pending = None
+        self.version += 1
+        return True
+
+    def set_transpose(self, semitones):
+        """Set the transposer stage shift in semitones (-24..+24, 0 = off).
+
+        Pitch-only: onset detection and the grid are untouched, so the live
+        pending group needs no reset.
+        """
+        try:
+            st = int(semitones)
+        except (TypeError, ValueError):
+            return False
+        if st < -24 or st > 24:
+            return False
+        self.transpose_semitones = st
         self.version += 1
         return True
 
@@ -889,6 +930,7 @@ class State:
             "user_tempo_bpm": round(self.user_tempo_bpm, 1) if self.user_tempo_bpm > 0 else 0,
             "quantization_divisions": self.quantization_divisions,
             "quantize_enabled": self.quantize_enabled,
+            "transpose_semitones": self.transpose_semitones,
             "time_signature": self.time_signature,
             "recording": self.recording,
             "quantized_notes": self.quantized_notes[-100:],  # last 100 quantized notes

@@ -175,12 +175,20 @@
           </div>
           <div class="chain-controls">
             <label class="quant-label"><span>quant:</span>
-              <select id="quantization" title="Grid the quantizer snaps to; off passes exact timing through">
+              <select id="quantization" title="Grid the quantizer snaps to, in explicit note values; off passes exact timing through">
                 <option value="0">off (no quantization)</option>
-                <option value="2">loose</option>
-                <option value="4" selected>normal</option>
-                <option value="8">tight</option>
+                <option value="16">64th</option>
+                <option value="8">32nd</option>
+                <option value="4" selected>16th</option>
+                <option value="2">8th</option>
+                <option value="1">quarter</option>
+                <option value="0.5">half</option>
+                <option value="0.25">whole</option>
               </select>
+            </label>
+            <label class="transpose-label"><span>transpose:</span>
+              <input type="number" id="transpose-input" class="tempo-input" min="-24" max="24" step="1"
+                     value="0" title="Transpose the transformed take by semitones (-24..+24, 0 = off)">
             </label>
             <span id="chain-status" class="chain-status"></span>
           </div>

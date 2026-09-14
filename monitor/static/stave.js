@@ -87,7 +87,9 @@
   }
 
   // Convert MIDI to VexFlow key string (natural note + octave)
-  // Accidentals are added separately via addAccidentals
+  // Notehead positions only carry the natural staff slot; the
+  // accidental glyph itself is overlaid by placeAccidentals, which
+  // follows the spelling key (sharp vs flat choice).
   function midiToKey(midi) {
     var pc = midi % 12;
     var oct = Math.floor(midi / 12) - 1;
@@ -144,6 +146,8 @@
 
   function clear() {
     events = [];
+    tintedStaveEvent = null;
+    stavePlayCursor = 0;
     if (div) div.innerHTML = "";
     renderer = null;
     context = null;
@@ -185,6 +189,7 @@
       // Convert duration to VexFlow duration
       dur = durationToVexFlow(ev.duration);
     }
+    var sn;
     if (ev.kind === "rest") {
       // A rest: VexFlow rest duration = the note duration string plus "r"
       // (e.g. "q" -> "qr", "8d" -> "8dr"; full/whole = "wr"). Keys are a
@@ -193,29 +198,81 @@
     }
     if (ev.kind === "chord" || ev.kind === "arpeggio" || ev.kind === "interval") {
       var keys = ev.notes.map(midiToKey);
-      var sn = new VF.StaveNote({ keys: keys, duration: dur });
-      addAccidentals(sn, ev.notes);
-      return [sn];
-    } else {
+      sn = new VF.StaveNote({ keys: keys, duration: dur });
+    } else if (ev.notes.length > 1) {
+      // Shouldn't happen (simultaneous notes group upstream) — legacy
+      // fallback draws each head untagged rather than dropping notes.
       return ev.notes.map(function(midi) {
-        var key = midiToKey(midi);
-        var sn = new VF.StaveNote({ keys: [key], duration: dur });
-        addAccidentals(sn, [midi]);
-        return sn;
+        var mkey = midiToKey(midi);
+        var msn = new VF.StaveNote({ keys: [mkey], duration: dur });
+        return msn;
       });
+    } else {
+      // Single-note events carry exactly one pitch (grouped upstream).
+      var one = ev.notes.length ? ev.notes[0] : 60;
+      var key = midiToKey(one);
+      sn = new VF.StaveNote({ keys: [key], duration: dur });
     }
+    // Tag the rendered group with the event id so playback can tint exactly
+    // the noteheads that are sounding. NOTE: this VexFlow build does not
+    // propagate attrs.id onto the SVG group (verified: no stavev- ids land),
+    // so the tint instead uses the eventHeadMap built by placeAccidentals.
+    // The assignment below is kept as a hint for builds that do propagate.
+    try { sn.attrs.id = "stavev-" + ev.id; } catch (e) { /* older builds */ }
+    return [sn];
   }
 
-  // Add Accidental modifiers for notes outside the key signature
-function addAccidentals(staveNote, midiNotes) {
+  // Accidental glyph choice for a pitch class under the current spelling key.
+  // Returns "#" / "b" / null. Glyphs are drawn as a Bravura overlay (see
+  // placeAccidentals): this VexFlow build silently drops addModifier
+  // accidentals, so spelling lives here and position in midiToKey.
+  var ACC_SHARP = "\uE262";
+  var ACC_FLAT = "\uE260";
+  function accidentalFor(pc) {
     var keySig = KEY_SIGS[spellingKey] ?? 0;
     if (spellingKey === "auto") keySig = 0;
-    for (var i = 0; i < midiNotes.length; i++) {
-      var pc = midiNotes[i] % 12;
-      if (requiresAccidental(pc, keySig)) {
-        var acc = new VF.Accidental(useFlatForPC(pc, keySig) ? 'b' : '#');
-        staveNote.addModifier(acc, i);
+    if (!requiresAccidental(pc, keySig)) return null;
+    return useFlatForPC(pc, keySig) ? ACC_FLAT : ACC_SHARP;
+  }
+
+  // Overlay accidental glyphs onto a rendered SVG. VexFlow groups noteheads
+  // as g.vf-notehead in tickable order, which matches our event order with
+  // notes ascending — so walk display events and DOM heads in lockstep:
+  // each non-rest event consumes ev.notes.length heads. While walking, also
+  // record the event->heads map that playback tinting uses (no reliance on
+  // VexFlow id propagation). Texts are tagged with the event id so the tint
+  // can recolour glyphs together with their heads.
+  var eventHeadMap = {};  // event id -> [g.vf-notehead...] of the last render
+  function placeAccidentals(svg, displayEvents, recordMap) {
+    if (!svg) return;
+    if (recordMap) eventHeadMap = {};
+    var heads = svg.querySelectorAll("g.vf-notehead");
+    var hi = 0;
+    for (var i = 0; i < displayEvents.length; i++) {
+      var ev = displayEvents[i];
+      if (ev.kind === "rest" || !ev.notes) continue;
+      var evHeads = [];
+      for (var j = 0; j < ev.notes.length; j++) {
+        if (hi >= heads.length) return;
+        var head = heads[hi++];
+        evHeads.push(head);
+        var glyph = accidentalFor(ev.notes[j] % 12);
+        if (!glyph) continue;
+        try {
+          var bb = head.getBBox();
+          var t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+          t.setAttribute("x", bb.x - 3);
+          t.setAttribute("y", bb.y + bb.height / 2);
+          t.setAttribute("text-anchor", "end");
+          t.setAttribute("dominant-baseline", "central");
+          t.setAttribute("font-family", "Bravura");
+          t.setAttribute("font-size", "28");
+          t.setAttribute("data-ev", String(ev.id));
+          t.textContent = glyph;
+          svg.appendChild(t);
+        } catch (e) { /* decorative: never break notation */ }
       }
+      if (recordMap) eventHeadMap[ev.id] = evHeads;
     }
   }
     function requiresAccidental(pc, keySig) {
@@ -492,20 +549,14 @@ function addAccidentals(staveNote, midiNotes) {
         allBeams[bi].setContext(context).draw();
       }
 
-      // Highlight the most recent line's notes (older notes stay dark).
-      // Noteheads render flat in the SVG in this VexFlow build, so colour the
-      // trailing `noteCount` notehead groups (the last line was drawn last).
-      var lastNoteCount = 0;
-      for (var n2 = 0; n2 < line.length; n2++) lastNoteCount += line[n2].notes.length;
-      if (line.some(function (m) { return m.eventIds.indexOf(lastId) >= 0; })) {
-        highlightLastNoteheads(lastNoteCount);
-      }
-
       y += STAVE_H;
       totalHeight = y;
     }
 
     if (renderer) renderer.resize(canvasWidth(), totalHeight + 40);
+
+    // Spelling overlay: accidental glyphs follow the current key.
+    placeAccidentals(div.querySelector("svg"), displayEvents);
 
     // Auto-scroll stave-wrap to bottom
     var staveWrap = document.getElementById('stave-wrap');
@@ -514,17 +565,94 @@ function addAccidentals(staveNote, midiNotes) {
     }
   }
 
-  // Colour the trailing `count` notehead groups (the most recent line's notes).
-  function highlightLastNoteheads(count) {
-    var svg = div.querySelector('svg');
-    if (!svg || count <= 0) return;
-    var heads = svg.querySelectorAll('g.vf-notehead');
-    if (!heads.length) return;
-    var start = Math.max(0, heads.length - count);
-    for (var i = start; i < heads.length; i++) {
-      heads[i].setAttribute('fill', '#9B7ED8');
-      heads[i].setAttribute('stroke', '#9B7ED8');
+  // Playback notehead tint: black noteheads go royal purple while their
+  // event sounds during replay, then back to black. Driven per replay step
+  // (see markStavePlaying): each "on" step batch is one onset group, so the
+  // cursor walks the non-rest stave events in order — the same order the
+  // transform chain serializes. Replaces the old always-on trailing-line
+  // tint: purple now means "sounding right now".
+  var PLAY_TINT = "#9B7ED8";
+  var tintedStaveEvent = null;  // onset event currently tinted (or null)
+  var stavePlayCursor = 0;      // onset-event cursor for step matching
+
+  function staveNonRestEvents() {
+    return events.filter(function (e) { return e.kind !== "rest"; });
+  }
+
+  function headsForEvent(ev) {
+    // Primary: the event->heads map built during the last render. Fallback:
+    // a propagated group id (some VexFlow builds honour attrs.id).
+    if (ev && eventHeadMap[ev.id]) return eventHeadMap[ev.id];
+    if (!ev) return [];
+    var g = document.getElementById("stavev-" + ev.id);
+    if (!g) return [];
+    return g.querySelectorAll(".vf-notehead");
+  }
+
+  function untintStaveEvent(ev) {
+    if (!ev) return;
+    var heads = headsForEvent(ev);
+    for (var i = 0; i < heads.length; i++) {
+      heads[i].removeAttribute("fill");
+      heads[i].removeAttribute("stroke");
     }
+    // Overlay accidental glyphs tint with their heads.
+    var glyphs = document.querySelectorAll('text[data-ev="' + ev.id + '"]');
+    for (var k = 0; k < glyphs.length; k++) {
+      glyphs[k].removeAttribute("fill");
+    }
+  }
+
+  function tintStaveEvent(ev) {
+    var heads = headsForEvent(ev);
+    if (!heads.length) return false;
+    for (var i = 0; i < heads.length; i++) {
+      heads[i].setAttribute("fill", PLAY_TINT);
+      heads[i].setAttribute("stroke", PLAY_TINT);
+    }
+    var glyphs = document.querySelectorAll('text[data-ev="' + ev.id + '"]');
+    for (var k = 0; k < glyphs.length; k++) {
+      glyphs[k].setAttribute("fill", PLAY_TINT);
+    }
+    try { heads[0].scrollIntoView({ block: "nearest" }); } catch (e) { /* noop */ }
+    return true;
+  }
+
+  function clearStavePlaying() {
+    // End of replay (done/stopped/error): sounding notes back to black.
+    untintStaveEvent(tintedStaveEvent);
+    tintedStaveEvent = null;
+  }
+
+  function resetStavePlayback() {
+    // Start of replay: rewind the onset cursor as well.
+    untintStaveEvent(tintedStaveEvent);
+    tintedStaveEvent = null;
+    stavePlayCursor = 0;
+  }
+
+  function markStavePlaying(stepNotes) {
+    if (!stepNotes || !stepNotes.length) return;
+    var list = staveNonRestEvents();
+    var pick = null;
+    for (var i = stavePlayCursor; i < list.length; i++) {
+      var evn = list[i].notes || [];
+      for (var j = 0; j < evn.length; j++) {
+        if (stepNotes.indexOf(evn[j]) >= 0) {
+          pick = list[i];
+          stavePlayCursor = i + 1;
+          break;
+        }
+      }
+      if (pick) break;
+    }
+    // No unplayed onset overlaps this step (e.g. a bypass re-strike that
+    // notation merged away): hold the last tint instead of going dark.
+    if (!pick) pick = tintedStaveEvent;
+    if (!pick || pick === tintedStaveEvent) return;
+    untintStaveEvent(tintedStaveEvent);
+    if (tintStaveEvent(pick)) tintedStaveEvent = pick;
+    else tintedStaveEvent = null;
   }
 
   function redrawMini() {
@@ -536,7 +664,6 @@ function addAccidentals(staveNote, midiNotes) {
     var keys = lastChordEvent.notes.map(midiToKey);
     var dur = "h"; // half note for mini stave
     var sn = new VF.StaveNote({ keys: keys, duration: dur });
-    addAccidentals(sn, lastChordEvent.notes);
 
     var stave = new VF.Stave(10, 20, 520);
     stave.addClef("treble");
@@ -553,6 +680,9 @@ function addAccidentals(staveNote, midiNotes) {
     voice.draw(miniContext, stave);
 
     if (miniRenderer) miniRenderer.resize(560, 130);
+    // Spelling overlay for the mini chord too (never playback-tinted).
+    placeAccidentals(miniDiv.querySelector("svg"),
+                     [{ kind: "chord", notes: lastChordEvent.notes, id: "mini" }]);
   }
 
   // Update ONLY the mini "last chord / interval" stave. Independent of the
@@ -670,6 +800,9 @@ function addAccidentals(staveNote, midiNotes) {
     setTimeSignature: setTimeSignature,
     backspace: backspace,
     finishTake: finishTake,
+    markPlaying: markStavePlaying,
+    clearPlaying: clearStavePlaying,
+    resetPlayback: resetStavePlayback,
   };
 
   // Editing: Backspace deletes the last note on the stave. Guard so it never

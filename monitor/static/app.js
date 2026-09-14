@@ -443,8 +443,11 @@ function buildCatchTooltip() {
   function applyScaleGuide(tonic, scaleId) {
     clearScaleGuide();
     var tonicPc = parseInt(tonic, 10);
-    var def = SCALES[scaleId];
-    if (isNaN(tonicPc) || tonicPc < 0 || tonicPc > 11 || !def) {
+    var tonicOk = !isNaN(tonicPc) && tonicPc >= 0 && tonicPc <= 11;
+    // A bare tonic with no scale means major (saying "G" is G major) — so a
+    // tonic change alone always moves the stave key signature + spelling.
+    var def = SCALES[scaleId] || (tonicOk && SCALES.major);
+    if (!tonicOk || !def) {
       if (window.StavePanel) StavePanel.setKey("auto");
       return;
     }
@@ -667,34 +670,39 @@ function buildCatchTooltip() {
           if (setReplayBtn) setReplayBtn();
           replayRawCursor = 0;
           clearRawPlaying();
+          if (window.StavePanel) StavePanel.resetPlayback();
           addFeed('<span class="time">' + fmtTime(ev.time || 0) +
             "</span>  REPLAY  playing back " + ev.count + " note" +
             (ev.count === 1 ? "" : "s") + " (~" + (ev.duration * 1000) +
             " ms)" , "replay");
         } else if (ev.phase === "step") {
-          // Light the keys as notes sound back out the keyboard, and bold
-          // the matching entries in the raw midi buffer as they play.
+          // Light the keys as notes sound back out the keyboard, bold the
+          // matching raw-buffer entries, and purple the sounding notation.
           ev.notes.forEach(function (n) {
             activate(n);
             setTimeout(function () { deactivate(n); }, 250);
           });
           markRawPlaying(ev.notes);
+          if (window.StavePanel) StavePanel.markPlaying(ev.notes);
         } else if (ev.phase === "done") {
           replayActive = false;
           if (setReplayBtn) setReplayBtn();
           clearRawPlaying();
+          if (window.StavePanel) StavePanel.clearPlaying();
           addFeed('<span class="time">' + fmtTime(ev.time || 0) +
             "</span>  REPLAY  done", "replay");
         } else if (ev.phase === "stopped") {
           replayActive = false;
           if (setReplayBtn) setReplayBtn();
           clearRawPlaying();
+          if (window.StavePanel) StavePanel.clearPlaying();
           addFeed('<span class="time">' + fmtTime(ev.time || 0) +
             "</span>  REPLAY  stopped", "replay");
         } else if (ev.phase === "error") {
           replayActive = false;
           if (setReplayBtn) setReplayBtn();
           clearRawPlaying();
+          if (window.StavePanel) StavePanel.clearPlaying();
           addFeed('<span class="time">' + fmtTime(ev.time || 0) +
             "</span>  REPLAY  " + ev.message, "replay");
         }
@@ -795,7 +803,11 @@ function buildCatchTooltip() {
   }
 
   // Chain status line: what the quantizer stage is doing right now.
-  var QUANT_GRID_NAMES = { 2: "8ths", 4: "16ths", 8: "32nds" };
+  var QUANT_GRID_NAMES = { 16: "64ths", 8: "32nds", 4: "16ths", 2: "8ths",
+                             1: "quarters", 0.5: "halves", 0.25: "wholes" };
+  // Transposer stage shift (semitones). The raw buffer shows the SOURCE take,
+  // so step matching un-transposes; the stave is derived post-shift already.
+  var transposeSt = 0;
   function renderChainStatus(data) {
     var counts = document.getElementById("chain-counts");
     var status = document.getElementById("chain-status");
@@ -803,14 +815,17 @@ function buildCatchTooltip() {
     if (counts) {
       counts.textContent = "in " + (c.in || 0) + " \u2192 out " + (c.out || 0);
     }
+    if (typeof data.transpose === "number") transposeSt = data.transpose;
     if (status) {
-      if (data && data.enabled === false) {
-        status.textContent = "bypass \u00B7 exact timing";
-      } else {
+      var parts = [];
+      if (data && data.enabled === false) parts.push("bypass \u00B7 exact timing");
+      else {
         var grid = QUANT_GRID_NAMES[data ? data.divisions : 0] || "";
         var bpm = (data && data.tempo > 0) ? Math.round(data.tempo) + "bpm" : "no tempo yet";
-        status.textContent = (grid ? grid + " @ " : "") + bpm;
+        parts.push((grid ? grid + " @ " : "") + bpm);
       }
+      if (transposeSt) parts.push((transposeSt > 0 ? "+" : "") + transposeSt + "st");
+      status.textContent = parts.join(" \u00B7 ");
     }
   }
 
@@ -989,12 +1004,41 @@ function buildCatchTooltip() {
     });
   })();
 
-  // Quantization strictness selector (grid fineness)
+  // Transposer stage: semitone shift applied to the transformed take
+  // (notation + OUT hear it; the raw buffer keeps the source pitches).
+  (function () {
+    var input = document.getElementById("transpose-input");
+    if (!input) return;
+    function apply() {
+      var raw = input.value.trim();
+      var st = raw === "" ? 0 : parseInt(raw, 10);
+      if (isNaN(st)) return;
+      st = Math.max(-24, Math.min(24, st));
+      input.value = String(st);
+      fetch("/api/transpose", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ semitones: st })
+      }).then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (res && typeof res.semitones === "number") transposeSt = res.semitones;
+          renderNotationFromBuffer();
+        })
+        .catch(function () { /* ignore transient */ });
+    }
+    input.addEventListener("change", apply);
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") { input.blur(); apply(); }
+    });
+  })();
+
+  // Quantization grid selector (explicit note values, off = bypass)
   (function () {
     var sel = document.getElementById("quantization");
     if (!sel) return;
     sel.addEventListener("change", function () {
-      var divs = parseInt(sel.value, 10);
+      var divs = parseFloat(sel.value);
+      if (isNaN(divs)) return;
       fetch("/api/quant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1207,6 +1251,13 @@ function buildCatchTooltip() {
           if (qsel.querySelector('option[value="' + qv + '"]')) qsel.value = qv;
         }
       }
+      if (typeof s.transpose_semitones !== "undefined") {
+        transposeSt = s.transpose_semitones;
+        var tinput = document.getElementById("transpose-input");
+        if (tinput && document.activeElement !== tinput) {
+          tinput.value = String(s.transpose_semitones);
+        }
+      }
       if (typeof s.time_signature === "string" && s.time_signature.indexOf("/") > 0) {
         var tp = s.time_signature.split("/");
         setTimesig(parseInt(tp[0], 10), parseInt(tp[1], 10));
@@ -1256,11 +1307,13 @@ function buildCatchTooltip() {
     // consumed in buffer order, matching replay which serializes raw events
     // in the same order. No-ops harmlessly if the buffer shows other content
     // (e.g. replaying quantized notes while the raw buffer is empty).
+    // The raw buffer shows SOURCE pitches: un-transpose the sounded notes
+    // before matching (the stave is derived post-shift and needs no fixup).
     if (!rawTakeEl || !noteNums || !noteNums.length) return;
     var lis = rawTakeEl.querySelectorAll("li.on[data-note]");
     var updated = false;
     noteNums.forEach(function (n) {
-      var want = String(n);
+      var want = String(n - transposeSt);
       for (var i = replayRawCursor; i < lis.length; i++) {
         if (lis[i].getAttribute("data-note") === want) {
           lis[i].classList.add("playing");
