@@ -372,6 +372,16 @@ def api_take():
     return jsonify({"ok": True, "raw_events": raw_events, "recording": state.recording})
 
 
+@app.route("/api/notation")
+def api_notation():
+    """Notation events re-derived from the raw take buffer under the current
+    quantisation/tempo/time-signature — the notation card's source of truth."""
+    return jsonify({"ok": True, "events": state.notation_from_buffer(),
+                    "tempo": state.tempo_bpm,
+                    "time_signature": state.time_signature,
+                    "divisions": state.quantization_divisions})
+
+
 @app.route("/api/take/clear", methods=["POST"])
 def api_take_clear():
     """Clear the raw take events buffer."""

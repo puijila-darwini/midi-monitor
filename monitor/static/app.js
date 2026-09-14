@@ -29,12 +29,11 @@ window.tempoBpm = 0;  // expose on window for durationToVexFlow
   var timesig = { numer: 4, denom: 4 };
   window.timesig = timesig;
 
-  // Recording gate: the notation stave accumulates ONLY while recording. REC
-  // clears the stave and starts a fresh take (backend reset too); STOP freezes
-  // the take (backend flushes the trailing note; the stave fills the final bar
-  // with a rest). The feed/piano/flash banner stay live either way.
-  // Default True = continuous behavior (notes flow onto the stave as before);
-  // the user uses STOP to end/freeze a take.
+  // REC/STOP take state. REC resets the backend take and clears the stave;
+  // STOP freezes the take and renders the notation from the raw buffer.
+  // The stave is never pushed live — only the mini stave, feed, piano and
+  // flash banner stay live either way. Default True = the take accumulates
+  // in the background from page load; the user uses STOP to freeze/render.
   var recording = true;
   // Catch-tonic (the &#9834; catch button). When armed, the next note(s) from
   // the keyboard set the tonic. If those notes form a major or minor triad, an
@@ -629,11 +628,11 @@ function buildCatchTooltip() {
           }
         }
         // Decoupled from record/stop: the mini "last chord / interval" stave
-        // always shows the latest flash, mid-take or not. The main stave push
-        // stays recording-gated.
+        // always shows the latest flash, mid-take or not. The main stave is
+        // never pushed live — it renders from the raw buffer on STOP and on
+        // quant/time-sig/tempo changes.
         if (window.StavePanel && ev.notes && ev.notes.length) {
           StavePanel.pushMini(ev.kind, ev.notes, ev.time, ev.label);
-          if (recording) StavePanel.push(ev.kind, ev.notes, ev.time, ev.label);
         }
         break;
       case "program_change":
@@ -643,23 +642,21 @@ function buildCatchTooltip() {
           '</span>  PGM CHANGE  ' + ev.name + " (prog " + ev.program + ", ch " + ev.channel + ")", "program_change");
         break;
       case "quantized_note":
-        // Update global tempo for quantization
+        // Tempo display only now: the stave itself renders from the raw
+        // buffer (STOP / quant / time-sig / tempo), never from live pushes.
         if (ev.tempo) {
           tempoBpm = ev.tempo;
           window.tempoBpm = ev.tempo;
         }
         renderTempo(ev.tempo, ev.detected_bpm || 0, ev.user_tempo_bpm || 0);
-        if (recording && window.StavePanel) StavePanel.push("note", [ev.note], ev.off_time, null, ev.duration);
         break;
       case "quantized_rest":
-        // A rest emitted by the recorder when a pause is detected between
-        // notes (backend splits long gaps into note value + silence).
+        // Rest display: same as above, tempo bookkeeping only.
         if (ev.tempo) {
           tempoBpm = ev.tempo;
           window.tempoBpm = ev.tempo;
         }
         renderTempo(ev.tempo, ev.detected_bpm || 0, ev.user_tempo_bpm || 0);
-        if (recording && window.StavePanel) StavePanel.push("rest", [], ev.off_time, null, ev.duration);
         break;
       case "capture_error":
         showCaptureError(ev.message, ev.restarts);
@@ -797,13 +794,36 @@ function buildCatchTooltip() {
     }
   }
 
-  // (stave-clear and feed-clear buttons were removed: the raw buffer's
-  // clear is the single clear path for buffer + derived notation + stream.)
+  // Notation is rendered FROM the raw take buffer (/api/notation), never
+  // pushed live: every render below rebuilds the whole stave from the buffer
+  // under the current quantisation, so quant/time-sig/tempo changes re-hear
+  // the same take instead of wiping it.
+  function renderNotationFromBuffer() {
+    if (!window.StavePanel) return;
+    fetch("/api/notation", { cache: "no-store" })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (!data || !data.ok || !window.StavePanel) return;
+        if (typeof data.tempo === "number" && data.tempo > 0) {
+          tempoBpm = data.tempo;
+          window.tempoBpm = data.tempo;
+        }
+        StavePanel.clear();
+        (data.events || []).forEach(function (ev) {
+          if (ev.kind === "rest") {
+            StavePanel.push("rest", [], ev.off_time, null, ev.duration);
+          } else {
+            StavePanel.push(ev.kind, ev.notes, ev.off_time,
+                            ev.label || null, ev.duration);
+          }
+        });
+        StavePanel.finishTake(); // fill the final bar with a trailing rest
+      })
+      .catch(function () { /* transient */ });
+  }
 
-  // REC/STOP take control. REC clears the stave + resets the backend take and
-  // starts accumulating; STOP ends the take: the backend flushes the trailing
-  // pending note (returned in the response so the client can render it through
-  // the recording gate), and the stave fills the final bar with a trailing rest.
+  // REC/STOP take control. REC resets the backend take and clears the stave;
+  // STOP freezes the take and renders the notation from the raw buffer.
   (function () {
     var btn = document.getElementById("record-btn");
     var dot = document.getElementById("record-btn-dot");
@@ -818,9 +838,6 @@ function buildCatchTooltip() {
 
     btn.addEventListener("click", function () {
       var next = !recording;
-      // Flip the gate synchronously: once STOP is issued, the SSE stream for
-      // the flushed trailing note must be skipped (we render it from the POST
-      // response body instead) — otherwise it would double-render.
       recording = next;
       renderButton();
       if (next) {
@@ -835,20 +852,10 @@ function buildCatchTooltip() {
         .then(function (res) {
           recording = !!res.recording;
           renderButton();
-          if (!recording && res.events && res.events.length && window.StavePanel) {
-            // STOP flushed the trailing pending note (returned as both
-            // quantized_note and quantized_rest) — render them here because the
-            // recording gate is now off and the SSE stream would skip them.
-            res.events.forEach(function (ev) {
-              if (ev.type === "quantized_note") {
-                StavePanel.push("note", [ev.note], ev.off_time, null, ev.duration);
-              } else if (ev.type === "quantized_rest") {
-                StavePanel.push("rest", [], ev.off_time, null, ev.duration);
-              }
-            });
-          }
-          if (!recording && window.StavePanel) {
-            StavePanel.finishTake(); // fill the final bar with a trailing rest
+          if (!recording) {
+            // STOP: the take froze (backend flushed the trailing note into
+            // the buffer) — render the whole notation from the raw buffer.
+            renderNotationFromBuffer();
           }
         })
         .catch(function () { /* transient */ });
@@ -973,7 +980,7 @@ function buildCatchTooltip() {
         body: JSON.stringify({ divisions: divs })
       }).then(function (r) { return r.json(); })
         .then(function (res) {
-          if (window.StavePanel) window.StavePanel.clear();
+          renderNotationFromBuffer();
         })
         .catch(function () { /* ignore transient */ });
     });
@@ -995,7 +1002,7 @@ function buildCatchTooltip() {
         body: JSON.stringify({ numer: numer, denom: denom })
       }).then(function (r) { return r.json(); })
         .then(function (res) {
-          if (window.StavePanel) window.StavePanel.clear();
+          renderNotationFromBuffer();
         })
         .catch(function () { /* ignore transient */ });
     });
@@ -1014,7 +1021,7 @@ function buildCatchTooltip() {
           body: JSON.stringify({ bpm: 0 })
         }).then(function (r) { return r.json(); })
           .then(function (res) {
-            if (window.StavePanel) window.StavePanel.clear();
+            renderNotationFromBuffer();
           })
           .catch(function () {});
         return;
@@ -1027,7 +1034,7 @@ function buildCatchTooltip() {
           body: JSON.stringify({ bpm: bpm })
         }).then(function (r) { return r.json(); })
           .then(function (res) {
-            if (window.StavePanel) window.StavePanel.clear();
+            renderNotationFromBuffer();
           })
           .catch(function () {});
       }

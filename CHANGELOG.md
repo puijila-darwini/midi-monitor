@@ -768,3 +768,17 @@ that file lean. History is chronological; most lines start with a version tag.
   chosen again. Verified live: clear split (stream survives raw clear, dies
   on its own), purple computed styles, voice selector ordered to the live
   receive voice at load, zero console errors.
+- Ver 56: notation card rendered FROM the raw buffer. New
+  State.notation_from_buffer() replays raw_take_events through a scratch
+  State (same grid anchor, same pending-group pipeline as live capture)
+  with tempo/divisions locked to current values — no live-state pollution,
+  no thread leaks (checked). Simultaneous onsets group into chords (3+,
+  chords.name_only label) / intervals (dyads, chords.interval_of);
+  same-pitch re-strikes in one tick dedupe to a single note. New GET
+  /api/notation returns the events + tempo/TS/divisions. Frontend
+  renderNotationFromBuffer() clears + pushes + finishTake; wired to STOP,
+  quant, time-sig and tempo changes (all re-render instead of wiping);
+  live StavePanel.push paths removed (flash keeps banner + mini stave,
+  quantized SSE keeps tempo display). Verified live with the keyboard:
+  quant change rendered full notation from a 39-row buffer (89 paths),
+  STOP/time-sig/REC all re-render correctly, zero console errors.

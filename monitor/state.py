@@ -4,6 +4,7 @@ import statistics
 import threading
 
 from .replay import VOICES as VOICES_BY_PROGRAM
+from . import chords
 
 
 class State:
@@ -286,6 +287,97 @@ class State:
         """Drain and return the finalized quantized notes not yet emitted via SSE."""
         with self._emit_lock:
             out, self._emit_queue = self._emit_queue, []
+        return out
+
+    def notation_from_buffer(self):
+        """Re-derive the notation card's note/rest events from the stored raw
+        take buffer, processed by the CURRENT quantisation settings.
+
+        Replays raw_take_events through a scratch State (same grid anchor, same
+        pending-group code path as live capture) with tempo/divisions fixed at
+        their current values, so the stave always reflects the buffer as the
+        current grid hears it — regardless of what the grid was while playing.
+
+        Returns a list of plain dicts, one per stave event:
+          {"kind": "note"|"chord"|"interval"|"rest", "notes": [...],
+           "on_time":, "off_time":, "velocity":, "duration":, "label": str|None}
+        Simultaneous onsets are grouped: 3+ notes -> "chord" (label via
+        chords.name_only), 2 notes -> "interval" (label via
+        chords.interval_of); unmatched groups carry label None. Rests keep
+        their position in time order.
+        """
+        raw = list(self.raw_take_events)
+        if not raw:
+            return []
+        scratch = State(quantization_divisions=self.quantization_divisions)
+        scratch._start = self._start
+        scratch.tempo_bpm = self.tempo_bpm
+        # Lock the scratch tempo (mirrors set_user_tempo): the rebuild must
+        # not re-estimate, it renders under the current effective tempo.
+        scratch.user_tempo_bpm = self.tempo_bpm if self.tempo_bpm > 0 else 0.0
+        scratch.recording = False
+        for ev in raw:
+            if ev.get("type") not in ("note_on", "note_off"):
+                continue
+            try:
+                scratch.handle({
+                    "type": ev["type"],
+                    "note": int(ev["note"]),
+                    "velocity": int(ev.get("velocity", 0)),
+                    "time": float(ev["time"]),
+                    "channel": int(ev.get("channel", 0)),
+                })
+            except (TypeError, ValueError, KeyError):
+                continue
+        # The scratch daemon never fires for freshly-fed events (grace period),
+        # but stop it so no stray thread outlives the rebuild.
+        scratch._flush_stop.set()
+        with scratch._emit_lock:
+            # Same trailing-note semantics as stopping a take live.
+            if scratch._pending is not None and scratch.tempo_bpm > 0:
+                scratch._finalize_pending(scratch._robust_gap_duration())
+        # Merge adjacent same-onset notes into chord/interval groups,
+        # preserving time order (rests stay where they fall).
+        merged = []  # list of ("notes", [qn, ...]) | ("rest", qn)
+        for qn in scratch.quantized_notes:
+            if qn.get("rest"):
+                merged.append(("rest", qn))
+            elif (merged and merged[-1][0] == "notes"
+                    and merged[-1][1][0]["on_time"] == qn["on_time"]):
+                merged[-1][1].append(qn)
+            else:
+                merged.append(("notes", [qn]))
+        out = []
+        for kind, payload in merged:
+            if kind == "rest":
+                out.append({
+                    "kind": "rest", "notes": [],
+                    "on_time": payload["on_time"],
+                    "off_time": payload["off_time"],
+                    "velocity": 0, "duration": payload["duration"],
+                    "label": None,
+                })
+                continue
+            # Dedupe: re-strikes of one pitch inside a single grid tick are
+            # one notation slot, not a unison "interval".
+            notes = sorted({q["note"] for q in payload})
+            first = payload[0]
+            if len(notes) >= 3:
+                label = chords.name_only(notes) or None
+                if label == "(no template)":
+                    label = None
+                k = "chord"
+            elif len(notes) == 2:
+                label = chords.interval_of(notes) or None
+                k = "interval"
+            else:
+                label, k = None, "note"
+            out.append({
+                "kind": k, "notes": notes,
+                "on_time": first["on_time"], "off_time": first["off_time"],
+                "velocity": first["velocity"], "duration": first["duration"],
+                "label": label,
+            })
         return out
     
     @property
