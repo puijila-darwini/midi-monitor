@@ -739,3 +739,19 @@ that file lean. History is chronological; most lines start with a version tag.
   straw-gold-bordered thumbs (purple on hover), webkit + Firefox variants.
   Reset-server button also doubles as the recovery path for "site won't come
   back after keyboard on".
+- Ver 54: left column stacked (note stream half-height, raw buffer under it)
+  + raw buffer owns record/play/clear + single clear path + playback
+  highlighting. Layout is now 2 columns (280px 1fr): the left column stacks
+  the note stream (top half) over the raw midi buffer (bottom half), each
+  half scrolls internally. REC/STOP, play take and the voice selector moved
+  out of the notation card into the raw buffer card (the buffer is the
+  source take; notation will be derived from it). Clearing rationalised to
+  ONE button: raw buffer clear wipes the raw buffer (API) plus the derived
+  notation and the note stream; stave-clear and feed-clear buttons removed.
+  During replay each sounded raw entry goes bold (li.playing, straw wash)
+  via a monotonic cursor matching step note numbers to data-note entries;
+  raw polling pauses mid-replay so highlights aren't wiped, cursor resets on
+  start/render. Verified live: stacked half-height cards, unique control IDs,
+  clear/stop/rec all functional (replay 400 on empty take is the expected
+  backend reject), highlight algorithm unit-checked in-page (chord marks in
+  order, repeated notes advance past offs, offs never marked).

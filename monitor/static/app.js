@@ -667,29 +667,36 @@ function buildCatchTooltip() {
         if (ev.phase === "start") {
           replayActive = true;
           if (setReplayBtn) setReplayBtn();
+          replayRawCursor = 0;
+          clearRawPlaying();
           addFeed('<span class="time">' + fmtTime(ev.time || 0) +
             "</span>  REPLAY  playing back " + ev.count + " note" +
             (ev.count === 1 ? "" : "s") + " (~" + (ev.duration * 1000) +
             " ms)" , "replay");
         } else if (ev.phase === "step") {
-          // Light the keys as notes sound back out the keyboard.
+          // Light the keys as notes sound back out the keyboard, and bold
+          // the matching entries in the raw midi buffer as they play.
           ev.notes.forEach(function (n) {
             activate(n);
             setTimeout(function () { deactivate(n); }, 250);
           });
+          markRawPlaying(ev.notes);
         } else if (ev.phase === "done") {
           replayActive = false;
           if (setReplayBtn) setReplayBtn();
+          clearRawPlaying();
           addFeed('<span class="time">' + fmtTime(ev.time || 0) +
             "</span>  REPLAY  done", "replay");
         } else if (ev.phase === "stopped") {
           replayActive = false;
           if (setReplayBtn) setReplayBtn();
+          clearRawPlaying();
           addFeed('<span class="time">' + fmtTime(ev.time || 0) +
             "</span>  REPLAY  stopped", "replay");
         } else if (ev.phase === "error") {
           replayActive = false;
           if (setReplayBtn) setReplayBtn();
+          clearRawPlaying();
           addFeed('<span class="time">' + fmtTime(ev.time || 0) +
             "</span>  REPLAY  " + ev.message, "replay");
         }
@@ -789,13 +796,8 @@ function buildCatchTooltip() {
     }
   }
 
-  (function () {
-    var btn = document.getElementById("stave-clear");
-    if (!btn) return;
-    btn.addEventListener("click", function () {
-      if (window.StavePanel) StavePanel.clear();
-    });
-  })();
+  // (stave-clear and feed-clear buttons were removed: the raw buffer's
+  // clear is the single clear path for buffer + derived notation + stream.)
 
   // REC/STOP take control. REC clears the stave + resets the backend take and
   // starts accumulating; STOP ends the take: the backend flushes the trailing
@@ -854,14 +856,7 @@ function buildCatchTooltip() {
     renderButton();
   })();
 
-  (function () {
-    var btn = document.getElementById("feed-clear");
-    if (!btn) return;
-    btn.addEventListener("click", function () {
-      var feedList = document.getElementById("feed-list");
-      if (feedList) feedList.innerHTML = "";
-    });
-  })();
+  // (feed-clear button removed: see the single-clear note above.)
   // Play/stop take replay. POSTs /api/replay (which serializes the quantized
   // buffer back to the keyboard's internal voices on a background thread);
   // while a replay is active the button becomes a STOP that cancels it.
@@ -1182,6 +1177,45 @@ function buildCatchTooltip() {
   var rawTakeEl = document.getElementById("raw-take");
   var rawTakeClearBtn = document.getElementById("raw-take-clear");
   var rawTakeCleared = false;
+  // Monotonic cursor into the rendered raw buffer so replay step events can
+  // bold the entry that is currently sounding (progressive illumination).
+  var replayRawCursor = 0;
+
+  function clearRawPlaying() {
+    if (!rawTakeEl) return;
+    var marked = rawTakeEl.querySelectorAll("li.playing");
+    for (var i = 0; i < marked.length; i++) {
+      marked[i].classList.remove("playing");
+    }
+  }
+
+  function markRawPlaying(noteNums) {
+    // Highlight the next unplayed note_on entry per sounded note. Entries are
+    // consumed in buffer order, matching replay which serializes raw events
+    // in the same order. No-ops harmlessly if the buffer shows other content
+    // (e.g. replaying quantized notes while the raw buffer is empty).
+    if (!rawTakeEl || !noteNums || !noteNums.length) return;
+    var lis = rawTakeEl.querySelectorAll("li.on[data-note]");
+    var updated = false;
+    noteNums.forEach(function (n) {
+      var want = String(n);
+      for (var i = replayRawCursor; i < lis.length; i++) {
+        if (lis[i].getAttribute("data-note") === want) {
+          lis[i].classList.add("playing");
+          if (i + 1 > replayRawCursor) replayRawCursor = i + 1;
+          updated = true;
+          break;
+        }
+      }
+    });
+    if (updated) {
+      var played = rawTakeEl.querySelectorAll("li.playing");
+      var cur = played.length ? played[played.length - 1] : null;
+      if (cur && cur.scrollIntoView) {
+        try { cur.scrollIntoView({ block: "nearest" }); } catch (e) { /* noop */ }
+      }
+    }
+  }
 
   function renderRawTake(events) {
     if (!rawTakeEl) return;
@@ -1193,10 +1227,14 @@ function buildCatchTooltip() {
     // <li class="on">|"off">  <span class="time">00.4s</span>  <span
     // class="nmark">D#4</span>  on (v23)|off  so both panels share the look.
     var frag = document.createDocumentFragment();
-    events.forEach(function (ev) {
+    events.forEach(function (ev, idx) {
       var li = document.createElement("li");
       var isOn = ev.type === "note_on";
       li.className = isOn ? "on" : "off";
+      // data-idx / data-note let the replay step handler find the entry that
+      // is currently sounding so it can be highlighted (bold) in the buffer.
+      li.setAttribute("data-idx", String(idx));
+      li.setAttribute("data-note", String(ev.note));
       var html = '<span class="time">' + fmtTime(ev.time) + "</span>  " +
         '<span class="nmark">' + midiNoteName(ev.note) + "</span>";
       if (isOn) {
@@ -1209,10 +1247,14 @@ function buildCatchTooltip() {
     });
     rawTakeEl.innerHTML = "";
     rawTakeEl.appendChild(frag);
+    replayRawCursor = 0;
     rawTakeEl.scrollTop = rawTakeEl.scrollHeight;
   }
 
 function fetchRawTake() {
+  // While a replay is running the buffer is frozen so the playback
+  // highlighting isn't wiped by the 1s re-render; resume polling after.
+  if (typeof replayActive !== "undefined" && replayActive) return;
   fetch("/api/take")
     .then(function (r) { return r.json(); })
     .then(function (data) {
@@ -1232,9 +1274,16 @@ function fetchRawTake() {
 }
 
 function clearRawTake() {
+  // THE single clear path: the raw buffer is the source take, so clearing it
+  // also clears the notation derived from it and the note stream. (REC-start
+  // still wipes via the backend as part of beginning a new take.)
   if (rawTakeEl) {
     rawTakeEl.innerHTML = '<li class="statusline">no raw events yet</li>';
   }
+  replayRawCursor = 0;
+  var feedList = document.getElementById("feed-list");
+  if (feedList) feedList.innerHTML = "";
+  if (window.StavePanel) window.StavePanel.clear();
   rawTakeCleared = true;
   fetch("/api/take/clear", { method: "POST" })
     .then(function (r) { return r.json(); })

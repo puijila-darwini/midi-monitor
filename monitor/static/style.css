@@ -309,10 +309,19 @@ select option { background: var(--phthalo-card); color: var(--text); }
 /* ---- main grid layout ---- */
 .main-grid {
   display: grid;
-  grid-template-columns: 280px 240px 1fr;
+  grid-template-columns: 280px 1fr;
   gap: 14px;
   flex: 1;
   min-height: 0;
+}
+
+/* Left column: note stream (top half) stacked over raw midi buffer (bottom half) */
+.left-col {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  height: 100%;
 }
 
 .feed-sidebar,
@@ -320,13 +329,36 @@ select option { background: var(--phthalo-card); color: var(--text); }
   display: flex;
   flex-direction: column;
   min-height: 0;
-  height: 100%;
+  flex: 1;
   overflow-y: auto;
 }
 
-.raw-sidebar .raw-take-head {
+.raw-sidebar .raw-take-head,
+.raw-sidebar .raw-take-controls {
   flex: 0 0 auto;
 }
+
+/* Record / playback controls attached to the raw buffer card */
+.raw-take-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 6px 8px;
+  margin-bottom: 8px;
+  border: 1px solid var(--phthalo-border);
+  border-radius: 2px;
+  background: #08110E;
+  font-size: 11px;
+  color: var(--muted);
+}
+.raw-take-controls label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+.replay-voice-label select { max-width: 110px; }
 
 .feed-list {
   list-style: none;
@@ -348,6 +380,14 @@ select option { background: var(--phthalo-card); color: var(--text); }
 .feed-list li.statusline { color: var(--muted); font-style: italic; }
 .feed-list li.on .nmark { color: var(--straw-soft); font-weight: 700; }
 .feed-list li.off { color: var(--muted); }
+/* Raw buffer entry currently sounding during playback: bold + straw wash */
+.feed-list li.playing {
+  font-weight: 700;
+  opacity: 1;
+  background: rgba(242, 230, 166, 0.10);
+  outline: 1px solid var(--straw-gold);
+}
+.feed-list li.playing .nmark { color: var(--straw); font-weight: 700; }
 
 /* Nilotic Greenhouse scrollbars: phthalo-green tracks, straw-gold thumbs */
 * { scrollbar-width: thin; scrollbar-color: var(--phthalo-border) var(--phthalo-deep); }
