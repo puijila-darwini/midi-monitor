@@ -418,14 +418,29 @@ function addAccidentals(staveNote, midiNotes) {
 
   function redraw() {
     if (!div) return;
-    if (!events.length) { div.innerHTML = ""; return; }
+    if (!events.length) { div.innerHTML = ""; renderer = null; context = null; return; }
     initRenderer();
 
     context.clear();
+    // Drop any empty-state placeholder from an earlier empty render — fresh
+    // notation draws into the same div.
+    var stalePh = div.querySelector(".stave-empty");
+    if (stalePh) stalePh.remove();
 
     // Filter events based on showIntervals setting
     var displayEvents = showIntervals ? events : events.filter(function(e) { return e.kind !== "interval"; });
-    if (!displayEvents.length) { div.innerHTML = ""; return; }
+    if (!displayEvents.length) {
+      // Never go silently blank: if events exist but all are filtered out,
+      // say so (otherwise a take of pure intervals looks like a dead stave).
+      // Drop the cached renderer too: it points at the replaced SVG, and the
+      // next redraw must bind a fresh one (same staleness rule as clear()).
+      div.innerHTML = events.length
+        ? '<div class="stave-empty">only interval events &mdash; toggle intervals on to show them</div>'
+        : "";
+      renderer = null;
+      context = null;
+      return;
+    }
 
     var staveLines = packLines(displayEvents);
     var lastId = displayEvents[displayEvents.length - 1].id;

@@ -61,6 +61,24 @@ class State:
         self.quantized_notes = []  # list of quantized note events
         self.raw_take_events = []  # semi-raw MIDI events for replay / piano roll
         self.take_notes = []  # the frozen take = exactly what the stave shows (for replay)
+        # Transform chain output (RAW -> quantizer -> OUT). quantized_take is
+        # the canonical quantized intermediate: same shape as quantized_notes
+        # entries (note/on_time/off_time/velocity/duration/rest?). The stave
+        # groups+labels it; OUT expands it to MIDI on/off pairs
+        # (transformed_events, same dict shape as raw_take_events).
+        # Rebuilt on demand by requantize() — never accumulates live.
+        self.quantized_take = []
+        self.transformed_events = []
+        # Bypass switch for the quantizer stage ("no quantization" option):
+        # False = exact on/off pairs straight from the raw buffer.
+        self.quantize_enabled = True
+        # Near-simultaneous window (seconds) for grouping chord members when
+        # bypassing (no grid to snap them together). Grouping ALSO requires
+        # overlap (next onset lands while the group still sounds) so fast
+        # legato runs stay single notes and only true block chords/dyads
+        # group — otherwise a fast passage collapses into intervals and the
+        # stave (with intervals hidden) goes silently blank.
+        self.bypass_group_window = 0.05
         self.max_quantized_notes = 500
         self.max_raw_take_events = 2000
         # Pending-onset based note value derivation (TIME-TO-NEXT-ONSET).
@@ -289,26 +307,31 @@ class State:
             out, self._emit_queue = self._emit_queue, []
         return out
 
-    def notation_from_buffer(self):
-        """Re-derive the notation card's note/rest events from the stored raw
-        take buffer, processed by the CURRENT quantisation settings.
+    def requantize(self):
+        """Rebuild the transform-chain output from the raw take buffer.
 
-        Replays raw_take_events through a scratch State (same grid anchor, same
-        pending-group code path as live capture) with tempo/divisions fixed at
-        their current values, so the stave always reflects the buffer as the
-        current grid hears it — regardless of what the grid was while playing.
-
-        Returns a list of plain dicts, one per stave event:
-          {"kind": "note"|"chord"|"interval"|"rest", "notes": [...],
-           "on_time":, "off_time":, "velocity":, "duration":, "label": str|None}
-        Simultaneous onsets are grouped: 3+ notes -> "chord" (label via
-        chords.name_only), 2 notes -> "interval" (label via
-        chords.interval_of); unmatched groups carry label None. Rests keep
-        their position in time order.
+        THE quantizer stage (RAW -> quantizer -> OUT): replays raw_take_events
+        under the CURRENT settings into the canonical quantized_take, then
+        expands it to transformed_events (MIDI on/off pairs for OUT; rests
+        are notation-only and dropped). Always recomputed on demand, so every
+        consumer (notation, replay, counts) hears the same take. Returns the
+        quantized_take list.
         """
         raw = list(self.raw_take_events)
+        self.quantized_take = []
+        self.transformed_events = []
         if not raw:
-            return []
+            return self.quantized_take
+        if self.quantize_enabled:
+            self.quantized_take = self._requantize_gridded(raw)
+        else:
+            self.quantized_take = self._requantize_exact(raw)
+        self.transformed_events = self._expand_midi(self.quantized_take)
+        return self.quantized_take
+
+    def _requantize_gridded(self, raw):
+        """Scratch-State rebuild: same grid anchor, same pending-group code
+        path as live capture, tempo/divisions fixed at current values."""
         scratch = State(quantization_divisions=self.quantization_divisions)
         scratch._start = self._start
         scratch.tempo_bpm = self.tempo_bpm
@@ -336,17 +359,113 @@ class State:
             # Same trailing-note semantics as stopping a take live.
             if scratch._pending is not None and scratch.tempo_bpm > 0:
                 scratch._finalize_pending(scratch._robust_gap_duration())
-        # Merge adjacent same-onset notes into chord/interval groups,
-        # preserving time order (rests stay where they fall).
+        return list(scratch.quantized_notes)
+
+    def _requantize_exact(self, raw):
+        """Bypass path ("no quantization"): exact on/off pairs matched
+        straight from the raw buffer. No rests — gaps are just gaps; hanging
+        notes (no off yet) close at the buffer end. Same dict shape as the
+        gridded path so downstream grouping/labelling is shared."""
+        notes = []
+        open_notes = {}  # note -> (on_time, velocity)
+        last_t = None
+        for ev in raw:
+            if ev.get("type") not in ("note_on", "note_off"):
+                continue
+            try:
+                n = int(ev["note"])
+                t = float(ev["time"])
+            except (TypeError, ValueError, KeyError):
+                continue
+            last_t = t if last_t is None else max(last_t, t)
+            if ev["type"] == "note_on":
+                try:
+                    v = max(1, min(127, int(ev.get("velocity", 100))))
+                except (TypeError, ValueError):
+                    v = 100
+                if n in open_notes:
+                    # Re-strike without release: close the previous at now.
+                    ot, ov = open_notes.pop(n)
+                    if t > ot:
+                        notes.append({"note": n, "on_time": ot,
+                                      "off_time": t, "velocity": ov,
+                                      "duration": t - ot})
+                open_notes[n] = (t, v)
+            else:
+                if n in open_notes:
+                    ot, ov = open_notes.pop(n)
+                    if t >= ot:
+                        notes.append({"note": n, "on_time": ot,
+                                      "off_time": t, "velocity": ov,
+                                      "duration": max(0.0, t - ot)})
+        if last_t is not None:
+            for n, (ot, ov) in sorted(open_notes.items()):
+                off = max(last_t, ot + 0.1)
+                notes.append({"note": n, "on_time": ot, "off_time": off,
+                              "velocity": ov, "duration": off - ot})
+        notes.sort(key=lambda q: q["on_time"])
+        return notes
+
+    @staticmethod
+    def _expand_midi(quantized_take):
+        """Expand quantized notes to MIDI on/off event dicts (OUT side of the
+        chain; same shape as raw_take_events). Rests are notation-only."""
+        events = []
+        for qn in quantized_take:
+            if qn.get("rest"):
+                continue
+            try:
+                n = int(qn["note"])
+                on = float(qn["on_time"])
+                off = float(qn["off_time"])
+                v = max(1, min(127, int(qn.get("velocity", 100))))
+            except (TypeError, ValueError, KeyError):
+                continue
+            if off < on:
+                continue
+            events.append({"type": "note_on", "note": n, "velocity": v,
+                           "time": on, "channel": 0})
+            events.append({"type": "note_off", "note": n, "velocity": 0,
+                           "time": off, "channel": 0})
+        events.sort(key=lambda e: (e["time"], 0 if e["type"] == "off" else 1)
+                    if e["type"] == "note_off"
+                    else (e["time"], 1))
+        return events
+
+    def notation_from_buffer(self):
+        """Re-derive the notation card's note/rest events from the stored raw
+        take buffer, processed by the CURRENT quantisation settings.
+
+        Groups simultaneous onsets (3+ -> "chord" via chords.name_only, 2 ->
+        "interval" via chords.interval_of; unmatched groups carry label None)
+        and preserves time order (rests stay where they fall). See requantize
+        for the rebuild both notation and OUT share.
+        """
+        self.requantize()
+        window = 0.0 if self.quantize_enabled else self.bypass_group_window
         merged = []  # list of ("notes", [qn, ...]) | ("rest", qn)
-        for qn in scratch.quantized_notes:
+        for qn in self.quantized_take:
             if qn.get("rest"):
                 merged.append(("rest", qn))
-            elif (merged and merged[-1][0] == "notes"
-                    and merged[-1][1][0]["on_time"] == qn["on_time"]):
-                merged[-1][1].append(qn)
-            else:
-                merged.append(("notes", [qn]))
+                continue
+            if merged and merged[-1][0] == "notes":
+                members = merged[-1][1]
+                gap = qn["on_time"] - members[0]["on_time"]
+                if window <= 0.0:
+                    # Gridded path: same snapped tick (exact float equality).
+                    same_slot = gap <= 0.0
+                else:
+                    # Bypass path: near-simultaneous AND overlapping — a true
+                    # block chord, not a fast legato run.
+                    same_slot = gap <= window and qn["on_time"] < max(
+                        q["off_time"] for q in members)
+                if same_slot:
+                    # Dedupe: re-strikes of one pitch inside one slot are a
+                    # single notation event, not a unison "interval".
+                    if qn["note"] not in [q["note"] for q in members]:
+                        members.append(qn)
+                    continue
+            merged.append(("notes", [qn]))
         out = []
         for kind, payload in merged:
             if kind == "rest":
@@ -694,17 +813,27 @@ class State:
             self.recent.append({"type": "online", "time": event["time"]})
 
     def set_quantization(self, divisions):
-        """Set the quantization grid's fineness (divisions per beat).
+        """Set the quantization grid fineness (divisions per beat).
 
         Loose (2) = 8th-note grid, Normal (4) = 16th grid, Tight (8) = 32nd grid.
-        Resets the pending-onset anchor so the next note is treated as a fresh
-        phrase after the grid changes.
+        0 = bypass ("no quantization"): the transform chain passes exact
+        on/off timing through. Resets the pending-onset anchor so the next note
+        is treated as a fresh phrase after the grid changes.
         """
-        old = self.quantization_divisions
-        self.quantization_divisions = max(1, int(divisions))
+        try:
+            divisions = int(divisions)
+        except (TypeError, ValueError):
+            return False
+        if divisions == 0:
+            self.quantize_enabled = False
+        elif 1 <= divisions <= 16:
+            self.quantize_enabled = True
+            self.quantization_divisions = divisions
+        else:
+            return False
         self._pending = None
-        if old != self.quantization_divisions:
-            self.version += 1
+        self.version += 1
+        return True
 
     def set_recording(self, flag):
         """Start or stop a recording take.
@@ -725,6 +854,8 @@ class State:
                 self.quantized_notes = []
                 self.raw_take_events = []
                 self.take_notes = []  # clear the take buffer
+                self.quantized_take = []  # clear the transform output
+                self.transformed_events = []
                 self.held = {}
                 self.version += 1
             self.recording = True
@@ -757,6 +888,7 @@ class State:
             "detected_bpm": round(self.detected_bpm, 1) if self.detected_bpm > 0 else 0,
             "user_tempo_bpm": round(self.user_tempo_bpm, 1) if self.user_tempo_bpm > 0 else 0,
             "quantization_divisions": self.quantization_divisions,
+            "quantize_enabled": self.quantize_enabled,
             "time_signature": self.time_signature,
             "recording": self.recording,
             "quantized_notes": self.quantized_notes[-100:],  # last 100 quantized notes

@@ -782,3 +782,27 @@ that file lean. History is chronological; most lines start with a version tag.
   quantized SSE keeps tempo display). Verified live with the keyboard:
   quant change rendered full notation from a 39-row buffer (89 paths),
   STOP/time-sig/REC all re-render correctly, zero console errors.
+- Ver 57: RAW -> quantizer BOX -> OUT chain. New canonical transform output:
+  State.requantize() rebuilds quantized_take + transformed_events (MIDI
+  on/off expansion, rests dropped) on demand, so notation and playback hear
+  the same take. Bypass ("no quantization", quant select now offers off):
+  exact on/off pairs matched from raw, no rests, hanging notes closed at
+  buffer end. New chain row under the control row, above notation:
+  transform card (quant select incl. off, in->out counts, grid status like
+  "16ths @ 120bpm" / "bypass - exact timing") + out card (play take + voice
+  moved out of the raw card; REC/STOP/clear stay on raw as input controls).
+  /api/replay now plays the transformed buffer (gate moved with it — this
+  also fixes stale replays after a raw clear, which used to fall back to
+  old take_notes); /api/notation serves the canonical take + counts with an
+  unchanged event shape; /api/quant accepts 0 (validated 0-16); wipes
+  (REC-start, raw clear) drop the transform output too; page load restores
+  stave + chain status from a surviving buffer. Two real bugs found live
+  while testing bypass: (1) fast legato runs grouped into intervals under
+  the 90ms window, blanking the stave with intervals hidden — bypass
+  grouping now needs overlap + tighter 50ms window; (2) stave renderer went
+  stale (placeholder/empty renders kept drawing into a detached SVG, and a
+  stale placeholder could linger) — renderer/context now reset on empty
+  renders and placeholders are removed on redraw. Verified live with the
+  keyboard: quantized + bypass replays both sound with purple step
+  highlighting, counts track (in 370 -> out 370 bypass), chord labels
+  survive, zero console errors.

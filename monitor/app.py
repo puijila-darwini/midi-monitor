@@ -243,14 +243,17 @@ def api_key_reset():
 
 @app.route("/api/quant", methods=["POST"])
 def api_quant():
-    """Set the quantization grid fineness (divisions per beat)."""
+    """Set the quantization grid fineness (divisions per beat). 0 = bypass
+    ("no quantization": the transform chain passes exact timing through)."""
     try:
         body = request.get_json(silent=True) or {}
         divisions = int(body.get("divisions", 4))
     except (TypeError, ValueError):
         return jsonify({"ok": False, "error": "divisions must be an int"}), 400
-    state.set_quantization(divisions)
-    return jsonify({"ok": True, "divisions": state.quantization_divisions})
+    if not state.set_quantization(divisions):
+        return jsonify({"ok": False, "error": "divisions must be 0-16"}), 400
+    return jsonify({"ok": True, "divisions": state.quantization_divisions,
+                    "enabled": state.quantize_enabled})
 
 
 @app.route("/api/record", methods=["POST"])
@@ -339,8 +342,11 @@ def api_replay():
         return jsonify({"ok": False, "error": "speed must be a number"}), 400
     if speed <= 0:
         return jsonify({"ok": False, "error": "speed must be > 0"}), 400
-    notes = [n for n in state.take_notes if not n.get("rest")]
-    if not notes:
+    # OUT side of the transform chain: re-derive the quantized take from the
+    # raw buffer under current settings, then play the transformed MIDI.
+    state.requantize()
+    played = state.transformed_events[-500:]  # limit to last 500 events
+    if not played:
         return jsonify({"ok": False, "error": "take is empty"}), 400
     # Optional voice selection: send a program change before playback so the
     # keyboard uses the chosen voice instead of whatever it was last on.
@@ -349,13 +355,10 @@ def api_replay():
     if voice is not None:
         state.receive_program = voice[1]
         state.receive_bank = voice[0]
-    # Try to use raw_take_events if available (exact timing), otherwise fall back to quantized_notes
-    if hasattr(state, "raw_take_events") and state.raw_take_events:
-        raw_notes = state.raw_take_events[-500:]  # limit to last 500 events
-        replayer.play(raw_notes, speed=speed, on_event=hub.publish, voice=voice)
-    else:
-        replayer.play(state.take_notes, speed=speed, on_event=hub.publish, voice=voice)
-    return jsonify({"ok": True, "notes": len(notes), "speed": speed, "voice": body.get("voice", "auto")})
+    # Play the transformed MIDI through the keyboard's internal voices.
+    replayer.play(played, speed=speed, on_event=hub.publish, voice=voice)
+    count = sum(1 for e in played if e["type"] == "note_on")
+    return jsonify({"ok": True, "notes": count, "speed": speed, "voice": body.get("voice", "auto")})
 
 
 @app.route("/api/replay/stop", methods=["POST"])
@@ -375,17 +378,25 @@ def api_take():
 @app.route("/api/notation")
 def api_notation():
     """Notation events re-derived from the raw take buffer under the current
-    quantisation/tempo/time-signature — the notation card's source of truth."""
-    return jsonify({"ok": True, "events": state.notation_from_buffer(),
+    quantisation/tempo/time-signature — the notation card's source of truth.
+    Shares the canonical transform output with OUT (see requantize)."""
+    events = state.notation_from_buffer()
+    return jsonify({"ok": True, "events": events,
                     "tempo": state.tempo_bpm,
                     "time_signature": state.time_signature,
-                    "divisions": state.quantization_divisions})
+                    "divisions": state.quantization_divisions,
+                    "enabled": state.quantize_enabled,
+                    "counts": {"in": len(state.raw_take_events),
+                               "out": len(state.transformed_events)}})
 
 
 @app.route("/api/take/clear", methods=["POST"])
 def api_take_clear():
-    """Clear the raw take events buffer."""
+    """Clear the raw take events buffer (plus the transform output derived
+    from it, so nothing stale survives)."""
     state.raw_take_events = []
+    state.quantized_take = []
+    state.transformed_events = []
     return jsonify({"ok": True, "cleared": True})
 
 

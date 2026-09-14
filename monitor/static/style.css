@@ -358,7 +358,60 @@ select option { background: var(--phthalo-card); color: var(--text); }
   gap: 4px;
   cursor: pointer;
 }
-.replay-voice-label select { max-width: 110px; }
+.replay-voice-label select { max-width: none; }
+
+/* ---- signal chain row: transform -> out, under the control row ---- */
+.chain-row {
+  display: flex;
+  align-items: stretch;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.chain-card {
+  flex: 1 1 300px;
+  padding: 10px 12px;
+}
+.chain-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid var(--straw);
+  border-radius: 999px;
+  padding: 6px 8px 6px 16px;
+  margin-bottom: 8px;
+  background: #08110E;
+}
+.chain-title {
+  font-size: 11px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--straw-soft);
+}
+.chain-counts {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  color: var(--muted);
+}
+.chain-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  color: var(--muted);
+}
+.chain-controls label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+.chain-status {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  color: var(--straw-gold);
+}
 
 .feed-list {
   list-style: none;
@@ -812,6 +865,13 @@ li.tonic {
   border-left: 3px solid var(--royal);
   border-radius: 2px;
   padding: 6px;
+}
+.stave-empty {
+  color: var(--muted);
+  font-style: italic;
+  font-size: 12px;
+  padding: 18px 12px;
+  text-align: center;
 }
 
 /* ---- mini stave ---- */

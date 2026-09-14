@@ -794,6 +794,26 @@ function buildCatchTooltip() {
     }
   }
 
+  // Chain status line: what the quantizer stage is doing right now.
+  var QUANT_GRID_NAMES = { 2: "8ths", 4: "16ths", 8: "32nds" };
+  function renderChainStatus(data) {
+    var counts = document.getElementById("chain-counts");
+    var status = document.getElementById("chain-status");
+    var c = (data && data.counts) || {};
+    if (counts) {
+      counts.textContent = "in " + (c.in || 0) + " \u2192 out " + (c.out || 0);
+    }
+    if (status) {
+      if (data && data.enabled === false) {
+        status.textContent = "bypass \u00B7 exact timing";
+      } else {
+        var grid = QUANT_GRID_NAMES[data ? data.divisions : 0] || "";
+        var bpm = (data && data.tempo > 0) ? Math.round(data.tempo) + "bpm" : "no tempo yet";
+        status.textContent = (grid ? grid + " @ " : "") + bpm;
+      }
+    }
+  }
+
   // Notation is rendered FROM the raw take buffer (/api/notation), never
   // pushed live: every render below rebuilds the whole stave from the buffer
   // under the current quantisation, so quant/time-sig/tempo changes re-hear
@@ -808,6 +828,7 @@ function buildCatchTooltip() {
           tempoBpm = data.tempo;
           window.tempoBpm = data.tempo;
         }
+        renderChainStatus(data);
         StavePanel.clear();
         (data.events || []).forEach(function (ev) {
           if (ev.kind === "rest") {
@@ -1180,8 +1201,10 @@ function buildCatchTooltip() {
       renderTempo(s.tempo_bpm || 0, s.detected_bpm || 0, s.user_tempo_bpm || 0);
       if (typeof s.quantization_divisions !== "undefined") {
         var qsel = document.getElementById("quantization");
-        if (qsel && qsel.querySelector('option[value="' + s.quantization_divisions + '"]')) {
-          qsel.value = String(s.quantization_divisions);
+        if (qsel) {
+          // Bypass ("no quantization") shows as off; otherwise the grid.
+          var qv = s.quantize_enabled === false ? "0" : String(s.quantization_divisions);
+          if (qsel.querySelector('option[value="' + qv + '"]')) qsel.value = qv;
         }
       }
       if (typeof s.time_signature === "string" && s.time_signature.indexOf("/") > 0) {
@@ -1206,6 +1229,9 @@ function buildCatchTooltip() {
           if (lab) lab.textContent = recording ? "stop" : "rec";
         }
       }
+      // Restore the stave + chain status from any take already in the buffer
+      // (e.g. after a page reload while the server kept running).
+      renderNotationFromBuffer();
     })
     .catch(function () { /* server just started? SSE will catch us up */ });
 

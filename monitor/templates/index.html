@@ -45,58 +45,6 @@
                   title="REC: start a new take (clears the buffer). STOP: freeze the take and flush the last note.">
             <span id="record-btn-dot" class="record-dot"></span><span id="record-btn-label">rec</span>
           </button>
-          <button id="replay-btn" class="record-btn replay-btn" type="button"
-                  title="Play the take back through the keyboard's internal voices. Click again to stop.">
-            <span id="replay-btn-glyph" class="replay-glyph">&#9656;</span><span id="replay-btn-label">play take</span>
-          </button>
-          <label class="replay-voice-label">
-            <span>voice:</span>
-            <select id="replay-voice" title="Voice to use for playback (sends program change before replay; 'auto' uses current receive voice)">
-              <option value="auto">auto (current receive voice)</option>
-              <option value="Grand Piano">Grand Piano</option>
-              <option value="Electric Piano 1">Electric Piano 1</option>
-              <option value="Electric Piano 2">Electric Piano 2</option>
-              <option value="Electric Grand Piano">Electric Grand Piano</option>
-              <option value="Drawbar Organ">Drawbar Organ</option>
-              <option value="Rock Organ">Rock Organ</option>
-              <option value="Accordion">Accordion</option>
-              <option value="Harmonica">Harmonica</option>
-              <option value="Nylon Guitar">Nylon Guitar</option>
-              <option value="Steel Guitar">Steel Guitar</option>
-              <option value="Jazz Guitar">Jazz Guitar</option>
-              <option value="Clean Guitar">Clean Guitar</option>
-              <option value="Overdriven Guitar">Overdriven Guitar</option>
-              <option value="Acoustic Bass">Acoustic Bass</option>
-              <option value="Finger Bass">Finger Bass</option>
-              <option value="Slap Bass">Slap Bass</option>
-              <option value="Synth Bass">Synth Bass</option>
-              <option value="Strings">Strings</option>
-              <option value="Pizzicato Strings">Pizzicato Strings</option>
-              <option value="Violin">Violin</option>
-              <option value="Cello">Cello</option>
-              <option value="Orchestral Harp">Orchestral Harp</option>
-              <option value="Oboe">Oboe</option>
-              <option value="Clarinet">Clarinet</option>
-              <option value="Flute">Flute</option>
-              <option value="Tenor Sax">Tenor Sax</option>
-              <option value="Brass Section">Brass Section</option>
-              <option value="Trumpet">Trumpet</option>
-              <option value="Trombone">Trombone</option>
-              <option value="French Horn">French Horn</option>
-              <option value="Synth Brass">Synth Brass</option>
-              <option value="Gemini">Gemini</option>
-              <option value="Punchy Chordz">Punchy Chordz</option>
-              <option value="Square Lead">Square Lead</option>
-              <option value="Sawtooth Lead">Sawtooth Lead</option>
-              <option value="New Age Pad">New Age Pad</option>
-              <option value="Warm Pad">Warm Pad</option>
-              <option value="Brightness">Brightness</option>
-              <option value="Standard Kit">Standard Kit</option>
-              <option value="Dance Kit">Dance Kit</option>
-              <option value="Vibraphone">Vibraphone</option>
-              <option value="Marimba">Marimba</option>
-            </select>
-          </label>
         </div>
         <ul id="raw-take" class="feed-list raw-take"></ul>
       </aside>
@@ -216,17 +164,93 @@
         </section>
       </div>
 
-      <section id="stave-wrap" class="stave-wrap card">
-        <div class="stave-head">
-          <span class="stave-title">notation</span>
-          <div class="stave-controls">
+      <!-- Signal chain: raw midi -> transform (quantizer) -> out (keyboard).
+           The transform re-hears the raw buffer under the current grid; OUT
+           plays the transformed take back. -->
+      <div class="chain-row">
+        <section id="transform-card" class="chain-card card">
+          <div class="chain-head">
+            <span class="chain-title">transform &middot; quantizer</span>
+            <span id="chain-counts" class="chain-counts" title="Raw events in -> transformed MIDI events out"></span>
+          </div>
+          <div class="chain-controls">
             <label class="quant-label"><span>quant:</span>
-              <select id="quantization">
+              <select id="quantization" title="Grid the quantizer snaps to; off passes exact timing through">
+                <option value="0">off (no quantization)</option>
                 <option value="2">loose</option>
                 <option value="4" selected>normal</option>
                 <option value="8">tight</option>
               </select>
             </label>
+            <span id="chain-status" class="chain-status"></span>
+          </div>
+        </section>
+
+        <section id="out-card" class="chain-card card">
+          <div class="chain-head">
+            <span class="chain-title">out &middot; keyboard</span>
+          </div>
+          <div class="chain-controls">
+            <button id="replay-btn" class="record-btn replay-btn" type="button"
+                    title="Play the transformed take back through the keyboard's internal voices. Click again to stop.">
+              <span id="replay-btn-glyph" class="replay-glyph">&#9656;</span><span id="replay-btn-label">play take</span>
+            </button>
+            <label class="replay-voice-label">
+              <span>voice:</span>
+              <select id="replay-voice" title="Voice to use for playback (sends program change before replay; 'auto' uses current receive voice)">
+                <option value="auto">auto (current receive voice)</option>
+                <option value="Grand Piano">Grand Piano</option>
+                <option value="Electric Piano 1">Electric Piano 1</option>
+                <option value="Electric Piano 2">Electric Piano 2</option>
+                <option value="Electric Grand Piano">Electric Grand Piano</option>
+                <option value="Drawbar Organ">Drawbar Organ</option>
+                <option value="Rock Organ">Rock Organ</option>
+                <option value="Accordion">Accordion</option>
+                <option value="Harmonica">Harmonica</option>
+                <option value="Nylon Guitar">Nylon Guitar</option>
+                <option value="Steel Guitar">Steel Guitar</option>
+                <option value="Jazz Guitar">Jazz Guitar</option>
+                <option value="Clean Guitar">Clean Guitar</option>
+                <option value="Overdriven Guitar">Overdriven Guitar</option>
+                <option value="Acoustic Bass">Acoustic Bass</option>
+                <option value="Finger Bass">Finger Bass</option>
+                <option value="Slap Bass">Slap Bass</option>
+                <option value="Synth Bass">Synth Bass</option>
+                <option value="Strings">Strings</option>
+                <option value="Pizzicato Strings">Pizzicato Strings</option>
+                <option value="Violin">Violin</option>
+                <option value="Cello">Cello</option>
+                <option value="Orchestral Harp">Orchestral Harp</option>
+                <option value="Oboe">Oboe</option>
+                <option value="Clarinet">Clarinet</option>
+                <option value="Flute">Flute</option>
+                <option value="Tenor Sax">Tenor Sax</option>
+                <option value="Brass Section">Brass Section</option>
+                <option value="Trumpet">Trumpet</option>
+                <option value="Trombone">Trombone</option>
+                <option value="French Horn">French Horn</option>
+                <option value="Synth Brass">Synth Brass</option>
+                <option value="Gemini">Gemini</option>
+                <option value="Punchy Chordz">Punchy Chordz</option>
+                <option value="Square Lead">Square Lead</option>
+                <option value="Sawtooth Lead">Sawtooth Lead</option>
+                <option value="New Age Pad">New Age Pad</option>
+                <option value="Warm Pad">Warm Pad</option>
+                <option value="Brightness">Brightness</option>
+                <option value="Standard Kit">Standard Kit</option>
+                <option value="Dance Kit">Dance Kit</option>
+                <option value="Vibraphone">Vibraphone</option>
+                <option value="Marimba">Marimba</option>
+              </select>
+            </label>
+          </div>
+        </section>
+      </div>
+
+      <section id="stave-wrap" class="stave-wrap card">
+        <div class="stave-head">
+          <span class="stave-title">notation</span>
+          <div class="stave-controls">
             <label><input type="checkbox" id="show-intervals"> intervals</label>
           </div>
         </div>
