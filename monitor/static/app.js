@@ -22,6 +22,7 @@
   var keyEls = {};
   var held = new Set();
   var replayActive = false;  // a take is currently playing back out the keyboard
+var loopActive = false;    // a take is currently looping
   var tempoBpm = 0;  // global tempo for quantization
 window.tempoBpm = 0;  // expose on window for durationToVexFlow
   // Time signature (beats per measure). Exposed on window for stave (measure
@@ -664,7 +665,7 @@ function buildCatchTooltip() {
       case "capture_error":
         showCaptureError(ev.message, ev.restarts);
         break;
-      case "replay":
+case "replay":
         if (ev.phase === "start") {
           replayActive = true;
           if (setReplayBtn) setReplayBtn();
@@ -688,23 +689,21 @@ function buildCatchTooltip() {
           replayActive = false;
           if (setReplayBtn) setReplayBtn();
           clearRawPlaying();
-          if (window.StavePanel) StavePanel.clearPlaying();
           addFeed('<span class="time">' + fmtTime(ev.time || 0) +
             "</span>  REPLAY  done", "replay");
-        } else if (ev.phase === "stopped") {
+        } else if (ev.phase === "stopped" || ev.phase === "error") {
           replayActive = false;
+          loopActive = false;
           if (setReplayBtn) setReplayBtn();
+          if (setLoopBtn) setLoopBtn();
           clearRawPlaying();
-          if (window.StavePanel) StavePanel.clearPlaying();
-          addFeed('<span class="time">' + fmtTime(ev.time || 0) +
-            "</span>  REPLAY  stopped", "replay");
-        } else if (ev.phase === "error") {
-          replayActive = false;
-          if (setReplayBtn) setReplayBtn();
-          clearRawPlaying();
-          if (window.StavePanel) StavePanel.clearPlaying();
-          addFeed('<span class="time">' + fmtTime(ev.time || 0) +
-            "</span>  REPLAY  " + ev.message, "replay");
+          if (ev.phase === "stopped") {
+            addFeed('<span class="time">' + fmtTime(ev.time || 0) +
+              "</span>  REPLAY  stopped", "replay");
+          } else {
+            addFeed('<span class="time">' + fmtTime(ev.time || 0) +
+              "</span>  REPLAY  " + ev.message, "replay");
+          }
         }
         break;
     }
@@ -959,6 +958,73 @@ function buildCatchTooltip() {
     render();
   })();
 
+// STOP button: halt playback immediately (all notes off).
+  (function () {
+    var btn = document.getElementById("replay-stop-btn");
+    if (!btn) return;
+    btn.addEventListener("click", function () {
+      fetch("/api/replay/stop", { method: "POST" })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (res && !res.active) {
+            replayActive = false;
+            loopActive = false;
+            setReplayBtn && setReplayBtn();
+            setLoopBtn && setLoopBtn();
+          }
+        })
+        .catch(function () { /* transient */ });
+    });
+  })();
+
+  // LOOP button: start replay looping until STOP is clicked.
+  var setLoopBtn = null;
+  (function () {
+    var btn = document.getElementById("replay-loop-btn");
+    if (!btn) return;
+
+    function renderLoop() {
+      btn.classList.toggle("active", loopActive);
+      btn.classList.toggle("recording", loopActive);
+    }
+    setLoopBtn = renderLoop;
+
+    btn.addEventListener("click", function () {
+      if (loopActive) {
+        fetch("/api/replay/stop", { method: "POST" })
+          .then(function (r) { return r.json(); })
+          .then(function (res) {
+            loopActive = false;
+            renderLoop();
+            if (res && !res.active) {
+              replayActive = false;
+              setReplayBtn && setReplayBtn();
+            }
+          })
+          .catch(function () { /* transient */ });
+        return;
+      }
+      var voiceSel = document.getElementById("replay-voice");
+      var voiceVal = voiceSel ? voiceSel.value : "auto";
+      fetch("/api/replay/loop", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ speed: 1.0, voice: voiceVal })
+      }).then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (res && res.ok) {
+            loopActive = true;
+            replayActive = true;
+            renderLoop();
+            setReplayBtn && setReplayBtn();
+          } else {
+            addFeed("LOOP  " + (res.error || "failed"), "replay");
+          }
+        })
+        .catch(function () { /* transient */ });
+    });
+  })();
+
   // Tonic + scale selector: shade in-scale keys + interval labels on the piano,
   // and drive the stave key signature when the scale maps to one. The "catch"
   // button arms a one-shot listener: the next note (or chord) heard from the
@@ -1049,6 +1115,109 @@ function buildCatchTooltip() {
         })
         .catch(function () { /* ignore transient */ });
     });
+  })();
+
+  // Velocity compressor stage: standard velocity, width and mode.
+  // Standard is the center of the target band; blank / detect = auto
+  // (median of note-on velocities in the raw buffer). Width is the band
+  // half-width. Mode: "compress" = linearly rescale the whole buffer into
+  // the band; "threshold" = clip values outside the band to the edges.
+  (function () {
+    var stdInput = document.getElementById("vel-standard");
+    var widthInput = document.getElementById("vel-width");
+    var modeSel = document.getElementById("vel-mode");
+    var autoBtn = document.getElementById("vel-auto");
+    var enabledChk = document.getElementById("vel-enabled");
+    if (!stdInput && !widthInput && !modeSel && !autoBtn && !enabledChk) return;
+
+    function apply() {
+      var body = {};
+      if (enabledChk) body.enabled = enabledChk.checked;
+      if (stdInput && stdInput.value.trim() !== "") {
+        var std = parseInt(stdInput.value, 10);
+        if (!isNaN(std)) body.standard = std;
+      } else {
+        body.standard = null;  // auto-detect
+      }
+      if (widthInput && widthInput.value.trim() !== "") {
+        var w = parseInt(widthInput.value, 10);
+        if (!isNaN(w)) body.width = w;
+      }
+      if (modeSel) body.mode = modeSel.value;
+      fetch("/api/velocity", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      }).then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (res && res.ok) {
+            if (typeof res.enabled === "boolean" && enabledChk) {
+              enabledChk.checked = res.enabled;
+            }
+            if (typeof res.standard === "number" && stdInput) {
+              stdInput.value = String(res.standard);
+            }
+            if (typeof res.width === "number" && widthInput) {
+              widthInput.value = String(res.width);
+            }
+            if (res.mode && modeSel) modeSel.value = res.mode;
+            renderNotationFromBuffer();
+          }
+        })
+        .catch(function () { /* ignore transient */ });
+    }
+
+    if (stdInput) stdInput.addEventListener("change", apply);
+    if (widthInput) widthInput.addEventListener("change", apply);
+    if (modeSel) modeSel.addEventListener("change", apply);
+    if (autoBtn) autoBtn.addEventListener("click", apply);
+    if (enabledChk) enabledChk.addEventListener("change", apply);
+  })();
+
+  // Humanizer stage: subtle timing and velocity variation applied at the
+  // very end of the transform chain (to the final OUT MIDI events).
+  (function () {
+    var enabledChk = document.getElementById("humanizer-enabled");
+    var timingInput = document.getElementById("humanizer-timing");
+    var velocityInput = document.getElementById("humanizer-velocity");
+    if (!enabledChk && !timingInput && !velocityInput) return;
+
+    function apply() {
+      var body = {};
+      if (enabledChk) body.enabled = enabledChk.checked;
+      if (timingInput && timingInput.value.trim() !== "") {
+        var t = parseInt(timingInput.value, 10);
+        if (!isNaN(t)) body.timing_ms = t;
+      }
+      if (velocityInput && velocityInput.value.trim() !== "") {
+        var v = parseInt(velocityInput.value, 10);
+        if (!isNaN(v)) body.velocity = v;
+      }
+      fetch("/api/humanizer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      }).then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (res && res.ok) {
+            if (typeof res.enabled === "boolean" && enabledChk) {
+              enabledChk.checked = res.enabled;
+            }
+            if (typeof res.timing_ms === "number" && timingInput) {
+              timingInput.value = String(res.timing_ms);
+            }
+            if (typeof res.velocity === "number" && velocityInput) {
+              velocityInput.value = String(res.velocity);
+            }
+            renderNotationFromBuffer();
+          }
+        })
+        .catch(function () { /* ignore transient */ });
+    }
+
+    if (enabledChk) enabledChk.addEventListener("change", apply);
+    if (timingInput) timingInput.addEventListener("change", apply);
+    if (velocityInput) velocityInput.addEventListener("change", apply);
   })();
 
   // Time-signature selector (beats per measure) for stave + metronome.
@@ -1258,16 +1427,40 @@ function buildCatchTooltip() {
           tinput.value = String(s.transpose_semitones);
         }
       }
-      if (typeof s.time_signature === "string" && s.time_signature.indexOf("/") > 0) {
-        var tp = s.time_signature.split("/");
-        setTimesig(parseInt(tp[0], 10), parseInt(tp[1], 10));
-        if (window.StavePanel) window.StavePanel.setTimeSignature(parseInt(tp[0], 10), parseInt(tp[1], 10));
-        var tsel = document.getElementById("timesig");
-        if (tsel && tsel.querySelector('option[value="' + s.time_signature + '"]')) {
-          tsel.value = s.time_signature;
+if (typeof s.time_signature === "string" && s.time_signature.indexOf("/") > 0) {
+          var tp = s.time_signature.split("/");
+          setTimesig(parseInt(tp[0], 10), parseInt(tp[1], 10));
+          if (window.StavePanel) window.StavePanel.setTimeSignature(parseInt(tp[0], 10), parseInt(tp[1], 10));
+          var tsel = document.getElementById("timesig");
+          if (tsel && tsel.querySelector('option[value="' + s.time_signature + '"]')) {
+            tsel.value = s.time_signature;
+          }
         }
-      }
-      seedHeld(s.held || []);
+        // Sync velocity compressor settings from backend state
+        if (typeof s.velocity_standard !== "undefined") {
+          var stdInput = document.getElementById("vel-standard");
+          if (stdInput && document.activeElement !== stdInput) {
+            stdInput.value = s.velocity_standard === null ? "" : String(s.velocity_standard);
+          }
+        }
+        if (typeof s.velocity_width !== "undefined") {
+          var widthInput = document.getElementById("vel-width");
+          if (widthInput && document.activeElement !== widthInput) {
+            widthInput.value = String(s.velocity_width);
+          }
+        }
+        if (typeof s.velocity_mode !== "undefined") {
+          var modeSel = document.getElementById("vel-mode");
+          if (modeSel && document.activeElement !== modeSel) {
+            modeSel.value = s.velocity_mode;
+          }
+        }
+        if (typeof s.velocity_enabled !== "undefined") {
+          // We assume it's always enabled for UI purposes; the control set enables/disables it
+          // but we keep UI showing it as enabled so user can adjust parameters
+          // (disabled state is handled by the backend; UI always allows tweaking)
+        }
+        seedHeld(s.held || []);
       // Sync the REC/STOP control with the backend recording state.
       if (typeof s.recording !== "undefined" && s.recording !== recording) {
         recording = !!s.recording;

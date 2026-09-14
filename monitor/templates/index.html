@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Keyboard Monitor</title>
+  <title>Abora</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='14' fill='%23101418'/><rect x='20' y='30' width='60' height='40' rx='4' fill='%23f4f4f2'/><rect x='42' y='30' width='16' height='22' rx='2' fill='%2316181b'/><rect x='20' y='48' width='60' height='3' fill='%234c9aff'/></svg>">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
@@ -84,8 +84,17 @@
                   <option value="9/8">9/8</option>
                   <option value="12/8">12/8</option>
                 </select>
-              </label>
-            </div>
+</label>
+            <label class="humanizer-label"><span>humanize:</span>
+              <input type="checkbox" id="humanizer-enabled" checked title="Add subtle timing/velocity variations to the keyboard output">
+              <label for="humanizer-enabled">humanize</label>
+              <input type="number" id="humanizer-timing" class="humanizer-input" min="0" max="100" step="1"
+                     value="10" title="Max random timing shift in milliseconds (±)">
+              <label for="humanizer-timing">ms</label>
+              <input type="number" id="humanizer-velocity" class="humanizer-input" min="0" max="20" step="1"
+                     value="5" title="Max random velocity shift (±) ">
+              <label for="humanizer-velocity">vel</label>
+            </label>
           </div>
         </section>
 
@@ -191,6 +200,34 @@
                      value="0" title="Transpose the transformed take by semitones (-24..+24, 0 = off)">
             </label>
             <span id="chain-status" class="chain-status"></span>
+            <label class="vel-label"><span>compressor:</span>
+              <input type="checkbox" id="vel-enabled" checked title="Enable/disable the velocity compressor stage">
+              <label for="vel-enabled">compress</label>
+              <input type="number" id="vel-standard" class="vel-input" min="1" max="127" step="1"
+                     value="100" title="Standard velocity (center of the target band); blank to auto-detect from the buffer">
+              <button id="vel-auto" class="listen-btn" type="button"
+                      title="Auto-detect standard velocity from the raw buffer (median of note-on velocities)">&#9889; detect</button>
+            </label>
+            <label class="vel-width-label"><span>width:</span>
+              <input type="number" id="vel-width" class="vel-input" min="1" max="127" step="1"
+                     value="50" title="Velocity band half-width (all velocities forced inside standard ± width/2)">
+            </label>
+            <label class="vel-mode-label"><span>mode:</span>
+              <select id="vel-mode" title="Compressor mode">
+                <option value="compress" selected>compress (linear rescale)</option>
+                <option value="threshold">threshold (clip)</option>
+              </select>
+            </label>
+            <label class="humanizer-label"><span>humanize:</span>
+              <input type="checkbox" id="humanizer-enabled" title="Add subtle timing/velocity variations to the keyboard output">
+              <label for="humanizer-enabled">humanize</label>
+              <input type="number" id="humanizer-timing" class="humanizer-input" min="0" max="100" step="1"
+                     value="10" title="Max random timing shift in milliseconds (±)">
+              <label for="humanizer-timing">ms</label>
+              <input type="number" id="humanizer-velocity" class="humanizer-input" min="0" max="20" step="1"
+                     value="5" title="Max random velocity shift (±)">
+              <label for="humanizer-velocity">vel</label>
+            </label>
           </div>
         </section>
 
@@ -199,10 +236,20 @@
             <span class="chain-title">out &middot; keyboard</span>
           </div>
           <div class="chain-controls">
-            <button id="replay-btn" class="record-btn replay-btn" type="button"
-                    title="Play the transformed take back through the keyboard's internal voices. Click again to stop.">
-              <span id="replay-btn-glyph" class="replay-glyph">&#9656;</span><span id="replay-btn-label">play take</span>
-            </button>
+            <div class="replay-btn-group">
+              <button id="replay-btn" class="record-btn replay-btn" type="button"
+                      title="Play the transformed take back through the keyboard's internal voices. Click again to stop.">
+                <span id="replay-btn-glyph" class="replay-glyph">&#9656;</span><span id="replay-btn-label">play take</span>
+              </button>
+              <button id="replay-stop-btn" class="record-btn stop-btn" type="button"
+                      title="Halt playback immediately and cut all notes">
+                <span id="replay-stop-glyph">&#9646;</span><span id="replay-stop-label">stop</span>
+              </button>
+              <button id="replay-loop-btn" class="record-btn loop-btn" type="button"
+                      title="Loop the pattern until STOP is clicked">
+                <span id="replay-loop-glyph">&#9851;</span><span id="replay-loop-label">loop</span>
+              </button>
+            </div>
             <label class="replay-voice-label">
               <span>voice:</span>
               <select id="replay-voice" title="Voice to use for playback (sends program change before replay; 'auto' uses current receive voice)">

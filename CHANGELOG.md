@@ -655,7 +655,7 @@ that file lean. History is chronological; most lines start with a version tag.
   regressed — verified exhaustive: chrom cluster at any root resolves
   chromatic; major/minor/aug triads still fall through to their own 3-note
   paths (returning null from shapes so the triad path runs); a 4+ chord
-  CONTAINING the cluster {0,1,2,4,7,10} still resolves phrygian_dominant (7b9,
+  CONTAINING the cluster {0,1,2,4,7,10,7} still resolves phrygian_dominant (7b9,
   longer wins) and Cadd9 stays major_pent with bass tiebreak; gap scales remain
   unfilled (melodic_minor, double_harmonic, bebop_*, enigmatic, hungarian_minor,
   neapolitan_* still show ∅). Tooltip: chromatic row now shows `chrom (1 m2 M2)`
@@ -808,3 +808,4 @@ that file lean. History is chronological; most lines start with a version tag.
   survive, zero console errors.
 - Ver 58: quantization grid extended to 0.25 (whole notes) and coarser (half, 8th, 16th, 32nd, 64th); replaced loose/normal/tight labels with explicit values; stave tint now uses event->heads map (headsForEvent) to recolour playback notes regardless of VexFlow id propagation; key change re-render confirmed via tonic+scale selector
 - Ver 59: stave tint now uses eventHeadMap built during render (placeAccidentals called with recordMap=true) so playback purple works regardless of VexFlow id propagation; headsForEvent skips rest events; project renamed to Abora in title/header
+- Ver 60: VELOCITY COMPRESSOR + HUMANIZER + STOP/LOOP REPLAY BUTTONS. Added velocity compressor stage (after quantization/transposition, before expansion) with threshold/compress modes and auto-detect standard velocity. Added humanizer stage (at end of chain) with ±timing_ms and ±velocity jitter for organic feel. Enhanced replay controls with dedicated STOP (immediate halt) and LOOP (continuous repeat until stopped) buttons alongside voice selector. All features integrate into existing transform chain and expose via /api/velocity, /api/humanizer, /api/replay/loop endpoints with real-time UI sync.

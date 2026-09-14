@@ -633,8 +633,6 @@
   function markStavePlaying(stepNotes) {
     if (!stepNotes || !stepNotes.length) return;
     var list = staveNonRestEvents();
-    // Extra safety: skip events with no notes (should already be filtered
-    // by staveNonRestEvents() but guard against stale eventHeadMap entries).
     var safeList = list.filter(function (e) { return e.notes && e.notes.length; });
     var pick = null;
     for (var i = stavePlayCursor; i < safeList.length; i++) {

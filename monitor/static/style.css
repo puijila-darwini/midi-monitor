@@ -359,6 +359,7 @@ select option { background: var(--phthalo-card); color: var(--text); }
   cursor: pointer;
 }
 .replay-voice-label select { max-width: none; }
+.replay-btn-group { display: flex; align-items: center; gap: 6px; }
 
 /* ---- signal chain row: transform -> out, under the control row ---- */
 .chain-row {

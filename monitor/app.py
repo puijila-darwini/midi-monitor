@@ -271,6 +271,68 @@ def api_transpose():
     return jsonify({"ok": True, "semitones": state.transpose_semitones})
 
 
+@app.route("/api/velocity", methods=["POST"])
+def api_velocity():
+    """Set the velocity compressor stage. Body:
+    {"standard": <1-127>, "width": <1-127>, "mode": "threshold"|"compress",
+     "enabled": <bool>}. Any field omitted leaves it unchanged.
+     Standard velocity is auto-detected from the buffer when set to null.
+    """
+    body = request.get_json(silent=True) or {}
+    try:
+        standard = body.get("standard", None)
+        if standard is not None:
+            standard = float(standard)
+        width = body.get("width", None)
+        if width is not None:
+            width = float(width)
+        mode = body.get("mode", None)
+        enabled = body.get("enabled", None)
+        if mode is not None and mode not in ("threshold", "compress"):
+            return jsonify({"ok": False,
+                            "error": "mode must be 'threshold' or 'compress'"}), 400
+        state.set_velocity_compressor(
+            standard=standard, width=width, mode=mode, enabled=enabled)
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+    return jsonify({
+        "ok": True,
+        "standard": state.velocity_standard,
+        "width": state.velocity_width,
+        "mode": state.velocity_mode,
+        "enabled": state.velocity_enabled,
+        "detected": state.compute_velocity_stats(),
+    })
+
+
+@app.route("/api/humanizer", methods=["POST"])
+def api_humanizer():
+    """Set the humanizer stage (applied at the end of the transform chain).
+    Body: {"enabled": <bool>, "timing_ms": <float>, "velocity": <int>}.
+    Any field omitted leaves it unchanged.
+    """
+    body = request.get_json(silent=True) or {}
+    try:
+        enabled = body.get("enabled", None)
+        if enabled is not None:
+            enabled = bool(enabled)
+        timing_ms = body.get("timing_ms", None)
+        if timing_ms is not None:
+            timing_ms = float(timing_ms)
+        velocity = body.get("velocity", None)
+        if velocity is not None:
+            velocity = int(velocity)
+        state.set_humanizer(enabled=enabled, timing_ms=timing_ms, velocity=velocity)
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+    return jsonify({
+        "ok": True,
+        "enabled": state.humanizer_enabled,
+        "timing_ms": state.humanizer_timing_ms,
+        "velocity": state.humanizer_velocity,
+    })
+
+
 @app.route("/api/record", methods=["POST"])
 def api_record():
     """Start or stop a recording take. Stopping flushes the trailing pending
@@ -371,9 +433,37 @@ def api_replay():
         state.receive_program = voice[1]
         state.receive_bank = voice[0]
     # Play the transformed MIDI through the keyboard's internal voices.
-    replayer.play(played, speed=speed, on_event=hub.publish, voice=voice)
+    loop = bool(body.get("loop", False))
+    replayer.play(played, speed=speed, on_event=hub.publish, voice=voice, loop=loop)
     count = sum(1 for e in played if e["type"] == "note_on")
-    return jsonify({"ok": True, "notes": count, "speed": speed, "voice": body.get("voice", "auto")})
+    return jsonify({"ok": True, "notes": count, "speed": speed, "voice": body.get("voice", "auto"), "loop": loop})
+
+
+@app.route("/api/replay/loop", methods=["POST"])
+def api_replay_loop():
+    """Loop the current take until stopped. Equivalent to /api/replay with loop=True."""
+    body = request.get_json(silent=True) or {}
+    try:
+        speed = float(body.get("speed", 1.0))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "speed must be a number"}), 400
+    if speed <= 0:
+        return jsonify({"ok": False, "error": "speed must be > 0"}), 400
+    if replayer.active:
+        return jsonify({"ok": False, "error": "already replaying"}), 409
+    if not state.online:
+        return jsonify({"ok": False, "error": "keyboard offline"}), 503
+    state.requantize()
+    played = state.transformed_events[-500:]
+    if not played:
+        return jsonify({"ok": False, "error": "take is empty"}), 400
+    voice = _voice_to_bank_pc(body.get("voice", "auto"))
+    if voice is not None:
+        state.receive_program = voice[1]
+        state.receive_bank = voice[0]
+    replayer.play(played, speed=speed, on_event=hub.publish, voice=voice, loop=True)
+    count = sum(1 for e in played if e["type"] == "note_on")
+    return jsonify({"ok": True, "notes": count, "speed": speed, "voice": body.get("voice", "auto"), "loop": True})
 
 
 @app.route("/api/replay/stop", methods=["POST"])

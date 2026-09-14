@@ -2,6 +2,7 @@
 import time
 import statistics
 import threading
+import random
 
 from .replay import VOICES as VOICES_BY_PROGRAM
 from . import chords
@@ -86,6 +87,30 @@ class State:
         # quantized take, so OUT and notation hear the same transposed take.
         # Out-of-range notes clamp to 0/127.
         self.transpose_semitones = 0
+        # Velocity compressor stage (RAW -> quantizer -> velocity -> OUT).
+        # The compressor operates on the quantized take after transposition;
+        # it does not touch timing. Standard velocity is the target center
+        # (default 100, the MIDI "loud" default). Width is the half-width of
+        # the allowed velocity band (default 50, so 50..150 is clamped to the
+        # MIDI range and all values are scaled into that band). Mode is either
+        # "threshold" (clip everything outside the band to the band edges) or
+        # "compress" (linearly rescale the whole buffer into the band).
+        self.velocity_enabled = True
+        self.velocity_standard = 100.0
+        self.velocity_width = 50.0
+        self.velocity_mode = "compress"  # "threshold" or "compress"
+        # Velocity stats derived from the raw buffer (like tempo detection).
+        self.detected_velocity = 0.0
+        self.detected_velocity_min = 0.0
+        self.detected_velocity_max = 0.0
+        self.detected_velocity_count = 0
+        # Humanizer stage (OUT -> humanized OUT): adds subtle timing and
+        # velocity variations to make the output sound more human-like.
+        # Timing variation: max random shift in milliseconds (±)
+        # Velocity variation: max random shift in velocity units (±)
+        self.humanizer_enabled = False
+        self.humanizer_timing_ms = 10.0   # ±10ms default
+        self.humanizer_velocity = 5       # ±5 velocity default
         # Near-simultaneous window (seconds) for grouping chord members when
         # bypassing (no grid to snap them together). Grouping ALSO requires
         # overlap (next onset lands while the group still sounds) so fast
@@ -124,6 +149,148 @@ class State:
         # flushes the trailing pending note immediately so the last played note is
         # captured.
         self.recording = True
+
+    def set_humanizer(self, enabled=None, timing_ms=None, velocity=None):
+        """Set the humanizer stage (called by /api/humanizer)."""
+        if enabled is not None:
+            self.humanizer_enabled = bool(enabled)
+        if timing_ms is not None:
+            try:
+                self.humanizer_timing_ms = float(timing_ms)
+            except (TypeError, ValueError):
+                pass
+        if velocity is not None:
+            try:
+                self.humanizer_velocity = int(velocity)
+            except (TypeError, ValueError):
+                pass
+        self.humanizer_timing_ms = max(0.0, self.humanizer_timing_ms)
+        self.humanizer_velocity = max(0, self.humanizer_velocity)
+        self.requantize()
+
+    def _apply_humanizer(self, events):
+        """Apply the humanizer to the transformed MIDI events (OUT side)."""
+        if not self.humanizer_enabled:
+            return events
+        if not events:
+            return events
+        rng = random.Random()
+        seed = 0
+        for ev in events:
+            seed ^= int(float(ev.get("time", 0)) * 1000000) & 0xFFFFFFFF
+        rng.seed(seed)
+        out = []
+        for ev in events:
+            if ev.get("type") not in ("note_on", "note_off"):
+                out.append(ev)
+                continue
+            t = float(ev.get("time", 0))
+            v = int(ev.get("velocity", 0))
+            if self.humanizer_timing_ms > 0:
+                t += rng.uniform(-self.humanizer_timing_ms,
+                                 self.humanizer_timing_ms) / 1000.0
+            if ev.get("type") == "note_on" and self.humanizer_velocity > 0:
+                v = max(1, min(127, v + rng.randint(-self.humanizer_velocity,
+                                                     self.humanizer_velocity)))
+            out.append({**ev, "time": t, "velocity": v})
+        out.sort(key=lambda e: (e["time"], 0 if e["type"] == "note_off" else 1)
+                 if e["type"] == "note_off"
+                 else (e["time"], 1))
+        return out
+
+    def set_velocity_compressor(self, standard=None, width=None, mode=None, enabled=None):
+        """Set the velocity compressor stage (called by /api/velocity-compressor)."""
+        if enabled is not None:
+            self.velocity_enabled = bool(enabled)
+        if standard is not None:
+            try:
+                self.velocity_standard = float(standard)
+            except (TypeError, ValueError):
+                pass
+        if width is not None:
+            try:
+                self.velocity_width = float(width)
+            except (TypeError, ValueError):
+                pass
+        if mode is not None:
+            if mode not in ("threshold", "compress"):
+                raise ValueError("mode must be 'threshold' or 'compress'")
+            self.velocity_mode = mode
+        self.velocity_standard = max(1.0, min(127.0, self.velocity_standard))
+        self.velocity_width = max(1.0, min(127.0, self.velocity_width))
+        self.requantize()
+
+    def compute_velocity_stats(self):
+        """Compute the standard velocity and range from the raw buffer.
+
+        The standard velocity is the median of note-on velocities (robust to
+        outliers and drift). The min/max are the raw observed range so the
+        UI can show what the compressor is working with.
+        """
+        velocities = []
+        for ev in self.raw_take_events:
+            if ev.get("type") != "note_on":
+                continue
+            try:
+                v = float(ev.get("velocity", 100))
+            except (TypeError, ValueError):
+                continue
+            if 1 <= v <= 127:
+                velocities.append(v)
+        self.detected_velocity = statistics.median(velocities) if velocities else 0.0
+        self.detected_velocity_min = min(velocities) if velocities else 0.0
+        self.detected_velocity_max = max(velocities) if velocities else 0.0
+        self.detected_velocity_count = len(velocities)
+        return {
+            "velocity_standard": self.detected_velocity,
+            "velocity_min": self.detected_velocity_min,
+            "velocity_max": self.detected_velocity_max,
+            "velocity_count": self.detected_velocity_count,
+        }
+
+    def _apply_velocity_compressor(self, notes):
+        """Apply the velocity compressor to a list of quantized notes."""
+        if not self.velocity_enabled or self.velocity_width <= 0:
+            return notes
+        self.compute_velocity_stats()
+        std = self.velocity_standard
+        width = self.velocity_width
+        lo = max(1, int(std - width / 2.0))
+        hi = min(127, int(std + width / 2.0))
+        if lo >= hi:
+            return notes
+        if self.velocity_mode == "threshold":
+            for qn in notes:
+                if qn.get("rest"):
+                    continue
+                try:
+                    v = int(qn.get("velocity", 100))
+                    if v < lo:
+                        v = lo
+                    elif v > hi:
+                        v = hi
+                    qn["velocity"] = max(1, min(127, v))
+                except (TypeError, ValueError):
+                    continue
+            return notes
+        # compress mode: linearly rescale the whole buffer into the band.
+        min_v = self.detected_velocity_min
+        max_v = self.detected_velocity_max
+        if min_v >= max_v:
+            return notes
+        scale = (hi - lo) / (max_v - min_v)
+        for qn in notes:
+            if qn.get("rest"):
+                continue
+            try:
+                v = float(qn.get("velocity", 100))
+                if min_v <= max_v:
+                    v = lo + (v - min_v) * scale
+                v = max(1, min(127, int(round(v))))
+                qn["velocity"] = v
+            except (TypeError, ValueError):
+                continue
+        return notes
 
     def _start_flush_daemon(self):
         """Daemon that flushes the trailing pending note so the last note of a
@@ -350,8 +517,14 @@ class State:
                         qn["note"] = max(0, min(127, int(qn["note"]) + st))
                     except (TypeError, ValueError):
                         continue
+        # Apply velocity compressor (if enabled)
+        if self.velocity_enabled:
+            self._apply_velocity_compressor(qns)
         self.quantized_take = qns
         self.transformed_events = self._expand_midi(self.quantized_take)
+        # Apply humanizer (if enabled) to the final output events
+        if self.humanizer_enabled:
+            self.transformed_events = self._apply_humanizer(self.transformed_events)
         return self.quantized_take
 
     def _requantize_gridded(self, raw):
@@ -933,6 +1106,17 @@ class State:
             "transpose_semitones": self.transpose_semitones,
             "time_signature": self.time_signature,
             "recording": self.recording,
+            "velocity_standard": self.velocity_standard,
+            "velocity_width": self.velocity_width,
+            "velocity_mode": self.velocity_mode,
+            "velocity_enabled": self.velocity_enabled,
+            "velocity_detected": round(self.detected_velocity, 1) if self.detected_velocity > 0 else 0,
+            "velocity_min": round(self.detected_velocity_min, 1) if self.detected_velocity_min > 0 else 0,
+            "velocity_max": round(self.detected_velocity_max, 1) if self.detected_velocity_max > 0 else 0,
+            "velocity_count": self.detected_velocity_count,
+            "humanizer_enabled": self.humanizer_enabled,
+            "humanizer_timing_ms": self.humanizer_timing_ms,
+            "humanizer_velocity": self.humanizer_velocity,
             "quantized_notes": self.quantized_notes[-100:],  # last 100 quantized notes
             "take_notes": self.take_notes[-100:],  # the frozen take for replay
             "raw_take_events": self.raw_take_events[-500:],  # semi-raw MIDI events for replay / piano roll

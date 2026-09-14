@@ -140,6 +140,7 @@ class Replay:
     def __init__(self, device=DEVICE):
         self.device = device
         self._stop = threading.Event()
+        self._loop = False
         self._thread = None
         self._last_error = None
 
@@ -148,28 +149,35 @@ class Replay:
         return self._thread is not None and self._thread.is_alive()
 
     @property
+    def looping(self):
+        return self._loop
+
+    @property
     def last_error(self):
         return self._last_error
 
     def stop(self):
         """Cancel any in-flight replay and cut the sound immediately."""
         self._stop.set()
+        self._loop = False
         try:
             self._send("B0 7B 00")  # all notes off
         except Exception:
             pass
 
-    def play(self, quantized_notes, speed=1.0, on_event=None, voice=None):
+    def play(self, quantized_notes, speed=1.0, on_event=None, voice=None, loop=False):
         """Start playback on a background thread. Returns True if started.
 
         on_event receives dicts ({type:'replay', phase: ..., ...}) as progress
         is made (start/step/done/stopped/error); it may be the SSE hub publish.
         voice: (bank, pc) program change to send before playback; None = skip.
+        loop: if True, replay the pattern continuously until stop() is called.
         Raises nothing; playback errors are reported via on_event instead.
         """
         if self.active:
             return False
         self._stop.clear()
+        self._loop = bool(loop)
         self._last_error = None
         # Detect whether the caller passed raw MIDI events (note_on/note_off dicts)
         # or quantized note dicts, and plan accordingly.
@@ -188,42 +196,48 @@ class Replay:
                 except Exception:
                     pass
 
-        try:
-            if voice is not None:
-                bank, pc = voice
-                program_change(bank, pc)
-            if raw:
-                events, duration = plan_from_raw(notes, speed)
-            else:
-                events, duration = plan(notes, speed)
-            if not events:
-                emit("error", message="nothing to play (take is empty)")
-                return
-            count = sum(len(b[2]) for b in events if b[1] == "on")
-            emit("start", count=count, duration=round(duration, 3))
-            base = time.monotonic()
-            for rel_t, kind, batch in events:
-                target = base + rel_t
-                while True:
-                    wait = target - time.monotonic()
-                    if wait <= 0.001:
-                        break
-                    if self._stop.wait(wait):
-                        self._all_off()
-                        emit("stopped", elapsed=round(time.monotonic() - base, 2))
-                        return
-                self._send(self._hex(kind, batch))
-                if kind == "on":
-                    emit("step", notes=[n for n, _ in batch])
-            self._all_off()
-            emit("done", duration=round(duration, 3))
-        except BaseException as exc:
-            self._last_error = exc
+        while True:
             try:
+                if voice is not None:
+                    bank, pc = voice
+                    program_change(bank, pc)
+                if raw:
+                    events, duration = plan_from_raw(notes, speed)
+                else:
+                    events, duration = plan(notes, speed)
+                if not events:
+                    emit("error", message="nothing to play (take is empty)")
+                    return
+                count = sum(len(b[2]) for b in events if b[1] == "on")
+                emit("start", count=count, duration=round(duration, 3))
+                base = time.monotonic()
+                for rel_t, kind, batch in events:
+                    target = base + rel_t
+                    while True:
+                        wait = target - time.monotonic()
+                        if wait <= 0.001:
+                            break
+                        if self._stop.wait(wait):
+                            self._all_off()
+                            emit("stopped", elapsed=round(time.monotonic() - base, 2))
+                            return
+                    self._send(self._hex(kind, batch))
+                    if kind == "on":
+                        emit("step", notes=[n for n, _ in batch])
                 self._all_off()
-            except Exception:
-                pass
-            emit("error", message="%s: %s" % (type(exc).__name__, exc))
+                emit("done", duration=round(duration, 3))
+                if not self._loop:
+                    return
+                # Loop: clear stop flag and restart from beginning.
+                self._stop.clear()
+            except BaseException as exc:
+                self._last_error = exc
+                try:
+                    self._all_off()
+                except Exception:
+                    pass
+                emit("error", message="%s: %s" % (type(exc).__name__, exc))
+                return
 
     def _hex(self, kind, batch):
         st = "90" if kind == "on" else "80"
