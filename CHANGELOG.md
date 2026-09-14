@@ -755,3 +755,16 @@ that file lean. History is chronological; most lines start with a version tag.
   clear/stop/rec all functional (replay 400 on empty take is the expected
   backend reject), highlight algorithm unit-checked in-page (chord marks in
   order, repeated notes advance past offs, offs never marked).
+- Ver 55: stream owns its clear again, purple playback highlight, replay
+  voice tracks the keyboard. The note stream got its own clear button back
+  (stream display only); the raw card's clear now wipes just the buffer +
+  derived notation, so each clear owns its own territory. Replay step
+  highlighting moved from straw to royal purple (bold + purple wash +
+  purple note name; purple was otherwise unused in the raw buffer). The
+  replay voice default now follows the keyboard's receive voice live: every
+  program_change (the same event feeding the title-bar instrument label)
+  re-points the selector via orderReplayVoices — unless the user hand-picked
+  a non-auto voice, in which case the default stays pinned until "auto" is
+  chosen again. Verified live: clear split (stream survives raw clear, dies
+  on its own), purple computed styles, voice selector ordered to the live
+  receive voice at load, zero console errors.

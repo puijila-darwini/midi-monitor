@@ -638,6 +638,7 @@ function buildCatchTooltip() {
         break;
       case "program_change":
         setInstrument(ev.program, ev.name);
+        updateReplayVoiceDefault(ev.name);
         addFeed('<span class="time">' + fmtTime(ev.time) +
           '</span>  PGM CHANGE  ' + ev.name + " (prog " + ev.program + ", ch " + ev.channel + ")", "program_change");
         break;
@@ -856,7 +857,16 @@ function buildCatchTooltip() {
     renderButton();
   })();
 
-  // (feed-clear button removed: see the single-clear note above.)
+  // Note stream clear: stream display only, never touches the raw buffer
+  // or the notation derived from it (those belong to the raw card's clear).
+  (function () {
+    var btn = document.getElementById("feed-clear");
+    if (!btn) return;
+    btn.addEventListener("click", function () {
+      var feedList = document.getElementById("feed-list");
+      if (feedList) feedList.innerHTML = "";
+    });
+  })();
   // Play/stop take replay. POSTs /api/replay (which serializes the quantized
   // buffer back to the keyboard's internal voices on a background thread);
   // while a replay is active the button becomes a STOP that cancels it.
@@ -893,6 +903,15 @@ function buildCatchTooltip() {
         })
         .catch(function () { /* transient */ });
     });
+
+    // Pinning: a hand-picked non-auto voice stops the default from following
+    // the keyboard; choosing "auto" again resumes tracking.
+    var voiceSel = document.getElementById("replay-voice");
+    if (voiceSel) {
+      voiceSel.addEventListener("change", function () {
+        replayVoicePinned = voiceSel.value !== "auto";
+      });
+    }
 
     render();
   })();
@@ -1105,6 +1124,16 @@ function buildCatchTooltip() {
     });
   })();
 
+  // Keep the replay voice default tracking the keyboard's receive voice
+  // (same source as the title-bar instrument label), but never stomp an
+  // explicit user pick: once the user hand-selects a non-auto voice the
+  // default stops following until they choose "auto" again.
+  var replayVoicePinned = false;
+  function updateReplayVoiceDefault(voiceName) {
+    if (replayVoicePinned) return;
+    orderReplayVoices(voiceName);
+  }
+
   // Reorder the replay voice selector so the current receive voice is first,
   // then "auto", then the remaining voices.
   function orderReplayVoices(currentVoice) {
@@ -1274,15 +1303,13 @@ function fetchRawTake() {
 }
 
 function clearRawTake() {
-  // THE single clear path: the raw buffer is the source take, so clearing it
-  // also clears the notation derived from it and the note stream. (REC-start
-  // still wipes via the backend as part of beginning a new take.)
+  // Clears the raw buffer (the source take) plus the notation derived from
+  // it. The note stream has its own clear button (stream display only).
+  // (REC-start still wipes via the backend as part of beginning a new take.)
   if (rawTakeEl) {
     rawTakeEl.innerHTML = '<li class="statusline">no raw events yet</li>';
   }
   replayRawCursor = 0;
-  var feedList = document.getElementById("feed-list");
-  if (feedList) feedList.innerHTML = "";
   if (window.StavePanel) window.StavePanel.clear();
   rawTakeCleared = true;
   fetch("/api/take/clear", { method: "POST" })

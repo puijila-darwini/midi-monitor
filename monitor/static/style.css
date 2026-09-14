@@ -380,14 +380,15 @@ select option { background: var(--phthalo-card); color: var(--text); }
 .feed-list li.statusline { color: var(--muted); font-style: italic; }
 .feed-list li.on .nmark { color: var(--straw-soft); font-weight: 700; }
 .feed-list li.off { color: var(--muted); }
-/* Raw buffer entry currently sounding during playback: bold + straw wash */
+/* Raw buffer entry currently sounding during playback: bold + royal wash
+   (purple is otherwise unused in the raw buffer, so it reads as "playing"). */
 .feed-list li.playing {
   font-weight: 700;
   opacity: 1;
-  background: rgba(242, 230, 166, 0.10);
-  outline: 1px solid var(--straw-gold);
+  background: rgba(107, 63, 160, 0.28);
+  outline: 1px solid var(--royal-soft);
 }
-.feed-list li.playing .nmark { color: var(--straw); font-weight: 700; }
+.feed-list li.playing .nmark { color: var(--royal-bright); font-weight: 700; }
 
 /* Nilotic Greenhouse scrollbars: phthalo-green tracks, straw-gold thumbs */
 * { scrollbar-width: thin; scrollbar-color: var(--phthalo-border) var(--phthalo-deep); }
