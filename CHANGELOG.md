@@ -722,3 +722,20 @@ that file lean. History is chronological; most lines start with a version tag.
 - Hw: MIDIREF.MD created from pssa50_en_mr_a0.pdf (channel routing, Local
   Control, program/control change, SysEx, implementation chart, live USB
   profile, voices table, send-path helpers, open questions).
+- Ver 53: emergency server reset + shared raw-buffer styling. Root cause of the
+  frozen-while-keyboard-on page: stale monitor.app/aseqdump instances were
+  holding :5050 (supervisor log "Port 5050 is in use") and a leftover aseqdump
+  kept the UI reporting "online". Added a red "reset server" button in the
+  header: POST /api/reset spawns "bash monitor.sh reset" detached, which sleeps
+  1s (lets the HTTP response flush), kills supervisor first, then monitor.app +
+  aseqdump, removes pidfiles, and starts fresh. Verified end-to-end (curl +
+  real click): new PID, one aseqdump, online again.
+  Raw midi buffer reworked to mirror the note stream exactly: same li classes
+  ("on"/"off"), the .time + .nmark spans and "on (vXX)"/"off" text, so both
+  panels share the same straw/green look (note names straw-soft, off lines
+  muted-green). Moved out of the bottom of the main area into a new 240px
+  middle column between the note stream and the last-chord card, scrollable.
+  Scrollbars all themed for Nilotic Greenhouse: phthalo-green tracks,
+  straw-gold-bordered thumbs (purple on hover), webkit + Firefox variants.
+  Reset-server button also doubles as the recovery path for "site won't come
+  back after keyboard on".

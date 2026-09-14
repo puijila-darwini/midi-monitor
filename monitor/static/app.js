@@ -721,6 +721,44 @@ function buildCatchTooltip() {
     el.className = "status " + (online ? "online" : "offline");
   }
 
+  // Same spelling as the backend (chords.nm): note 60 -> "C4".
+  var MIDI_NOTE_NAMES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+  function midiNoteName(n) {
+    return MIDI_NOTE_NAMES[n % 12] + (Math.floor(n / 12) - 1);
+  }
+
+  // Emergency recovery: close ALL monitor instances and restart the server.
+  // The backend answers, then kills this process & respawns; we show a
+  // "restarting" state and reload once the new server answers /api/state.
+  (function () {
+    var btn = document.getElementById("reset-btn");
+    if (!btn) return;
+    btn.addEventListener("click", function () {
+      if (btn.disabled) return;
+      btn.disabled = true;
+      var el = document.getElementById("status");
+      if (el) {
+        el.textContent = "restarting server...";
+        el.className = "status offline";
+      }
+      fetch("/api/reset", { method: "POST" }).catch(function () {});
+      var attempts = 0;
+      (function poll() {
+        attempts++;
+        fetch("/api/state", { cache: "no-store" })
+          .then(function (r) { return r.json(); })
+          .then(function (s) {
+            // fresh server is answering again
+            location.reload();
+          })
+          .catch(function () {
+            if (attempts < 40) setTimeout(poll, 1500);
+            else location.reload();
+          });
+      })();
+    });
+  })();
+
   function setInstrument(program, name) {
     var el = document.getElementById("instrument");
     if (el) el.textContent = "instrument: " + name + " (prog " + program + ")";
@@ -1148,20 +1186,29 @@ function buildCatchTooltip() {
   function renderRawTake(events) {
     if (!rawTakeEl) return;
     if (!events || !events.length) {
-      rawTakeEl.innerHTML = "<pre>no raw events yet</pre>";
+      rawTakeEl.innerHTML = '<li class="statusline">no raw events yet</li>';
       return;
     }
-    var lines = events.map(function (ev, i) {
-      var kind = ev.type || "?";
-      var note = typeof ev.note !== "undefined" ? String(ev.note) : "-";
-      var vel = typeof ev.velocity !== "undefined" ? String(ev.velocity) : "-";
-      var time = typeof ev.time !== "undefined" ? String(Math.round(ev.time * 1000)) : "-";
-      var chan = typeof ev.channel !== "undefined" ? String(ev.channel) : "-";
-      return String(i).padStart(3, "0") + "  " + time.padStart(8, " ") + "  " +
-        kind.padEnd(8, " ") + "  ch " + chan.padEnd(2, " ") + "  note " +
-        note.padStart(3, " ") + "  v " + vel;
+    // Mirror the note stream markup exactly: each raw on/off event renders as
+    // <li class="on">|"off">  <span class="time">00.4s</span>  <span
+    // class="nmark">D#4</span>  on (v23)|off  so both panels share the look.
+    var frag = document.createDocumentFragment();
+    events.forEach(function (ev) {
+      var li = document.createElement("li");
+      var isOn = ev.type === "note_on";
+      li.className = isOn ? "on" : "off";
+      var html = '<span class="time">' + fmtTime(ev.time) + "</span>  " +
+        '<span class="nmark">' + midiNoteName(ev.note) + "</span>";
+      if (isOn) {
+        html += '  on (v' + ev.velocity + ")";
+      } else {
+        html += "  off";
+      }
+      li.innerHTML = html;
+      frag.appendChild(li);
     });
-    rawTakeEl.innerHTML = "<pre>" + lines.join("\n") + "</pre>";
+    rawTakeEl.innerHTML = "";
+    rawTakeEl.appendChild(frag);
     rawTakeEl.scrollTop = rawTakeEl.scrollHeight;
   }
 
@@ -1186,7 +1233,7 @@ function fetchRawTake() {
 
 function clearRawTake() {
   if (rawTakeEl) {
-    rawTakeEl.innerHTML = "<pre>no raw events yet</pre>";
+    rawTakeEl.innerHTML = '<li class="statusline">no raw events yet</li>';
   }
   rawTakeCleared = true;
   fetch("/api/take/clear", { method: "POST" })

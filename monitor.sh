@@ -109,11 +109,28 @@ cmd_restart() {
   cmd_start
 }
 
+cmd_reset() {
+  # Emergency recovery: close EVERY monitor instance (server + aseqdump +
+  # supervisor) and start fresh. Stale duplicates are the usual cause of a
+  # wedged site that still reports online (a leftover server holds :5050 and
+  # its stuck aseqdump keeps the seed 'online' flag). Kill supervisor FIRST so
+  # it can't race us by restarting a half-killed server.
+  echo "Closing all monitor instances (server + aseqdump + supervisor)..."
+  sleep 1   # let the calling /api/reset request flush its response first
+  pkill -f "monitor.supervisor" 2>/dev/null
+  pkill -f "python3 -m monitor.app" 2>/dev/null
+  pkill -x aseqdump 2>/dev/null
+  sleep 1
+  rm -f "$PIDFILE" "$SUPPIDFILE"
+  cmd_start
+}
+
 case "${1:-}" in
   start)   cmd_start ;;
   stop)    cmd_stop ;;
   restart) cmd_restart ;;
+  reset)   cmd_reset ;;
   status)  cmd_status ;;
   log)     tail -50 "$LOG" ;;
-  *) echo "Usage: bash $0 {start|stop|restart|status|log}" ;;
+  *) echo "Usage: bash $0 {start|stop|restart|reset|status|log}" ;;
 esac

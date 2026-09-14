@@ -11,6 +11,8 @@
   <header>
     <div class="head-title">
       <h1>Key&middot;Monitor</h1>
+      <button id="reset-btn" class="reset-btn" type="button"
+        title="Close ALL monitor/aseqdump instances and restart the server (use when the site is frozen or shows stale online status)">reset server</button>
       <span class="badge">walled garden &middot; 127.0.0.1:5050</span>
     </div>
     <div id="status" class="status offline">keyboard offline</div>
@@ -27,6 +29,15 @@
         <button id="feed-clear" class="key-reset" type="button" title="Clear note stream">clear</button>
       </div>
       <ul id="feed-list" class="feed-list"></ul>
+    </aside>
+
+    <!-- Middle column: raw midi buffer (same markup as the note stream) -->
+    <aside id="raw-sidebar" class="raw-sidebar card">
+      <div class="raw-take-head">
+        <span class="raw-take-title">raw midi buffer</span>
+        <button id="raw-take-clear" class="key-reset" type="button" title="Clear raw buffer">clear</button>
+      </div>
+      <ul id="raw-take" class="feed-list raw-take"></ul>
     </aside>
 
     <!-- Right main area -->
@@ -226,14 +237,6 @@
           <div id="mini-stave" class="mini-stave"></div>
         </section>
       </div>
-
-      <section id="raw-take-wrap" class="raw-take-wrap card">
-        <div class="raw-take-head">
-          <span class="raw-take-title">raw midi buffer</span>
-          <button id="raw-take-clear" class="key-reset" type="button" title="Clear raw buffer">clear</button>
-        </div>
-        <div id="raw-take" class="raw-take"></div>
-      </section>
     </main>
   </div>
 

@@ -1,7 +1,9 @@
 """Flask web app serving the live keyboard monitor on :5050."""
 import itertools
 import json
+import os
 import queue
+import subprocess
 import threading
 import time
 import traceback
@@ -165,6 +167,35 @@ def _run_capture(cap):
 @app.route("/")
 def index():
     return render_template("index.html")
+
+
+@app.route("/api/reset", methods=["POST"])
+def api_reset():
+    """Emergency: close ALL monitor instances (server + aseqdump + supervisor)
+    and restart fresh. The current process is killed by the reset script, so we
+    spawn it detached and answer before it lands."""
+    return _spawn_reset()
+
+
+def _spawn_reset():
+    """Launch `monitor.sh reset` detached so it survives this process dying.
+
+    Returns a JSON response first (the shutdown happens after a 1s grace in the
+    script); the browser then reloads once the new server is up.
+    """
+    monitor_sh = os.path.join(os.path.dirname(__file__), "..", "monitor.sh")
+    monitor_sh = os.path.abspath(monitor_sh)
+    try:
+        subprocess.Popen(
+            ["bash", monitor_sh, "reset"],
+            cwd=os.path.dirname(monitor_sh),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return jsonify({"ok": False, "error": f"could not launch reset: {exc}"}), 500
+    return jsonify({"ok": True, "restarting": True})
 
 
 @app.route("/api/state")
