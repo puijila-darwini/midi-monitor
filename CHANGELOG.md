@@ -806,3 +806,5 @@ that file lean. History is chronological; most lines start with a version tag.
   keyboard: quantized + bypass replays both sound with purple step
   highlighting, counts track (in 370 -> out 370 bypass), chord labels
   survive, zero console errors.
+- Ver 58: quantization grid extended to 0.25 (whole notes) and coarser (half, 8th, 16th, 32nd, 64th); replaced loose/normal/tight labels with explicit values; stave tint now uses event->heads map (headsForEvent) to recolour playback notes regardless of VexFlow id propagation; key change re-render confirmed via tonic+scale selector
+- Ver 59: stave tint now uses eventHeadMap built during render (placeAccidentals called with recordMap=true) so playback purple works regardless of VexFlow id propagation; headsForEvent skips rest events; project renamed to Abora in title/header

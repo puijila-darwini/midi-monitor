@@ -556,7 +556,7 @@
     if (renderer) renderer.resize(canvasWidth(), totalHeight + 40);
 
     // Spelling overlay: accidental glyphs follow the current key.
-    placeAccidentals(div.querySelector("svg"), displayEvents);
+    placeAccidentals(div.querySelector("svg"), displayEvents, true);
 
     // Auto-scroll stave-wrap to bottom
     var staveWrap = document.getElementById('stave-wrap');
@@ -580,10 +580,9 @@
   }
 
   function headsForEvent(ev) {
-    // Primary: the event->heads map built during the last render. Fallback:
-    // a propagated group id (some VexFlow builds honour attrs.id).
-    if (ev && eventHeadMap[ev.id]) return eventHeadMap[ev.id];
-    if (!ev) return [];
+    // Skip rest events — they have no noteheads and nothing to tint.
+    if (!ev || ev.kind === "rest" || !ev.notes || !ev.notes.length) return [];
+    if (eventHeadMap[ev.id]) return eventHeadMap[ev.id];
     var g = document.getElementById("stavev-" + ev.id);
     if (!g) return [];
     return g.querySelectorAll(".vf-notehead");
@@ -634,8 +633,11 @@
   function markStavePlaying(stepNotes) {
     if (!stepNotes || !stepNotes.length) return;
     var list = staveNonRestEvents();
+    // Extra safety: skip events with no notes (should already be filtered
+    // by staveNonRestEvents() but guard against stale eventHeadMap entries).
+    var safeList = list.filter(function (e) { return e.notes && e.notes.length; });
     var pick = null;
-    for (var i = stavePlayCursor; i < list.length; i++) {
+    for (var i = stavePlayCursor; i < safeList.length; i++) {
       var evn = list[i].notes || [];
       for (var j = 0; j < evn.length; j++) {
         if (stepNotes.indexOf(evn[j]) >= 0) {

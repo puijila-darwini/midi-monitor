@@ -243,17 +243,32 @@ def api_key_reset():
 
 @app.route("/api/quant", methods=["POST"])
 def api_quant():
-    """Set the quantization grid fineness (divisions per beat). 0 = bypass
-    ("no quantization": the transform chain passes exact timing through)."""
+    """Set the quantization grid resolution (steps per beat, explicit note
+    values: 16 = 64ths … 0.25 = wholes). 0 = bypass ("no quantization":
+    the transform chain passes exact timing through)."""
     try:
         body = request.get_json(silent=True) or {}
-        divisions = int(body.get("divisions", 4))
+        divisions = float(body.get("divisions", 4))
     except (TypeError, ValueError):
-        return jsonify({"ok": False, "error": "divisions must be an int"}), 400
+        return jsonify({"ok": False, "error": "divisions must be a number"}), 400
     if not state.set_quantization(divisions):
-        return jsonify({"ok": False, "error": "divisions must be 0-16"}), 400
+        return jsonify({"ok": False,
+                        "error": "divisions must be 0 or one of 0.25,0.5,1,2,4,8,16"}), 400
     return jsonify({"ok": True, "divisions": state.quantization_divisions,
                     "enabled": state.quantize_enabled})
+
+
+@app.route("/api/transpose", methods=["POST"])
+def api_transpose():
+    """Set the transposer stage shift in semitones (-24..+24, 0 = off)."""
+    try:
+        body = request.get_json(silent=True) or {}
+        st = int(body.get("semitones", 0))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "semitones must be an int"}), 400
+    if not state.set_transpose(st):
+        return jsonify({"ok": False, "error": "semitones must be -24..24"}), 400
+    return jsonify({"ok": True, "semitones": state.transpose_semitones})
 
 
 @app.route("/api/record", methods=["POST"])
@@ -386,6 +401,7 @@ def api_notation():
                     "time_signature": state.time_signature,
                     "divisions": state.quantization_divisions,
                     "enabled": state.quantize_enabled,
+                    "transpose": state.transpose_semitones,
                     "counts": {"in": len(state.raw_take_events),
                                "out": len(state.transformed_events)}})
 
