@@ -416,6 +416,38 @@ select option {
 .replay-voice-label select { max-width: none; }
 .replay-btn-group { display: flex; align-items: center; gap: 6px; }
 
+/* ---- output routing checkboxes ("route to") ---- */
+.out-routing {
+  margin-top: 10px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.08);
+  padding-top: 8px;
+}
+.routing-title {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.routing-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+.routing-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--fg);
+}
+.routing-item input:checked + .routing-name { color: var(--accent, #7EC8A5); }
+.routing-item input:disabled + .routing-name { opacity: 0.6; cursor: default; }
+.routing-pending { color: var(--muted); font-style: italic; font-size: 11px; }
+.routing-name { font-family: ui-monospace, Menlo, monospace; }
+
 /* ---- signal chain row: transform -> out, under the control row ---- */
 .chain-row {
   display: flex;

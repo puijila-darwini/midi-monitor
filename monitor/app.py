@@ -14,6 +14,7 @@ from .capture import Capture
 from .state import State
 from .analysis import Analyser
 from .replay import Replay, plan_from_raw, VOICES
+from . import midiout
 from . import chords
 
 app = Flask(__name__)
@@ -91,7 +92,21 @@ class Hub:
 hub = Hub()
 state = State()
 analyser = Analyser()
-replayer = Replay()  # plays the quantized take back out to the keyboard
+replayer = Replay()  # plays the quantized take back out to chosen destinations
+
+
+# Default out routing: the keyboard's raw device (internal voices) always on,
+# plus any VCV Rack seq sink that's currently listening (auto-added). The user
+# can change both via /api/outs afterward.
+def _default_out_routing():
+    seq = [o["target"] for o in midiout.list_outs() if o["name"] == "VCV Rack"]
+    return seq, ["hw:2,0,0"]
+
+
+_init_seq, _init_raw = _default_out_routing()
+state.seq_outs = _init_seq
+state.raw_outs = _init_raw
+replayer.set_outputs(_init_seq, _init_raw, channel=state.midi_channel)
 
 
 def _note_name(n):
@@ -398,20 +413,60 @@ def api_timesig():
 
 
 
+@app.route("/api/outs", methods=["GET"])
+def api_outs_get():
+    """List all available MIDI output destinations + the current routing."""
+    return jsonify({
+        "ok": True,
+        "available": midiout.list_outs(),
+        "seq_outs": list(state.seq_outs),
+        "raw_outs": list(state.raw_outs),
+        "channel": state.midi_channel,
+    })
+
+
+@app.route("/api/outs", methods=["POST"])
+def api_outs_set():
+    """Set where replay goes. Body: {seq_outs: ["131:0", ...],
+    raw_outs: ["hw:2,0,0", ...], channel: int}.
+    Both lists must be valid (unknown targets are dropped); channel clamped
+    0..15. Replaying is stopped so a new routing applies cleanly."""
+    body = request.get_json(silent=True) or {}
+    if replayer.active:
+        return jsonify({"ok": False, "error": "stop replay first"}), 409
+
+    known = {o["target"] for o in midiout.list_outs()}
+    seq = [str(t) for t in (body.get("seq_outs") or []) if str(t) in known]
+    raw = []
+    for dev in (body.get("raw_outs") or []):
+        dev = str(dev).strip()
+        if dev:
+            raw.append(dev)
+    try:
+        chan = int(body.get("channel", state.midi_channel or 0)) & 0x0F
+    except (TypeError, ValueError):
+        chan = state.midi_channel
+    state.seq_outs = seq
+    state.raw_outs = raw
+    state.midi_channel = chan
+    replayer.set_outputs(seq, raw, channel=chan)
+    return jsonify({"ok": True, "seq_outs": seq, "raw_outs": raw, "channel": chan})
+
+
 @app.route("/api/replay", methods=["POST"])
 def api_replay():
-    """Play the current quantized take back through the keyboard's internal
-    voices (raw MIDI out to hw:2,0,0 via amidi).
+    """Play the current quantized take back out to every selected destination
+    (keyboard raw device, VCV Rack, Midi Through, ...).
 
-    Requires a connected keyboard and a non-empty take. Runs in a background
-    thread; progress is published on SSE ('replay' events) so the on-screen
-    keys light up as notes sound. Replays the whole buffer at a user-selectable
-    speed multiplier (default 1.0 = original timing).
+    Needs a non-empty take and at least one configured out. Runs in a
+    background thread; progress is published on SSE ('replay' events) so the
+    on-screen keys light up as notes sound. Replays the whole buffer at a
+    user-selectable speed multiplier (default 1.0 = original timing).
     """
     if replayer.active:
         return jsonify({"ok": False, "error": "already replaying"}), 409
-    if not state.online:
-        return jsonify({"ok": False, "error": "keyboard offline"}), 503
+    if not state.seq_outs and not state.raw_outs:
+        return jsonify({"ok": False, "error": "no output destinations"}), 400
     body = request.get_json(silent=True) or {}
     try:
         speed = float(body.get("speed", 1.0))
@@ -451,8 +506,8 @@ def api_replay_loop():
         return jsonify({"ok": False, "error": "speed must be > 0"}), 400
     if replayer.active:
         return jsonify({"ok": False, "error": "already replaying"}), 409
-    if not state.online:
-        return jsonify({"ok": False, "error": "keyboard offline"}), 503
+    if not state.seq_outs and not state.raw_outs:
+        return jsonify({"ok": False, "error": "no output destinations"}), 400
     state.requantize()
     played = state.transformed_events[-500:]
     if not played:

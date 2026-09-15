@@ -836,3 +836,23 @@ that file lean. History is chronological; most lines start with a version tag.
   the keys. Verified live in the browser: zero console errors, all 9 cartouches
   bar-nubbed, all 9 icons present, no duplicate ids, catch-tooltip still works.
   Committed agent:, pushed.
+- Ver 62: MIDI SPAGHETTI ZONE — replay now routes to a chosen mix of ALSA
+  sequencer destinations + raw device(s). Root problem: replay used amidi
+  to hw:2,0,0 (rawmidi, sounds keyboard internal voices) which BYPASSES the
+  ALSA sequencer, so VCV Rack etc never heard playback. New monitor/midiout.py
+  talks to libasound through ctypes (no pip libs available): snd_seq_open
+  OUTPUT mode, big pool, explicit per-event dest addressing (no aconnect
+  subscriptions needed). Kernel event struct mapped exactly (type is c_ubyte;
+  snd_seq_event_output returns a BYTE COUNT, not 0 — rc<0 is the only error).
+  Replay holds seq_targets + raw_devices + channel, opens a fresh SeqOut
+  ("Abora Out") per run when seq targets are ticked, sends program change +
+  notes + all-notes-off. /api/outs GET lists available sinks (aconnect -o
+  parse: Midi Through 14:0, Digital Keyboard 24:0, VCV Rack 131:0,
+  aseqdump) + current routing; POST sets seq_outs/raw_outs/channel (unknown
+  seq targets dropped, channel clamped 0-15). Boot default: auto-tick VCV
+  Rack if present + keep keyboard raw always (raw list server-managed,
+  locked checkbox in UI). Out card renamed "out · midi", gains "route to"
+  checkbox list. Replay no longer requires keyboard online (any ticked dest
+  suffices). Verified: notes + Warm Pad PC echoed through Midi Through via
+  web replay; zero JS errors; VCV 131:0 receives (write success; input port
+  not dump-able with aseqdump by design). Committed agent:, pushed.

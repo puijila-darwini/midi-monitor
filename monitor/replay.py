@@ -1,9 +1,14 @@
-"""Play a recorded take back through the keyboard's internal voices.
+"""Play a recorded take back out to keyboard + sequencer destinations.
 
-The PSS-A50 has no ALSA seq output port, so playback goes out over the raw MIDI
-device (hw:2,0,0) via amidi. This module schedules the quantized-note buffer
-(captured from live playing) back out preserving its relative timing: the same
-onset times, the same held durations, the same chords.
+The PSS-A50 has no ALSA seq output port (only a capture port), so historically
+playback went out over the raw MIDI device (hw:2,0,0) via amidi. That path
+reaches the keyboard's internal voices, but BYPASSES the ALSA sequencer, so
+sequencer listeners (VCV Rack etc.) never heard the playback.
+
+This module now opens its own ALSA seq output client (midiout.SeqOut) and
+routes the quantized-note buffer to any selected "client:port" targets, plus
+opt-in raw amidi devices. One path reaches the keyboard, VCV Rack, Midi
+Through, and any other seq sink simultaneously.
 
 Timeline construction is a pure function (plan) so it can be unit-tested
 without the keyboard; Replay only handles the real-time serialization.
@@ -11,6 +16,8 @@ without the keyboard; Replay only handles the real-time serialization.
 import subprocess
 import threading
 import time
+
+from .midiout import SeqOut, list_outs, CC_ALL_NOTES_OFF, CC_ALL_SOUND_OFF
 
 DEVICE = "hw:2,0,0"
 
@@ -66,8 +73,9 @@ VOICES = {
 def _send(hexstr):
     subprocess.run(["amidi", "-p", DEVICE, "-S", hexstr], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
+
 def program_change(bank, pc):
-    """Send a program change for (bank, pc) to the keyboard."""
+    """Send a program change for (bank, pc) to the keyboard (raw path)."""
     _send("B0 00 %02X" % bank)
     time.sleep(0.02)
     _send("C0 %02X" % pc)
@@ -135,7 +143,7 @@ def plan(quantized_notes, speed=1.0):
 
 
 class Replay:
-    """Serialize a quantized take back to the keyboard on a background thread."""
+    """Serialize a quantized take out to seq targets + raw devices."""
 
     def __init__(self, device=DEVICE):
         self.device = device
@@ -143,6 +151,19 @@ class Replay:
         self._loop = False
         self._thread = None
         self._last_error = None
+        # Routing: seq targets are ALSA "client:port" strings (VCV Rack, the
+        # keyboard's seq port, Midi Through, ...). raw devices are amidi
+        # hardware paths (hw:2,0,0) for the keyboard's internal voices.
+        self.seq_targets = []
+        self.raw_devices = []
+        self.channel = 0
+
+    def set_outputs(self, seq_targets, raw_devices=(), channel=0):
+        """Set where replay notes go. seq_targets: list of "client:port".
+        raw_devices: list of amidi device names ("" disables raw path)."""
+        self.seq_targets = list(seq_targets or ())
+        self.raw_devices = list(raw_devices or ())
+        self.channel = int(channel or 0) & 0x0F
 
     @property
     def active(self):
@@ -161,7 +182,7 @@ class Replay:
         self._stop.set()
         self._loop = False
         try:
-            self._send("B0 7B 00")  # all notes off
+            self._all_off()
         except Exception:
             pass
 
@@ -196,9 +217,24 @@ class Replay:
                 except Exception:
                     pass
 
+        seq = None
+        if self.seq_targets:
+            try:
+                seq = SeqOut("Abora Out")
+            except Exception as exc:
+                self._last_error = exc
+                emit("error", message="seq out failed: %s: %s" % (type(exc).__name__, exc))
+                return
+
         while True:
             try:
-                if voice is not None:
+                if voice is not None and seq is not None:
+                    bank, pc = voice
+                    for t in self.seq_targets:
+                        seq.send_program_change(t, bank, pc, channel=self.channel)
+                    seq.flush()
+                    time.sleep(0.02)
+                if voice is not None and self.raw_devices:
                     bank, pc = voice
                     program_change(bank, pc)
                 if raw:
@@ -207,6 +243,8 @@ class Replay:
                     events, duration = plan(notes, speed)
                 if not events:
                     emit("error", message="nothing to play (take is empty)")
+                    if seq is not None:
+                        seq.close()
                     return
                 count = sum(len(b[2]) for b in events if b[1] == "on")
                 emit("start", count=count, duration=round(duration, 3))
@@ -218,41 +256,80 @@ class Replay:
                         if wait <= 0.001:
                             break
                         if self._stop.wait(wait):
-                            self._all_off()
+                            self._all_off(seq)
                             emit("stopped", elapsed=round(time.monotonic() - base, 2))
+                            if seq is not None:
+                                seq.close()
                             return
-                    self._send(self._hex(kind, batch))
+                    self._send_batch(seq, kind, batch)
                     if kind == "on":
                         emit("step", notes=[n for n, _ in batch])
-                self._all_off()
+                self._all_off(seq)
                 emit("done", duration=round(duration, 3))
                 if not self._loop:
+                    if seq is not None:
+                        seq.close()
                     return
                 # Loop: clear stop flag and restart from beginning.
                 self._stop.clear()
             except BaseException as exc:
                 self._last_error = exc
                 try:
-                    self._all_off()
+                    self._all_off(seq)
                 except Exception:
                     pass
                 emit("error", message="%s: %s" % (type(exc).__name__, exc))
+                if seq is not None:
+                    seq.close()
                 return
 
-    def _hex(self, kind, batch):
-        st = "90" if kind == "on" else "80"
-        return st + " " + " ".join("%02X %02X" % (n, v) for n, v in batch)
+    def _send_batch(self, seq, kind, batch):
+        """Send one chord/note batch to every configured destination."""
+        # Raw amidi path (keyboard internal voices)
+        if self.raw_devices:
+            hexstr = _hexstr(kind, batch)
+            for dev in self.raw_devices:
+                try:
+                    subprocess.run(
+                        ["amidi", "-p", dev, "-S", hexstr],
+                        check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                except Exception:
+                    pass
+        # Sequencer path (VCV Rack etc.)
+        if seq is not None:
+            for t in self.seq_targets:
+                try:
+                    seq.send_notes(t, kind, batch, channel=self.channel)
+                except Exception:
+                    pass
+            seq.flush()
 
-    def _send(self, hexstr):
-        subprocess.run(
-            ["amidi", "-p", self.device, "-S", hexstr],
-            check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    def _all_off(self, seq=None):
+        for t in self.seq_targets:
+            if seq is not None:
+                try:
+                    seq.send_cc(t, CC_ALL_NOTES_OFF, 0, channel=self.channel)
+                    seq.send_cc(t, CC_ALL_SOUND_OFF, 0, channel=self.channel)
+                except Exception:
+                    pass
+        if seq is not None:
+            try:
+                seq.flush()
+            except Exception:
+                pass
+        if self.raw_devices:
+            for dev in self.raw_devices:
+                try:
+                    subprocess.run(
+                        ["amidi", "-p", dev, "-S", "B0 7B 00 B0 78 00"],
+                        check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                except Exception:
+                    pass
 
-    def _all_off(self):
-        try:
-            self._send("B0 7B 00")  # all notes off
-        except Exception:
-            pass
+
+def _hexstr(kind, batch):
+    st = "90" if kind == "on" else "80"
+    return st + " " + " ".join("%02X %02X" % (n, v) for n, v in batch)
 
 
 def plan_from_raw(raw_events, speed=1.0):

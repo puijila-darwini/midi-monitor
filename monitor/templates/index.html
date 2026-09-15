@@ -308,7 +308,7 @@
 
         <section id="out-card" class="chain-card card">
           <div class="cartouche chain-head">
-            <span class="cartouche-title chain-title">out &middot; keyboard</span>
+            <span class="cartouche-title chain-title">out &middot; midi</span>
             <div class="cartouche-end">
               <span class="corner" aria-hidden="true"><svg class="corner-ic"><use href="#ic-out"/></svg></span>
             </div>
@@ -316,7 +316,7 @@
           <div class="chain-controls out-controls">
             <div class="replay-btn-group">
               <button id="replay-btn" class="record-btn replay-btn" type="button"
-                      title="Play the transformed take through the keyboard's internal voices; press again to restart from the beginning.">
+                      title="Play the transformed take through the selected destinations (keyboard raw device + any ticked seq routes); press again to restart from the beginning.">
                 <span id="replay-btn-glyph" class="replay-glyph">&#9656;</span><span id="replay-btn-label">play</span>
               </button>
               <button id="replay-stop-btn" class="record-btn stop-btn" type="button"
@@ -376,6 +376,10 @@
                 <option value="Marimba">Marimba</option>
               </select>
             </label>
+            <div class="out-routing" id="out-routing">
+              <div class="routing-title">route to</div>
+              <div id="routing-list" class="routing-list"><span class="routing-pending">loading destinations&hellip;</span></div>
+            </div>
           </div>
         </section>
       </div>

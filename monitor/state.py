@@ -55,6 +55,13 @@ class State:
         self.time_signature = "4/4"
         self._start = time.time()
         self.version = 0
+
+        # MIDI output routing for replay (the "midi spaghetti zone"). seq_outs
+        # are ALSA "client:port" destinations (VCV Rack, keyboard seq port,
+        # Midi Through, ...); raw_outs are amidi hardware devices (hw:2,0,0).
+        self.seq_outs = []
+        self.raw_outs = ["hw:2,0,0"]
+        self.midi_channel = 0
         
         # Tempo. tempo_bpm is the EFFECTIVE grid tempo used for quantization.
         # detected_bpm is the live on-the-fly estimate (a suggestion/guide).
@@ -1117,6 +1124,9 @@ class State:
             "humanizer_enabled": self.humanizer_enabled,
             "humanizer_timing_ms": self.humanizer_timing_ms,
             "humanizer_velocity": self.humanizer_velocity,
+            "seq_outs": list(self.seq_outs),
+            "raw_outs": list(self.raw_outs),
+            "midi_channel": self.midi_channel,
             "quantized_notes": self.quantized_notes[-100:],  # last 100 quantized notes
             "take_notes": self.take_notes[-100:],  # the frozen take for replay
             "raw_take_events": self.raw_take_events[-500:],  # semi-raw MIDI events for replay / piano roll

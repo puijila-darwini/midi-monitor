@@ -1031,6 +1031,88 @@ case "replay":
     });
   })();
 
+  // Output routing ("midi spaghetti zone"): checkboxes for every available
+  // MIDI sink + raw device, loaded from /api/outs and saved on change.
+  (function () {
+    var listEl = document.getElementById("routing-list");
+    if (!listEl) return;
+
+    var state = { seq: [], raw: [], channel: 0 };
+    var boxes = [];
+
+    function save() {
+      return fetch("/api/outs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ seq_outs: state.seq, raw_outs: state.raw, channel: state.channel })
+      }).then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (!res.ok) addFeed("ROUTE  " + (res.error || "failed"), "replay");
+          return res;
+        })
+        .catch(function () { /* transient */ });
+    }
+
+    function render() {
+      listEl.innerHTML = "";
+      boxes = [];
+      // raw devices first (keyboard internal voices) with a lock hint
+      state.raw.forEach(function (dev) {
+        var lab = document.createElement("label");
+        lab.className = "routing-item";
+        var box = document.createElement("input");
+        box.type = "checkbox";
+        box.checked = true;
+        box.disabled = true; // raw list is server-managed (keyboard always on)
+        var span = document.createElement("span");
+        span.textContent = "keyboard \u2014 " + dev;
+        span.className = "routing-name";
+        lab.appendChild(box);
+        lab.appendChild(span);
+        listEl.appendChild(lab);
+        boxes.push(box);
+      });
+      // seq destinations
+      var seq = state.seq;
+      var avail = (window.__outsAvail || []);
+      avail.forEach(function (o) {
+        var lab = document.createElement("label");
+        lab.className = "routing-item";
+        var box = document.createElement("input");
+        box.type = "checkbox";
+        box.checked = seq.indexOf(o.target) !== -1;
+        box.dataset.target = o.target;
+        var span = document.createElement("span");
+        span.textContent = o.name + " \u2014 " + o.target;
+        span.className = "routing-name";
+        lab.appendChild(box);
+        lab.appendChild(span);
+        listEl.appendChild(lab);
+        boxes.push(box);
+        box.addEventListener("change", function () {
+          var t = box.dataset.target;
+          var idx = state.seq.indexOf(t);
+          if (box.checked && idx === -1) state.seq.push(t);
+          if (!box.checked && idx !== -1) state.seq.splice(idx, 1);
+          save();
+        });
+      });
+    }
+
+    fetch("/api/outs", { cache: "no-store" })
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        if (res && res.ok) {
+          state.seq = res.seq_outs || [];
+          state.raw = res.raw_outs || [];
+          state.channel = res.channel || 0;
+          window.__outsAvail = res.available || [];
+          render();
+        }
+      })
+      .catch(function () { /* transient */ });
+  })();
+
   // Tonic + scale selector: shade in-scale keys + interval labels on the piano,
   // and drive the stave key signature when the scale maps to one. The "catch"
   // button arms a one-shot listener: the next note (or chord) heard from the
