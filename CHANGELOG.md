@@ -880,3 +880,24 @@ that file lean. History is chronological; most lines start with a version tag.
   without page reload). Verified: /api/sinks/vcv/launch spawned Rack from
   cold; boot reset with VCV up auto-ticked 131:0; old /api/vcv alias still
   answers; zero JS console errors. Committed agent:, pushed.
+
+- Ver 65: PATTERN LIBRARY — save + load the raw (IN) and out (OUT) buffers
+  as named patterns. New monitor/patterns.py: JSON files in the gitignored
+  patterns/ dir (one per pattern), atomic write, slug-sanitized filenames
+  (path-traversal safe). A pattern = the events list (raw_take_events or
+  transformed_events — same note_on/note_off shape) PLUS the transform-chain
+  settings snapshot, so an OUT pattern replays exactly as saved even if the
+  chain was changed in between.
+  State gains settings_snapshot() + apply_settings() (bounds-checked
+  per-field restore of quantize/transpose/velocity/humanizer/tempo/timesig/
+  midi_channel). Endpoints: GET /api/patterns (list), POST /api/patterns
+  (save raw|out; "save out" auto-derives the OUT side via requantize if the
+  buffer is untouched), POST /api/patterns/<slug>/load (restores events +
+  settings into the raw buffer and requantizes), DELETE /api/patterns/<slug>.
+  Raw midi buffer card gains a pattern strip: name input, save raw / save
+  out buttons, a select of saved patterns + load/del, and a status line;
+  loading shows "… reloading" then a full page reload so every control
+  re-syncs to the restored settings (no settings-sync parser needed).
+  Verified: save/load/delete via HTTP and UI, settings restored on load
+  (transpose 5 probe), empty-buffer/empty-library guards, slug sanitization;
+  zero JS console errors. Committed agent:, pushed.

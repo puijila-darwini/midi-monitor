@@ -17,6 +17,7 @@ from .replay import Replay, plan_from_raw, VOICES
 from . import midiout
 from . import sinks
 from . import chords
+from . import patterns
 
 app = Flask(__name__)
 app.config["TEMPLATES_AUTO_RELOAD"] = True
@@ -604,6 +605,80 @@ def api_take_clear():
     state.quantized_take = []
     state.transformed_events = []
     return jsonify({"ok": True, "cleared": True})
+
+
+@app.route("/api/patterns", methods=["GET"])
+def api_patterns_list():
+    """The pattern library: metadata for every saved buffer snapshot."""
+    return jsonify({"ok": True, "patterns": patterns.list_patterns()})
+
+
+@app.route("/api/patterns", methods=["POST"])
+def api_patterns_save():
+    """Save the current buffer as a named pattern. Body:
+    {"name": <string>, "kind": "raw"|"out"}.
+
+    kind "raw" snapshots the IN side (raw_take_events); "out" snapshots the
+    OUT side (transformed_events — the take after quantize/transpose/
+    velocity/humanize). Both are stored with the transform-chain settings so
+    loading an OUT pattern replays exactly what was saved. Name is optional
+    (an auto timestamp name is used when blank); the file slug is derived."""
+    body = request.get_json(silent=True) or {}
+    kind = body.get("kind", "raw")
+    if kind == "out":
+        # The OUT side is derived on demand (notation/replay); derive it from
+        # the current buffer so an untouched take is still saveable.
+        if not state.transformed_events:
+            state.requantize()
+        events = list(state.transformed_events)
+    elif kind == "raw":
+        events = list(state.raw_take_events)
+    else:
+        return jsonify({"ok": False, "error": "kind must be 'raw' or 'out'"}), 400
+    if not events:
+        return jsonify({"ok": False, "error": "buffer is empty — play something first"}), 400
+    try:
+        meta = patterns.save_pattern(body.get("name"), kind, events,
+                                     state.settings_snapshot())
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+    hub.publish({"type": "patterns", "action": "save",
+                 "filename": meta["filename"], "name": meta["name"],
+                 "kind": meta["kind"], "time": time.time()})
+    return jsonify({"ok": True, "pattern": meta})
+
+
+@app.route("/api/patterns/<slug>/load", methods=["POST"])
+def api_patterns_load(slug):
+    """Load a saved pattern into the raw buffer + chain settings.
+
+    Events land in the raw take buffer (the two buffers share the same
+    note_on/note_off shape) and the saved transform settings are restored, so
+    an OUT snapshot replays true. The buffer is re-quantized and the notation
+    card is rebuilt; the requesting client reloads the page to re-sync every
+    control to the restored settings."""
+    try:
+        pat = patterns.load_pattern(slug)
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 404
+    state.raw_take_events = pat["events"]
+    state.apply_settings(pat["settings"])
+    state.requantize()
+    hub.publish({"type": "patterns", "action": "load",
+                 "filename": slug, "name": pat["name"], "kind": pat["kind"],
+                 "note_count": (pat["meta"] or {}).get("note_count", 0),
+                 "time": time.time()})
+    return jsonify({"ok": True, "name": pat["name"], "kind": pat["kind"],
+                    "note_count": (pat["meta"] or {}).get("note_count", 0)})
+
+
+@app.route("/api/patterns/<slug>", methods=["DELETE"])
+def api_patterns_delete(slug):
+    if not patterns.delete_pattern(slug):
+        return jsonify({"ok": False, "error": "no such pattern"}), 404
+    hub.publish({"type": "patterns", "action": "delete",
+                 "filename": slug, "time": time.time()})
+    return jsonify({"ok": True, "deleted": slug})
 
 
 @app.route("/api/events")

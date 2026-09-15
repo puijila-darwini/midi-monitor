@@ -2000,4 +2000,135 @@ if (rawTakeClearBtn) {
   buildCatchTooltip();
   buildPiano();
   bindPianoClick();
+
+  // Pattern library (raw midi buffer card): save/load named snapshots of the
+  // raw (IN) and out (OUT) buffers. Saving stores the events plus the current
+  // transform-chain settings; loading restores both in the backend, then the
+  // whole page reloads so every control re-syncs to the restored settings.
+  (function () {
+    var box = document.getElementById("patterns-box");
+    if (!box) return;
+    var nameInput = document.getElementById("pattern-name");
+    var saveBtn = document.getElementById("patterns-save");
+    var saveOutBtn = document.getElementById("patterns-save-out");
+    var sel = document.getElementById("patterns-select");
+    var loadBtn = document.getElementById("patterns-load");
+    var delBtn = document.getElementById("patterns-del");
+    var statusEl = document.getElementById("patterns-status");
+
+    function status(msg, cls) {
+      if (statusEl) {
+        statusEl.textContent = msg || "";
+        statusEl.className = "patterns-status" + (cls ? " " + cls : "");
+      }
+    }
+
+    function renderList(patterns) {
+      if (!sel) return;
+      sel.innerHTML = "";
+      (patterns || []).forEach(function (p) {
+        var opt = document.createElement("option");
+        opt.value = p.filename;
+        var tag = p.kind === "out" ? " [out]" : "";
+        var n = (typeof p.note_count === "number") ? " \u2013 " + p.note_count + "n" : "";
+        opt.textContent = p.name + tag + n;
+        sel.appendChild(opt);
+      });
+      loadBtn.disabled = sel.options.length === 0;
+      delBtn.disabled = sel.options.length === 0;
+      if (!sel.options.length) status("no patterns saved yet");
+    }
+
+    function refresh() {
+      fetch("/api/patterns", { cache: "no-store" })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (res && res.ok) renderList(res.patterns);
+        })
+        .catch(function () { /* transient */ });
+    }
+
+    function save(kind) {
+      if (saveBtn.disabled && saveOutBtn.disabled) return;
+      saveBtn.disabled = true;
+      saveOutBtn.disabled = true;
+      status(kind === "out" ? "saving out buffer\u2026" : "saving raw buffer\u2026");
+      fetch("/api/patterns", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: kind, name: (nameInput.value || "").trim() })
+      }).then(function (r) { return r.json(); })
+        .then(function (res) {
+          saveBtn.disabled = false;
+          saveOutBtn.disabled = false;
+          if (res && res.ok) {
+            status("saved \u201C" + res.pattern.name + "\u201D (" +
+                   res.pattern.note_count + " notes)", "ok");
+            if (nameInput) nameInput.value = "";
+            refresh();
+          } else {
+            status((res && res.error) || "save failed", "err");
+          }
+        })
+        .catch(function () {
+          saveBtn.disabled = false;
+          saveOutBtn.disabled = false;
+          status("save failed", "err");
+        });
+    }
+
+    function load() {
+      var slug = sel.value;
+      if (!slug || loadBtn.disabled) return;
+      loadBtn.disabled = true;
+      status("loading\u2026");
+      fetch("/api/patterns/" + encodeURIComponent(slug) + "/load", { method: "POST" })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (res && res.ok) {
+            status("loaded \u201C" + res.name + "\u201D (" + res.note_count +
+                   " notes) \u2014 reloading\u2026", "ok");
+            setTimeout(function () { location.reload(); }, 600);
+          } else {
+            loadBtn.disabled = false;
+            status((res && res.error) || "load failed", "err");
+          }
+        })
+        .catch(function () {
+          loadBtn.disabled = false;
+          status("load failed", "err");
+        });
+    }
+
+    function del() {
+      var slug = sel.value;
+      if (!slug || delBtn.disabled) return;
+      delBtn.disabled = true;
+      var n = slug;
+      fetch("/api/patterns/" + encodeURIComponent(slug), { method: "DELETE" })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          delBtn.disabled = false;
+          if (res && res.ok) status("deleted \u201C" + n + "\u201D", "ok");
+          refresh();
+        })
+        .catch(function () {
+          delBtn.disabled = false;
+          status("delete failed", "err");
+        });
+    }
+
+    saveBtn.addEventListener("click", function () { save("raw"); });
+    saveOutBtn.addEventListener("click", function () { save("out"); });
+    loadBtn.addEventListener("click", load);
+    delBtn.addEventListener("click", del);
+    if (nameInput) {
+      nameInput.addEventListener("keydown", function (e) {
+        if (e.key === "Enter") { e.preventDefault(); save("raw"); }
+      });
+    }
+    box.classList.remove("hidden");
+    refresh();
+    setInterval(refresh, 15000); // keep the library honest across tabs
+  })();
 })();

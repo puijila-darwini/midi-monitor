@@ -86,6 +86,24 @@
             <span id="record-btn-dot" class="record-dot"></span><span id="record-btn-label">rec</span>
           </button>
         </div>
+        <!-- Pattern library: save/load named snapshots of the raw (IN) or
+             out (OUT) buffer. Loading restores events + chain settings. -->
+        <div id="patterns-box" class="patterns-box hidden">
+          <div class="patterns-row">
+            <input id="pattern-name" class="pattern-name" type="text"
+                   spellcheck="false" placeholder="pattern name" />
+            <button id="patterns-save" class="mini-btn" type="button"
+                    title="Save the raw (IN) buffer as a named pattern">save raw</button>
+            <button id="patterns-save-out" class="mini-btn" type="button"
+                    title="Save the OUT (transformed) buffer as a named pattern">save out</button>
+          </div>
+          <div class="patterns-row">
+            <select id="patterns-select" title="Saved patterns"></select>
+            <button id="patterns-load" class="mini-btn" type="button" disabled>load</button>
+            <button id="patterns-del" class="mini-btn danger" type="button" disabled>del</button>
+          </div>
+          <div id="patterns-status" class="patterns-status"></div>
+        </div>
         <ul id="raw-take" class="feed-list raw-take"></ul>
       </aside>
     </div>

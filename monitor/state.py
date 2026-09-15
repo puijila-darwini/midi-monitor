@@ -1056,6 +1056,113 @@ class State:
         self.version += 1
         return True
 
+    def settings_snapshot(self):
+        """The transform-chain settings that give a buffer musical context."""
+        return {
+            "quantization_divisions": self.quantization_divisions,
+            "quantize_enabled": self.quantize_enabled,
+            "transpose_semitones": self.transpose_semitones,
+            "velocity_enabled": self.velocity_enabled,
+            "velocity_standard": self.velocity_standard,
+            "velocity_width": self.velocity_width,
+            "velocity_mode": self.velocity_mode,
+            "humanizer_enabled": self.humanizer_enabled,
+            "humanizer_timing_ms": self.humanizer_timing_ms,
+            "humanizer_velocity": self.humanizer_velocity,
+            "tempo_bpm": self.tempo_bpm,
+            "user_tempo_bpm": self.user_tempo_bpm,
+            "time_signature": self.time_signature,
+            "midi_channel": self.midi_channel,
+        }
+
+    def apply_settings(self, settings):
+        """Restore a settings_snapshot() dict from a saved pattern.
+
+        Bounds-checked value by value; unknown/invalid keys are skipped so a
+        corrupt pattern can never wedge the chain. Chain-dependent state gets
+        rebuilt (grid reset) but the buffer is NOT re-derived here — callers
+        decide when to requantize().
+        """
+        if not isinstance(settings, dict):
+            return False
+
+        try:
+            div = float(settings.get("quantization_divisions", 4))
+            if div in self.VALID_GRIDS:
+                self.quantization_divisions = div
+                self.quantize_enabled = bool(settings.get("quantize_enabled", True))
+                self._pending = None
+        except (TypeError, ValueError):
+            pass
+
+        st = settings.get("transpose_semitones", 0)
+        try:
+            st = int(st)
+            if -24 <= st <= 24:
+                self.transpose_semitones = st
+        except (TypeError, ValueError):
+            pass
+
+        self.velocity_enabled = bool(settings.get("velocity_enabled", True))
+        try:
+            std = float(settings.get("velocity_standard", 100.0))
+            if 0 <= std <= 127:
+                self.velocity_standard = std
+        except (TypeError, ValueError):
+            pass
+        try:
+            w = float(settings.get("velocity_width", 50.0))
+            if 0 <= w <= 127:
+                self.velocity_width = w
+        except (TypeError, ValueError):
+            pass
+        mode = settings.get("velocity_mode", "compress")
+        if mode in ("threshold", "compress"):
+            self.velocity_mode = mode
+
+        self.humanizer_enabled = bool(settings.get("humanizer_enabled", False))
+        try:
+            tm = float(settings.get("humanizer_timing_ms", 10.0))
+            if 0 <= tm <= 200:
+                self.humanizer_timing_ms = tm
+        except (TypeError, ValueError):
+            pass
+        try:
+            hv = int(settings.get("humanizer_velocity", 5))
+            if 0 <= hv <= 127:
+                self.humanizer_velocity = hv
+        except (TypeError, ValueError):
+            pass
+
+        try:
+            u = float(settings.get("user_tempo_bpm", 0.0))
+            if u >= 0 and u <= 300:
+                self.user_tempo_bpm = u
+        except (TypeError, ValueError):
+            pass
+        try:
+            t = float(settings.get("tempo_bpm", 120.0))
+            if t > 0:
+                self.tempo_bpm = t
+        except (TypeError, ValueError):
+            pass
+        ts = settings.get("time_signature", "4/4")
+        if isinstance(ts, str) and "/" in ts:
+            try:
+                n, d = ts.split("/")
+                self.set_time_signature(int(n), int(d))
+            except (TypeError, ValueError):
+                pass
+        try:
+            ch = int(settings.get("midi_channel", 0))
+            if 0 <= ch <= 15:
+                self.midi_channel = ch
+        except (TypeError, ValueError):
+            pass
+
+        self.version += 1
+        return True
+
     def set_recording(self, flag):
         """Start or stop a recording take.
 

@@ -416,6 +416,70 @@ select option {
 .replay-voice-label select { max-width: none; }
 .replay-btn-group { display: flex; align-items: center; gap: 6px; }
 
+/* Pattern library controls: save/load named snapshots of the raw/out buffers */
+.patterns-box {
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  border-radius: 2px;
+  background: #08110E;
+  font-size: 11px;
+  color: var(--muted);
+}
+.patterns-box.hidden { display: none; }
+.patterns-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.pattern-name {
+  flex: 1 1 90px;
+  min-width: 60px;
+  font-size: 11px;
+  padding: 3px 6px;
+}
+#patterns-select {
+  flex: 1 1 90px;
+  font-size: 11px;
+}
+.mini-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 2px;
+  background: #08110E;
+  color: var(--fg);
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  user-select: none;
+}
+.mini-btn:hover:not(:disabled) {
+  border-color: var(--straw, #C9A86A);
+  color: var(--straw, #C9A86A);
+}
+.mini-btn.danger:hover:not(:disabled) {
+  border-color: #E06C5D;
+  color: #E06C5D;
+}
+.mini-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.patterns-status {
+  min-height: 12px;
+  font-size: 10px;
+  line-height: 1.3;
+  color: var(--muted);
+}
+.patterns-status.ok { color: var(--accent, #7EC8A5); }
+.patterns-status.err { color: #E06C5D; }
+
 /* ---- output routing checkboxes ("route to") ---- */
 .out-routing {
   margin-top: 10px;

@@ -41,6 +41,11 @@ folded into a single web app package in `monitor/`:
                           auto_route (see ../Musica/Rack pattern); the out box
                           buttons + /api/sinks launch + boot auto-routing all
                           derive from it. Add a DAW = add one dict entry.
+- `monitor/patterns.py` - pattern library: save/load named snapshots of the raw
+                          (IN) / out (OUT) buffers as JSON in patterns/
+                          (gitignored). A pattern = events + transform-chain
+                          settings; load restores both into the raw buffer.
+                          Endpoints /api/patterns list/save/load/delete.
 - `monitor/templates/index.html` + `static/` - full 88-key piano (A0-C8,
                           transpose-safe), scrolling note feed, chord/arp flash.
 
