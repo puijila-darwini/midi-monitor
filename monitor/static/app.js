@@ -1040,13 +1040,16 @@ case "replay":
     var state = { seq: [], raw: [], channel: 0 };
     var boxes = [];
 
-    // VCV launch button: shows up/down state, spawns Rack on click and then
-    // polls until it appears as an ALSA sink (or a short timeout).
-    var vcvBtn = document.getElementById("vcv-launch-btn");
-    var vcvLabel = document.getElementById("vcv-launch-label");
-    var vcvGlyph = document.getElementById("vcv-launch-glyph");
-    var polling = false;
-    // Pull latest /api/outs so newly-appeared sinks (e.g. VCV Rack right after
+    // Launchable-apps row ("spaghetti zone" sources): one button per entry in
+    // the sinks registry (/api/sinks), data-driven — adding a DAW to
+    // monitor/sinks.py just adds a button here. Each button shows up/down
+    // state, spawns the app on click, then polls until it appears as an ALSA
+    // sink (or a short timeout). When one just came up, the destination list
+    // reloads so its checkbox shows up immediately.
+    var appsEl = document.getElementById("launchable-apps");
+    var polls = {}; // key -> {timer, tries, lastRunning}
+
+    // Pull latest /api/outs so newly-appeared sinks (e.g. an app right after
     // launch) show up as checkboxes immediately, honouring server routing.
     function reloadOuts() {
       fetch("/api/outs", { cache: "no-store" })
@@ -1062,62 +1065,121 @@ case "replay":
         })
         .catch(function () { /* transient */ });
     }
-    function setVcvRunning(running, busy) {
-      if (!vcvBtn) return;
-      vcvBtn.classList.toggle("running", !!running);
-      vcvBtn.classList.toggle("busy", !!busy);
-      vcvBtn.disabled = !!busy;
-      if (vcvLabel) vcvLabel.textContent = running ? "vcv is up" : (busy ? "launching\u2026" : "launch vcv");
-      if (vcvGlyph) vcvGlyph.textContent = running ? "\u2713" : (busy ? "\u2026" : "\u25b6");
+
+    function renderApps(sinks) {
+      if (!appsEl) return;
+      appsEl.innerHTML = "";
+      var buttons = {};
+      sinks.forEach(function (s) {
+        var btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "app-launch-btn";
+        btn.dataset.key = s.key;
+        var glyph = document.createElement("span");
+        glyph.className = "app-launch-glyph";
+        var label = document.createElement("span");
+        label.className = "app-launch-label";
+        btn.appendChild(glyph);
+        btn.appendChild(label);
+        btn.title = "Launch " + s.name + " if it isn't already running (needs its MIDI input module for the loop to reach it)";
+        btn.addEventListener("click", function () { launchApp(s.key); });
+        buttons[s.key] = { btn: btn, glyph: glyph, label: label };
+        appsEl.appendChild(btn);
+      });
+      refreshApps(buttons);
+      setInterval(function () { refreshApps(buttons); }, 10000); // keep state honest
     }
-    function refreshVcv() {
-      fetch("/api/vcv", { cache: "no-store" })
+
+    function refreshApps(buttons) {
+      fetch("/api/sinks", { cache: "no-store" })
         .then(function (r) { return r.json(); })
         .then(function (res) {
-          if (res && res.ok) {
-            var wasRunning = vcvBtn && vcvBtn.classList.contains("running");
-            setVcvRunning(res.running, res.launching || polling);
-            if (polling && res.running && !wasRunning) reloadOuts(); // just came up
-            if (polling && res.running) polling = false;
-          }
+          if (!res || !res.ok || !res.sinks) return;
+          res.sinks.forEach(function (s) {
+            var ref = buttons[s.key];
+            if (!ref) return;
+            var poll = polls[s.key];
+            var busy = !!s.launching || !!(poll && poll.tries && poll.tries > 0);
+            ref.btn.classList.toggle("running", !!s.running);
+            ref.btn.classList.toggle("busy", busy);
+            ref.btn.disabled = busy && !s.running;
+            ref.glyph.textContent = s.running ? "\u2713" : (busy ? "\u2026" : "\u25b6");
+            ref.label.textContent = s.running
+              ? s.name.toLowerCase() + " is up"
+              : (busy ? "launching\u2026" : "launch " + (s.name || s.key).toLowerCase());
+            // Just came up while we were polling it -> refresh the sink list.
+            if (poll && poll.tries && s.running && !poll.lastRunning) reloadOuts();
+            if (poll) poll.lastRunning = !!s.running;
+          });
         })
         .catch(function () { /* transient */ });
     }
-    if (vcvBtn) {
-      vcvBtn.addEventListener("click", function () {
-        if (vcvBtn.disabled) return;
-        setVcvRunning(false, true);
-        polling = true;
-        fetch("/api/vcv/launch", { method: "POST" })
-          .then(function (r) { return r.json(); })
-          .then(function (res) {
-            if (res && res.ok) {
-              addFeed("VCV  " + (res.message || "launching"), "replay");
-              if (res.running) { polling = false; setVcvRunning(true, false); return; }
-            } else if (res && res.error) {
-              addFeed("VCV  " + res.error, "replay");
-              polling = false;
-              setVcvRunning(false, false);
-              return;
-            }
-            var tries = 0;
-            var timer = setInterval(function () {
-              tries += 1;
-              refreshVcv();
-              if (tries >= 14 || !polling) { // ~21s cap
-                clearInterval(timer);
-                if (polling) { polling = false; setVcvRunning(false, false); }
-              }
-            }, 1500);
-          })
-          .catch(function () {
-            polling = false;
-            setVcvRunning(false, false);
-          });
-      });
-      refreshVcv();
-      setInterval(refreshVcv, 10000); // keep the up/down state honest
+
+    function paintBusy(ref) {
+      if (!ref) return;
+      ref.classList.remove("running");
+      ref.classList.add("busy");
+      ref.disabled = true;
+      ref.children[0].textContent = "\u2026";
+      ref.children[1].textContent = "launching\u2026";
     }
+
+    function launchApp(key) {
+      var ref = null;
+      if (appsEl) {
+        for (var i = 0; i < appsEl.children.length; i++) {
+          if (appsEl.children[i].dataset.key === key) { ref = appsEl.children[i]; break; }
+        }
+      }
+      if (ref && (ref.classList.contains("running") || ref.classList.contains("busy"))) return;
+      var poll = polls[key] || (polls[key] = { tries: 0, lastRunning: false });
+      poll.tries = 1;
+      poll.lastRunning = false;
+      paintBusy(ref);
+      fetch("/api/sinks/" + encodeURIComponent(key) + "/launch", { method: "POST" })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (res && res.ok) {
+            addFeed((res.message || "launching"), "replay");
+            if (res.running) { poll.tries = 0; refreshApps(buttonsByKey()); return; }
+          } else if (res && res.error) {
+            addFeed("LAUNCH  " + res.error, "replay");
+            poll.tries = 0;
+            refreshApps(buttonsByKey());
+            return;
+          }
+          if (poll.timer) clearInterval(poll.timer);
+          poll.timer = setInterval(function () {
+            poll.tries += 1;
+            refreshApps(buttonsByKey());
+            if (poll.tries >= 14) { // ~21s cap
+              clearInterval(poll.timer);
+              poll.tries = 0;
+              refreshApps(buttonsByKey());
+            }
+          }, 1500);
+        })
+        .catch(function () {
+          poll.tries = 0;
+          refreshApps(buttonsByKey());
+        });
+    }
+
+    function buttonsByKey() {
+      var out = {};
+      if (appsEl) {
+        for (var i = 0; i < appsEl.children.length; i++) {
+          var b = appsEl.children[i];
+          out[b.dataset.key] = { btn: b, glyph: b.children[0], label: b.children[1] };
+        }
+      }
+      return out;
+    }
+
+    fetch("/api/sinks", { cache: "no-store" })
+      .then(function (r) { return r.json(); })
+      .then(function (res) { if (res && res.ok) renderApps(res.sinks); })
+      .catch(function () { /* transient */ });
 
     function save() {
       return fetch("/api/outs", {

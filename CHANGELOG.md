@@ -867,3 +867,16 @@ that file lean. History is chronological; most lines start with a version tag.
   routing) without a page reload. Clicking while up is a no-op. Verified
   live: launched Rack from a cold state via the endpoint, detected as
   running ~4s later; zero JS console errors.
+- Ver 64: DATA-DRIVEN DESTINATIONS — the out box's launch buttons are no longer
+  VCV-specific. New monitor/sinks.py is a registry of launchable MIDI apps; one
+  dict entry (key, name, cmd, cwd, detect, auto_route) is all a new DAW needs.
+  Detection is generic (any aconnect -o client name substring from `detect`),
+  launching is generic (detached subprocess, per-key lock against double-
+  spawn), boot auto-routing is generic (auto_route entries present at boot get
+  ticked). /api/sinks GET + /api/sinks/<key>/launch POST replace /api/vcv
+  (kept as backward-compat aliases). UI: #launchable-apps renders one
+  .app-launch-btn per registry entry from /api/sinks, generic busy/running
+  paint + 10s honesty poll + post-launch sink-list reload (checkbox appears
+  without page reload). Verified: /api/sinks/vcv/launch spawned Rack from
+  cold; boot reset with VCV up auto-ticked 131:0; old /api/vcv alias still
+  answers; zero JS console errors. Committed agent:, pushed.

@@ -36,6 +36,11 @@ folded into a single web app package in `monitor/`:
                           detection (scalar add9no5 suppressed), dedupe
 - `monitor/app.py`      - Flask on :5050. Routes: `/`, `/events` (SSE),
                           `/api/state`. Background capture thread -> hub pub/sub.
+- `monitor/sinks.py`    - DATA-DRIVEN registry of launchable MIDI destinations
+                          (VCV Rack, DAWs). Each entry declares cmd/detect/
+                          auto_route (see ../Musica/Rack pattern); the out box
+                          buttons + /api/sinks launch + boot auto-routing all
+                          derive from it. Add a DAW = add one dict entry.
 - `monitor/templates/index.html` + `static/` - full 88-key piano (A0-C8,
                           transpose-safe), scrolling note feed, chord/arp flash.
 

@@ -15,6 +15,7 @@ from .state import State
 from .analysis import Analyser
 from .replay import Replay, plan_from_raw, VOICES
 from . import midiout
+from . import sinks
 from . import chords
 
 app = Flask(__name__)
@@ -23,8 +24,7 @@ app.config["TEMPLATES_AUTO_RELOAD"] = True
 PORT = 5050
 FULL_KEYBOARD = False
 
-# VCV Rack launcher. Detected by name in aconnect -o when up.
-VCV_RACK_CMD = "/home/pthag/Musica/Rack/Rack"
+# --- Launchable MIDI destinations (data-driven: see monitor/sinks.py) ---
 
 # --- Capture watchdog / health ---
 # The capture thread runs an infinite stream loop. If it ever throws (a bug,
@@ -99,49 +99,10 @@ replayer = Replay()  # plays the quantized take back out to chosen destinations
 
 
 # Default out routing: the keyboard's raw device (internal voices) always on,
-# plus any VCV Rack seq sink that's currently listening (auto-added). The user
-# can change both via /api/outs afterward.
+# plus any auto_route sink registry entry (sinks.py) that's currently up is
+# auto-ticked. Both remain user-adjustable via /api/outs.
 def _default_out_routing():
-    seq = [o["target"] for o in midiout.list_outs() if o["name"] == "VCV Rack"]
-    return seq, ["hw:2,0,0"]
-
-
-def _vcv_running():
-    """True if VCV Rack is currently up (seen as a sequencer sink)."""
-    return any(o["name"] == "VCV Rack" for o in midiout.list_outs())
-
-
-# Guard so two clicks can't double-spawn Rack while it boots.
-_vcv_launch_lock = threading.Lock()
-_vcv_launching = False
-
-
-def _launch_vcv():
-    """Spawn VCV Rack detached if its binary exists and it isn't already up.
-    Returns (ok, message, running_after)."""
-    global _vcv_launching
-    if _vcv_running():
-        return True, "vcv rack already running", True
-    if not os.path.isfile(VCV_RACK_CMD):
-        return False, "vcv binary missing: %s" % VCV_RACK_CMD, False
-    with _vcv_launch_lock:
-        if _vcv_launching:
-            return False, "already launching", False
-        _vcv_launching = True
-    try:
-        subprocess.Popen(
-            [VCV_RACK_CMD],
-            cwd=os.path.dirname(VCV_RACK_CMD),
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,
-        )
-        return True, "launching vcv rack", False
-    except Exception as exc:
-        return False, "launch failed: %s: %s" % (type(exc).__name__, exc), False
-    finally:
-        _vcv_launching = False
+    return sinks.default_routing()
 
 
 _init_seq, _init_raw = _default_out_routing()
@@ -494,23 +455,47 @@ def api_outs_set():
     return jsonify({"ok": True, "seq_outs": seq, "raw_outs": raw, "channel": chan})
 
 
+@app.route("/api/sinks", methods=["GET"])
+def api_sinks():
+    """Registry of launchable MIDI destinations with live up/down state.
+    The out box renders one launch button per entry."""
+    return jsonify(sinks.status())
+
+
+@app.route("/api/sinks/<key>/launch", methods=["POST"])
+def api_sinks_launch(key):
+    """Launch destination `key` (from the registry) if it isn't already up.
+    Detached, in its own session, so it survives independent of the server."""
+    ok, msg, running, launching = sinks.launch(key)
+    if not ok:
+        return jsonify({"ok": False, "error": msg, "running": running,
+                        "launching": launching}), 500
+    return jsonify({"ok": True, "key": key, "message": msg,
+                    "running": running, "launching": launching})
+
+
+# Backward-compatible aliases for the Ver 63 /api/vcv endpoints.
 @app.route("/api/vcv", methods=["GET"])
 def api_vcv():
-    """VCV Rack status: running (seen as an ALSA sink) and launch command."""
-    return jsonify({"ok": True, "running": _vcv_running(),
-                    "cmd": os.path.basename(VCV_RACK_CMD),
-                    "path": VCV_RACK_CMD})
+    """Deprecated alias for /api/sinks filtered to the 'vcv' entry."""
+    data = sinks.status()
+    vcv = next((s for s in data["sinks"] if s["key"] == "vcv"), None)
+    if vcv is None:
+        return jsonify({"ok": False, "error": "vcv not in registry"}), 404
+    return jsonify({"ok": True, "running": vcv["running"],
+                    "cmd": os.path.basename(vcv.get("cmd") or ""),
+                    "path": vcv.get("cmd")})
 
 
 @app.route("/api/vcv/launch", methods=["POST"])
 def api_vcv_launch():
-    """Launch VCV Rack if it isn't already up. Detached, in its own session,
-    so it survives independent of the server."""
-    ok, msg, running = _launch_vcv()
+    """Deprecated alias for /api/sinks/vcv/launch."""
+    ok, msg, running, launching = sinks.launch("vcv")
     if not ok:
-        return jsonify({"ok": False, "error": msg, "running": running, "launching": _vcv_launching}), 500
+        return jsonify({"ok": False, "error": msg, "running": running,
+                        "launching": launching}), 500
     return jsonify({"ok": True, "message": msg, "running": running,
-                    "launching": _vcv_launching})
+                    "launching": launching})
 
 
 @app.route("/api/replay", methods=["POST"])
