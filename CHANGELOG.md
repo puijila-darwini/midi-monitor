@@ -856,3 +856,14 @@ that file lean. History is chronological; most lines start with a version tag.
   suffices). Verified: notes + Warm Pad PC echoed through Midi Through via
   web replay; zero JS errors; VCV 131:0 receives (write success; input port
   not dump-able with aseqdump by design). Committed agent:, pushed.
+- Ver 63: VCV LAUNCH BUTTON in the out card's "route to" block. /api/vcv GET
+  reports running (detected as an ALSA sink by name) + cmd path; POST
+  /api/vcv/launch spawns /home/pthag/Musica/Rack/Rack detached (own session,
+  survives the server) iff it isn't already up, guarded by a launch lock so
+  double-clicks can't double-spawn while it boots. Button states: "▶ launch
+  vcv" (down), "… launching" (busy), "✓ vcv is up" (detected); polls every
+  10s to stay honest + 1.5s during launch, and when VCV first appears the
+  destination list reloads so its checkbox shows up (and follows server
+  routing) without a page reload. Clicking while up is a no-op. Verified
+  live: launched Rack from a cold state via the endpoint, detected as
+  running ~4s later; zero JS console errors.

@@ -447,6 +447,24 @@ select option {
 .routing-item input:disabled + .routing-name { opacity: 0.6; cursor: default; }
 .routing-pending { color: var(--muted); font-style: italic; font-size: 11px; }
 .routing-name { font-family: ui-monospace, Menlo, monospace; }
+.routing-launch-row { margin-bottom: 8px; }
+.vcv-launch-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 3px;
+  background: #08110E;
+  color: var(--fg);
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+.vcv-launch-btn:hover { border-color: var(--straw, #C9A86A); color: var(--straw, #C9A86A); }
+.vcv-launch-btn.running { border-color: var(--accent, #7EC8A5); color: var(--accent, #7EC8A5); }
+.vcv-launch-btn.busy { opacity: 0.6; cursor: wait; border-color: var(--straw, #C9A86A); color: var(--straw, #C9A86A); }
 
 /* ---- signal chain row: transform -> out, under the control row ---- */
 .chain-row {

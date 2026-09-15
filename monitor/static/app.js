@@ -1040,6 +1040,85 @@ case "replay":
     var state = { seq: [], raw: [], channel: 0 };
     var boxes = [];
 
+    // VCV launch button: shows up/down state, spawns Rack on click and then
+    // polls until it appears as an ALSA sink (or a short timeout).
+    var vcvBtn = document.getElementById("vcv-launch-btn");
+    var vcvLabel = document.getElementById("vcv-launch-label");
+    var vcvGlyph = document.getElementById("vcv-launch-glyph");
+    var polling = false;
+    // Pull latest /api/outs so newly-appeared sinks (e.g. VCV Rack right after
+    // launch) show up as checkboxes immediately, honouring server routing.
+    function reloadOuts() {
+      fetch("/api/outs", { cache: "no-store" })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (res && res.ok) {
+            state.seq = res.seq_outs || [];
+            state.raw = res.raw_outs || [];
+            state.channel = res.channel || 0;
+            window.__outsAvail = res.available || [];
+            render();
+          }
+        })
+        .catch(function () { /* transient */ });
+    }
+    function setVcvRunning(running, busy) {
+      if (!vcvBtn) return;
+      vcvBtn.classList.toggle("running", !!running);
+      vcvBtn.classList.toggle("busy", !!busy);
+      vcvBtn.disabled = !!busy;
+      if (vcvLabel) vcvLabel.textContent = running ? "vcv is up" : (busy ? "launching\u2026" : "launch vcv");
+      if (vcvGlyph) vcvGlyph.textContent = running ? "\u2713" : (busy ? "\u2026" : "\u25b6");
+    }
+    function refreshVcv() {
+      fetch("/api/vcv", { cache: "no-store" })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (res && res.ok) {
+            var wasRunning = vcvBtn && vcvBtn.classList.contains("running");
+            setVcvRunning(res.running, res.launching || polling);
+            if (polling && res.running && !wasRunning) reloadOuts(); // just came up
+            if (polling && res.running) polling = false;
+          }
+        })
+        .catch(function () { /* transient */ });
+    }
+    if (vcvBtn) {
+      vcvBtn.addEventListener("click", function () {
+        if (vcvBtn.disabled) return;
+        setVcvRunning(false, true);
+        polling = true;
+        fetch("/api/vcv/launch", { method: "POST" })
+          .then(function (r) { return r.json(); })
+          .then(function (res) {
+            if (res && res.ok) {
+              addFeed("VCV  " + (res.message || "launching"), "replay");
+              if (res.running) { polling = false; setVcvRunning(true, false); return; }
+            } else if (res && res.error) {
+              addFeed("VCV  " + res.error, "replay");
+              polling = false;
+              setVcvRunning(false, false);
+              return;
+            }
+            var tries = 0;
+            var timer = setInterval(function () {
+              tries += 1;
+              refreshVcv();
+              if (tries >= 14 || !polling) { // ~21s cap
+                clearInterval(timer);
+                if (polling) { polling = false; setVcvRunning(false, false); }
+              }
+            }, 1500);
+          })
+          .catch(function () {
+            polling = false;
+            setVcvRunning(false, false);
+          });
+      });
+      refreshVcv();
+      setInterval(refreshVcv, 10000); // keep the up/down state honest
+    }
+
     function save() {
       return fetch("/api/outs", {
         method: "POST",

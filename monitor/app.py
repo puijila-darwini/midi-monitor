@@ -23,6 +23,9 @@ app.config["TEMPLATES_AUTO_RELOAD"] = True
 PORT = 5050
 FULL_KEYBOARD = False
 
+# VCV Rack launcher. Detected by name in aconnect -o when up.
+VCV_RACK_CMD = "/home/pthag/Musica/Rack/Rack"
+
 # --- Capture watchdog / health ---
 # The capture thread runs an infinite stream loop. If it ever throws (a bug,
 # unexpected MIDI input, a crash inside a handler), the thread used to die
@@ -101,6 +104,44 @@ replayer = Replay()  # plays the quantized take back out to chosen destinations
 def _default_out_routing():
     seq = [o["target"] for o in midiout.list_outs() if o["name"] == "VCV Rack"]
     return seq, ["hw:2,0,0"]
+
+
+def _vcv_running():
+    """True if VCV Rack is currently up (seen as a sequencer sink)."""
+    return any(o["name"] == "VCV Rack" for o in midiout.list_outs())
+
+
+# Guard so two clicks can't double-spawn Rack while it boots.
+_vcv_launch_lock = threading.Lock()
+_vcv_launching = False
+
+
+def _launch_vcv():
+    """Spawn VCV Rack detached if its binary exists and it isn't already up.
+    Returns (ok, message, running_after)."""
+    global _vcv_launching
+    if _vcv_running():
+        return True, "vcv rack already running", True
+    if not os.path.isfile(VCV_RACK_CMD):
+        return False, "vcv binary missing: %s" % VCV_RACK_CMD, False
+    with _vcv_launch_lock:
+        if _vcv_launching:
+            return False, "already launching", False
+        _vcv_launching = True
+    try:
+        subprocess.Popen(
+            [VCV_RACK_CMD],
+            cwd=os.path.dirname(VCV_RACK_CMD),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        return True, "launching vcv rack", False
+    except Exception as exc:
+        return False, "launch failed: %s: %s" % (type(exc).__name__, exc), False
+    finally:
+        _vcv_launching = False
 
 
 _init_seq, _init_raw = _default_out_routing()
@@ -451,6 +492,25 @@ def api_outs_set():
     state.midi_channel = chan
     replayer.set_outputs(seq, raw, channel=chan)
     return jsonify({"ok": True, "seq_outs": seq, "raw_outs": raw, "channel": chan})
+
+
+@app.route("/api/vcv", methods=["GET"])
+def api_vcv():
+    """VCV Rack status: running (seen as an ALSA sink) and launch command."""
+    return jsonify({"ok": True, "running": _vcv_running(),
+                    "cmd": os.path.basename(VCV_RACK_CMD),
+                    "path": VCV_RACK_CMD})
+
+
+@app.route("/api/vcv/launch", methods=["POST"])
+def api_vcv_launch():
+    """Launch VCV Rack if it isn't already up. Detached, in its own session,
+    so it survives independent of the server."""
+    ok, msg, running = _launch_vcv()
+    if not ok:
+        return jsonify({"ok": False, "error": msg, "running": running, "launching": _vcv_launching}), 500
+    return jsonify({"ok": True, "message": msg, "running": running,
+                    "launching": _vcv_launching})
 
 
 @app.route("/api/replay", methods=["POST"])
