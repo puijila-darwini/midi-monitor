@@ -8,6 +8,39 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
+  <!-- Nilotic medallion icons: one small circular emblem per cartouche. -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <defs>
+      <symbol id="ic-notes" viewBox="0 0 24 24">
+        <path d="M9 18V5l10-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/>
+      </symbol>
+      <symbol id="ic-midi" viewBox="0 0 24 24">
+        <path d="M3 12h3l2-6 3 13 2-9 2 5 2-3h4"/>
+      </symbol>
+      <symbol id="ic-piano" viewBox="0 0 24 24">
+        <rect x="3" y="5" width="18" height="14" rx="1.5"/><path d="M8 5v9M12 5v9M16 5v9M8 14h8"/>
+      </symbol>
+      <symbol id="ic-metro" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>
+      </symbol>
+      <symbol id="ic-key" viewBox="0 0 24 24">
+        <circle cx="9" cy="12" r="4"/><path d="M13 12h8M18 9v6"/>
+      </symbol>
+      <symbol id="ic-sliders" viewBox="0 0 24 24">
+        <path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/>
+      </symbol>
+      <symbol id="ic-out" viewBox="0 0 24 24">
+        <path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 8.5a5 5 0 010 7"/>
+      </symbol>
+      <symbol id="ic-staff" viewBox="0 0 24 24">
+        <path d="M4 6h16M4 9.5h16M4 13h16M4 16.5h16"/><circle cx="9" cy="19" r="2.4"/>
+      </symbol>
+      <symbol id="ic-spark" viewBox="0 0 24 24">
+        <path d="M12 3l2.3 6.4L21 12l-6.7 2.6L12 21l-2.3-6.4L3 12l6.7-2.6z"/>
+      </symbol>
+    </defs>
+  </svg>
+
   <header>
     <div class="head-title">
       <h1>Abora</h1>
@@ -24,10 +57,14 @@
   <div class="main-grid">
     <!-- Left column: note stream (top half) + raw midi buffer (bottom half) -->
     <div class="left-col">
+      <div class="section-label">capture</div>
       <aside id="feed-sidebar" class="feed-sidebar card">
-        <div class="feed-header">
-          <span class="feed-label">note stream</span>
-          <button id="feed-clear" class="key-reset" type="button" title="Clear note stream">clear</button>
+        <div class="cartouche feed-header">
+          <span class="cartouche-title feed-label">note stream</span>
+          <div class="cartouche-end">
+            <button id="feed-clear" class="key-reset" type="button" title="Clear note stream">clear</button>
+            <span class="corner" aria-hidden="true"><svg class="corner-ic"><use href="#ic-notes"/></svg></span>
+          </div>
         </div>
         <ul id="feed-list" class="feed-list"></ul>
       </aside>
@@ -35,10 +72,13 @@
       <!-- Raw midi buffer: the source buffer. Record/stop, playback and the
            single clear control all live here (notation is derived from it). -->
       <aside id="raw-sidebar" class="raw-sidebar card">
-        <div class="raw-take-head">
-          <span class="raw-take-title">raw midi buffer</span>
-          <button id="raw-take-clear" class="key-reset" type="button"
-                  title="Clear the raw buffer and the notation derived from it">clear</button>
+        <div class="cartouche raw-take-head">
+          <span class="cartouche-title raw-take-title">raw midi buffer</span>
+          <div class="cartouche-end">
+            <button id="raw-take-clear" class="key-reset" type="button"
+                    title="Clear the raw buffer and the notation derived from it">clear</button>
+            <span class="corner" aria-hidden="true"><svg class="corner-ic"><use href="#ic-midi"/></svg></span>
+          </div>
         </div>
         <div class="raw-take-controls">
           <button id="record-btn" class="record-btn" type="button"
@@ -53,14 +93,25 @@
     <!-- Right main area -->
     <main id="main-area" class="main-area">
       <section id="piano-wrap" class="card">
-        <div id="piano"></div>
+        <div class="cartouche piano-head">
+          <span class="cartouche-title">keyboard</span>
+          <div class="cartouche-end">
+            <span class="corner" aria-hidden="true"><svg class="corner-ic"><use href="#ic-piano"/></svg></span>
+          </div>
+        </div>
+        <div class="piano-scroll"><div id="piano"></div></div>
       </section>
+
+      <div class="section-label">interpret &amp; tune</div>
 
       <div class="control-row">
         <!-- tempo & meter: quantization tempo, metronome, time signature -->
         <section id="tempo-card" class="tempo-card card">
-          <div class="keysec-head">
-            <span class="keysec-title">tempo &amp; meter</span>
+          <div class="cartouche keysec-head">
+            <span class="cartouche-title keysec-title">tempo &amp; meter</span>
+            <div class="cartouche-end">
+              <span class="corner" aria-hidden="true"><svg class="corner-ic"><use href="#ic-metro"/></svg></span>
+            </div>
           </div>
           <div class="tempo-card-body">
             <div class="tempo-row">
@@ -84,25 +135,19 @@
                   <option value="9/8">9/8</option>
                   <option value="12/8">12/8</option>
                 </select>
-</label>
-            <label class="humanizer-label"><span>humanize:</span>
-              <input type="checkbox" id="humanizer-enabled" checked title="Add subtle timing/velocity variations to the keyboard output">
-              <label for="humanizer-enabled">humanize</label>
-              <input type="number" id="humanizer-timing" class="humanizer-input" min="0" max="100" step="1"
-                     value="10" title="Max random timing shift in milliseconds (±)">
-              <label for="humanizer-timing">ms</label>
-              <input type="number" id="humanizer-velocity" class="humanizer-input" min="0" max="20" step="1"
-                     value="5" title="Max random velocity shift (±) ">
-              <label for="humanizer-velocity">vel</label>
-            </label>
+              </label>
+            </div>
           </div>
         </section>
 
         <section id="key" class="keysec card">
-          <div class="keysec-head">
-            <span class="keysec-title">tonic &amp; scale</span>
-            <button id="catch-help" class="help-btn" type="button"
-                    title="How the catch button turns a played chord into a scale">?</button>
+          <div class="cartouche keysec-head">
+            <span class="cartouche-title keysec-title">tonic &amp; scale</span>
+            <div class="cartouche-end">
+              <button id="catch-help" class="help-btn" type="button"
+                      title="How the catch button turns a played chord into a scale">?</button>
+              <span class="corner" aria-hidden="true"><svg class="corner-ic"><use href="#ic-key"/></svg></span>
+            </div>
           </div>
         <div class="keysec-controls">
           <label>
@@ -136,7 +181,7 @@
                 <option value="aeolian">Natural Minor (Aeolian)</option>
                 <option value="locrian">Locrian</option>
               </optgroup>
-              <optgroup label="Minor & classical">
+              <optgroup label="Minor &amp; classical">
                 <option value="harmonic_minor">Harmonic Minor</option>
                 <option value="melodic_minor">Melodic Minor</option>
                 <option value="harmonic_major">Harmonic Major</option>
@@ -145,7 +190,7 @@
                 <option value="lydian_dominant">Lydian Dominant</option>
                 <option value="super_locrian">Super Locrian (Altered)</option>
               </optgroup>
-              <optgroup label="Pentatonic & blues">
+              <optgroup label="Pentatonic &amp; blues">
                 <option value="major_pent">Major Pentatonic</option>
                 <option value="minor_pent">Minor Pentatonic</option>
                 <option value="blues">Blues</option>
@@ -156,7 +201,7 @@
                 <option value="bebop_dominant">Bebop Dominant</option>
                 <option value="bebop_dorian">Bebop Dorian (Minor)</option>
               </optgroup>
-              <optgroup label="Symmetric & exotic">
+              <optgroup label="Symmetric &amp; exotic">
                 <option value="whole_tone">Whole Tone</option>
                 <option value="diminished">Diminished (whole-half)</option>
                 <option value="chromatic">Chromatic</option>
@@ -175,71 +220,104 @@
 
       <!-- Signal chain: raw midi -> transform (quantizer) -> out (keyboard).
            The transform re-hears the raw buffer under the current grid; OUT
-           plays the transformed take back. -->
+           plays the transformed take back. Each transform op has its own
+           little cartouche so the stages read as distinct functions. -->
+      <div class="section-label">transform &amp; play</div>
+
       <div class="chain-row">
-        <section id="transform-card" class="chain-card card">
-          <div class="chain-head">
-            <span class="chain-title">transform &middot; quantizer</span>
-            <span id="chain-counts" class="chain-counts" title="Raw events in -> transformed MIDI events out"></span>
+        <section id="transform-card" class="chain-card card transform-card">
+          <div class="cartouche chain-head">
+            <span class="cartouche-title chain-title">transform</span>
+            <div class="cartouche-end">
+              <span id="chain-counts" class="chain-counts" title="Raw events in &rarr; transformed MIDI events out"></span>
+              <span class="corner" aria-hidden="true"><svg class="corner-ic"><use href="#ic-sliders"/></svg></span>
+            </div>
           </div>
-          <div class="chain-controls">
-            <label class="quant-label"><span>quant:</span>
-              <select id="quantization" title="Grid the quantizer snaps to, in explicit note values; off passes exact timing through">
-                <option value="0">off (no quantization)</option>
-                <option value="16">64th</option>
-                <option value="8">32nd</option>
-                <option value="4" selected>16th</option>
-                <option value="2">8th</option>
-                <option value="1">quarter</option>
-                <option value="0.5">half</option>
-                <option value="0.25">whole</option>
-              </select>
-            </label>
-            <label class="transpose-label"><span>transpose:</span>
-              <input type="number" id="transpose-input" class="tempo-input" min="-24" max="24" step="1"
-                     value="0" title="Transpose the transformed take by semitones (-24..+24, 0 = off)">
-            </label>
-            <span id="chain-status" class="chain-status"></span>
-            <label class="vel-label"><span>compressor:</span>
-              <input type="checkbox" id="vel-enabled" checked title="Enable/disable the velocity compressor stage">
-              <label for="vel-enabled">compress</label>
-              <input type="number" id="vel-standard" class="vel-input" min="1" max="127" step="1"
-                     value="100" title="Standard velocity (center of the target band); blank to auto-detect from the buffer">
-              <button id="vel-auto" class="listen-btn" type="button"
-                      title="Auto-detect standard velocity from the raw buffer (median of note-on velocities)">&#9889; detect</button>
-            </label>
-            <label class="vel-width-label"><span>width:</span>
-              <input type="number" id="vel-width" class="vel-input" min="1" max="127" step="1"
-                     value="50" title="Velocity band half-width (all velocities forced inside standard ± width/2)">
-            </label>
-            <label class="vel-mode-label"><span>mode:</span>
-              <select id="vel-mode" title="Compressor mode">
-                <option value="compress" selected>compress (linear rescale)</option>
-                <option value="threshold">threshold (clip)</option>
-              </select>
-            </label>
-            <label class="humanizer-label"><span>humanize:</span>
-              <input type="checkbox" id="humanizer-enabled" title="Add subtle timing/velocity variations to the keyboard output">
-              <label for="humanizer-enabled">humanize</label>
-              <input type="number" id="humanizer-timing" class="humanizer-input" min="0" max="100" step="1"
-                     value="10" title="Max random timing shift in milliseconds (±)">
-              <label for="humanizer-timing">ms</label>
-              <input type="number" id="humanizer-velocity" class="humanizer-input" min="0" max="20" step="1"
-                     value="5" title="Max random velocity shift (±)">
-              <label for="humanizer-velocity">vel</label>
-            </label>
+          <div class="ops">
+            <div class="op op-quant">
+              <div class="op-head"><span class="op-title">quantize</span></div>
+              <div class="op-body">
+                <label class="quant-label"><span>grid</span>
+                  <select id="quantization" title="Grid the quantizer snaps to, in explicit note values; off passes exact timing through">
+                    <option value="0">off (no quantization)</option>
+                    <option value="16">64th</option>
+                    <option value="8">32nd</option>
+                    <option value="4" selected>16th</option>
+                    <option value="2">8th</option>
+                    <option value="1">quarter</option>
+                    <option value="0.5">half</option>
+                    <option value="0.25">whole</option>
+                  </select>
+                </label>
+                <span id="chain-status" class="chain-status"></span>
+              </div>
+            </div>
+
+            <div class="op op-transpose">
+              <div class="op-head"><span class="op-title">transpose</span></div>
+              <div class="op-body">
+                <label class="transpose-label"><span>semitones</span>
+                  <input type="number" id="transpose-input" class="tempo-input" min="-24" max="24" step="1"
+                         value="0" title="Transpose the transformed take by semitones (-24..+24, 0 = off)">
+                </label>
+              </div>
+            </div>
+
+            <div class="op op-vel">
+              <div class="op-head"><span class="op-title">velocity</span></div>
+              <div class="op-body">
+                <label class="vel-enable"><input type="checkbox" id="vel-enabled" checked
+                       title="Enable/disable the velocity compressor stage"><span>compress</span></label>
+                <label class="vel-std"><span>std</span>
+                  <input type="number" id="vel-standard" class="vel-input" min="1" max="127" step="1"
+                         value="100" title="Standard velocity (center of the target band); blank to auto-detect from the buffer">
+                  <button id="vel-auto" class="listen-btn" type="button"
+                          title="Auto-detect standard velocity from the raw buffer (median of note-on velocities)">&#9889; detect</button>
+                </label>
+                <label class="vel-width-label"><span>width</span>
+                  <input type="number" id="vel-width" class="vel-input" min="1" max="127" step="1"
+                         value="50" title="Velocity band half-width (all velocities forced inside standard &plusmn; width/2)">
+                </label>
+                <label class="vel-mode-label"><span>mode</span>
+                  <select id="vel-mode" title="Compressor mode">
+                    <option value="compress" selected>compress</option>
+                    <option value="threshold">clip</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+
+            <div class="op op-humanize">
+              <div class="op-head"><span class="op-title">humanize</span></div>
+              <div class="op-body">
+                <label class="humanizer-enable"><input type="checkbox" id="humanizer-enabled"
+                       title="Add subtle timing/velocity variations to the keyboard output"><span>on</span></label>
+                <label class="humanizer-timing-label"><span>timing</span>
+                  <input type="number" id="humanizer-timing" class="humanizer-input" min="0" max="100" step="1"
+                         value="10" title="Max random timing shift in milliseconds (&plusmn;)">
+                  <span class="unit">ms</span>
+                </label>
+                <label class="humanizer-velocity-label"><span>vel</span>
+                  <input type="number" id="humanizer-velocity" class="humanizer-input" min="0" max="20" step="1"
+                         value="5" title="Max random velocity shift (&plusmn;)">
+                </label>
+              </div>
+            </div>
           </div>
         </section>
 
         <section id="out-card" class="chain-card card">
-          <div class="chain-head">
-            <span class="chain-title">out &middot; keyboard</span>
+          <div class="cartouche chain-head">
+            <span class="cartouche-title chain-title">out &middot; keyboard</span>
+            <div class="cartouche-end">
+              <span class="corner" aria-hidden="true"><svg class="corner-ic"><use href="#ic-out"/></svg></span>
+            </div>
           </div>
-          <div class="chain-controls">
+          <div class="chain-controls out-controls">
             <div class="replay-btn-group">
               <button id="replay-btn" class="record-btn replay-btn" type="button"
-                      title="Play the transformed take back through the keyboard's internal voices. Click again to stop.">
-                <span id="replay-btn-glyph" class="replay-glyph">&#9656;</span><span id="replay-btn-label">play take</span>
+                      title="Play the transformed take through the keyboard's internal voices; press again to restart from the beginning.">
+                <span id="replay-btn-glyph" class="replay-glyph">&#9656;</span><span id="replay-btn-label">play</span>
               </button>
               <button id="replay-stop-btn" class="record-btn stop-btn" type="button"
                       title="Halt playback immediately and cut all notes">
@@ -251,7 +329,7 @@
               </button>
             </div>
             <label class="replay-voice-label">
-              <span>voice:</span>
+              <span>voice</span>
               <select id="replay-voice" title="Voice to use for playback (sends program change before replay; 'auto' uses current receive voice)">
                 <option value="auto">auto (current receive voice)</option>
                 <option value="Grand Piano">Grand Piano</option>
@@ -303,10 +381,13 @@
       </div>
 
       <section id="stave-wrap" class="stave-wrap card">
-        <div class="stave-head">
-          <span class="stave-title">notation</span>
-          <div class="stave-controls">
-            <label><input type="checkbox" id="show-intervals"> intervals</label>
+        <div class="cartouche stave-head">
+          <span class="cartouche-title stave-title">notation</span>
+          <div class="cartouche-end">
+            <div class="stave-controls">
+              <label><input type="checkbox" id="show-intervals"> intervals</label>
+            </div>
+            <span class="corner" aria-hidden="true"><svg class="corner-ic"><use href="#ic-staff"/></svg></span>
           </div>
         </div>
         <div id="stave" class="stave"></div>
@@ -314,8 +395,11 @@
 
       <div class="mini-row">
         <section id="mini-stave-wrap" class="mini-stave-wrap card">
-          <div class="mini-stave-head">
-            <span class="mini-stave-title">last chord / interval</span>
+          <div class="cartouche mini-stave-head">
+            <span class="cartouche-title mini-stave-title">last chord / interval</span>
+            <div class="cartouche-end">
+              <span class="corner" aria-hidden="true"><svg class="corner-ic"><use href="#ic-spark"/></svg></span>
+            </div>
           </div>
           <div id="flash" class="flash"></div>
           <div id="mini-stave" class="mini-stave"></div>

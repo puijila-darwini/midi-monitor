@@ -224,11 +224,6 @@ header h1 {
 .timesig-label select {
   font-size: 12px;
   padding: 1px 5px;
-  border-radius: 2px;
-  border: 1px solid var(--phthalo-border);
-  border-left: 3px solid var(--royal);
-  background: #08110E;
-  color: var(--straw-soft);
 }
 
 /* ---- cards (the walled garden's boxes) ---- */
@@ -246,8 +241,9 @@ header h1 {
 }
 .card:hover { border-color: var(--royal-soft); }
 
-/* ---- pill card heads (the "tab") ---- */
-.feed-header, .stave-head, .keysec-head, .mini-stave-head {
+/* ---- cartouche heads (the "tab"): every card title is an oval cartouche
+   with a straw bar on the right and a small circular medallion icon. ---- */
+.cartouche {
   position: relative;
   display: flex;
   align-items: center;
@@ -255,29 +251,65 @@ header h1 {
   gap: 10px;
   border: 1px solid var(--straw);
   border-radius: 999px;
-  padding: 6px 8px 6px 16px;
+  padding: 5px 6px 5px 16px;
   margin-bottom: 10px;
   margin-right: 14px;
   background: #08110E;
 }
-.feed-header::after, .keysec-head::after, .mini-stave-head::after {
+/* the cartouche bar (the vertical straw nub) */
+.cartouche::after {
   content: '';
   position: absolute;
-  top: 3px;
-  bottom: 3px;
+  top: 4px;
+  bottom: 4px;
   right: -12px;
-  width: 6px;
+  width: 5px;
   border-radius: 3px;
   background: linear-gradient(180deg, var(--straw), var(--straw-gold));
   box-shadow: 0 0 6px rgba(212, 196, 122, 0.35);
 }
-.stave-head::after { content: none; }
-
+.cartouche-end {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+.cartouche-title,
 .feed-label, .stave-title, .keysec-title, .mini-stave-title {
   font-size: 11px;
   letter-spacing: 2px;
   text-transform: uppercase;
   color: var(--straw-soft);
+  white-space: nowrap;
+}
+
+/* ---- the circular medallion icons (one per cartouche) ---- */
+.corner {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--straw-gold);
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 28%, var(--phthalo-card), #08110E 72%);
+  color: var(--straw-soft);
+  box-shadow: inset 0 0 6px rgba(212, 196, 122, 0.25), 0 0 4px rgba(0, 0, 0, 0.4);
+  margin-right: 4px;
+}
+.corner-ic {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.card:hover .corner {
+  border-color: var(--straw);
+  color: var(--straw);
 }
 
 /* ---- buttons (the brass-sole) ---- */
@@ -296,15 +328,38 @@ button:active { transform: translateY(1px); }
 .key-reset { font-size: 11px; padding: 3px 8px; }
 
 select {
-  border: 1px solid var(--phthalo-border);
-  border-left: 3px solid var(--royal);
-  background: #08110E;
-  color: var(--text);
-  border-radius: 2px;
-  padding: 2px 6px;
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 3px 22px 3px 8px;
+  border-radius: 0;
+  border: 1px solid var(--royal-soft);
+  border-left: 2px solid var(--royal);
+  border-bottom: 2px solid var(--straw);
+  background: rgba(8, 17, 14, 0.8);
+  color: var(--straw-soft);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
   font-size: 11px;
+  cursor: pointer;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--straw) 50%),
+    linear-gradient(135deg, var(--straw) 50%, transparent 50%);
+  background-position: calc(100% - 14px) 55%, calc(100% - 9px) 55%;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+  background-color: rgba(8, 17, 14, 0.8);
 }
-select option { background: var(--phthalo-card); color: var(--text); }
+select:hover {
+  border-color: var(--straw);
+  background-color: rgba(107, 63, 160, 0.22);
+}
+select:focus {
+  outline: none;
+  border-color: var(--straw-gold);
+}
+select option {
+  background: #08110E;
+  color: var(--straw-soft);
+}
 
 /* ---- main grid layout ---- */
 .main-grid {
@@ -372,23 +427,8 @@ select option { background: var(--phthalo-card); color: var(--text); }
   flex: 1 1 300px;
   padding: 10px 12px;
 }
-.chain-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  border: 1px solid var(--straw);
-  border-radius: 999px;
-  padding: 6px 8px 6px 16px;
-  margin-bottom: 8px;
-  background: #08110E;
-}
-.chain-title {
-  font-size: 11px;
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  color: var(--straw-soft);
-}
+.transform-card { flex: 2 1 460px; }
+.chain-head { margin-bottom: 10px; }
 .chain-counts {
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
   font-size: 11px;
@@ -402,17 +442,104 @@ select option { background: var(--phthalo-card); color: var(--text); }
   font-size: 11px;
   color: var(--muted);
 }
-.chain-controls label {
+.out-controls { margin-top: 4px; }
+.chain-controls label,
+.op-body label {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   cursor: pointer;
 }
 .chain-status {
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
   font-size: 11px;
   color: var(--straw-gold);
+  white-space: nowrap;
 }
+
+/* ---- transform op modules: one block per stage so each function reads as
+   a distinct piece of machinery (quantize / transpose / velocity / humanize).
+   Each gets its own accent dot + left border from the Nilotic triad. ---- */
+.ops {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
+}
+.op {
+  border: 1px solid var(--phthalo-border);
+  border-left: 3px solid var(--royal);
+  border-bottom: 2px solid var(--straw-gold);
+  border-radius: 2px;
+  background: rgba(8, 17, 14, 0.45);
+  padding: 7px 9px 9px;
+}
+.op-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 7px;
+  padding-bottom: 5px;
+  border-bottom: 1px dashed rgba(42, 79, 68, 0.9);
+}
+.op-head::before {
+  content: '';
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--royal-soft);
+  box-shadow: 0 0 5px rgba(155, 126, 216, 0.6);
+}
+.op-title {
+  font-size: 10px;
+  letter-spacing: 1.8px;
+  text-transform: uppercase;
+  color: var(--straw);
+}
+.op-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.op-body label > span:first-child {
+  color: var(--straw-soft);
+  min-width: 46px;
+}
+.op-body .unit { color: var(--muted); }
+.op-body select { width: 100%; }
+.op-quant     { border-left-color: var(--royal); }
+.op-transpose { border-left-color: var(--straw-gold); }
+.op-transpose .op-head::before {
+  background: var(--straw-gold);
+  box-shadow: 0 0 5px rgba(212, 196, 122, 0.6);
+}
+.op-vel       { border-left-color: var(--royal-bright); }
+.op-vel .op-head::before {
+  background: var(--royal-bright);
+  box-shadow: 0 0 5px rgba(138, 91, 199, 0.6);
+}
+.op-humanize  { border-left-color: var(--straw); }
+.op-humanize .op-head::before {
+  background: var(--straw);
+  box-shadow: 0 0 5px rgba(242, 230, 166, 0.6);
+}
+
+/* compact numeric fields inside the ops */
+.vel-input,
+.humanizer-input {
+  width: 52px;
+  font-size: 11px;
+  padding: 1px 5px;
+  border-radius: 2px;
+  border: 1px solid var(--phthalo-border);
+  border-left: 3px solid var(--royal);
+  background: #08110E;
+  color: var(--text);
+}
+.vel-enable input,
+.humanizer-enable input { accent-color: var(--royal); }
 
 .feed-list {
   list-style: none;
@@ -463,10 +590,10 @@ select option { background: var(--phthalo-card); color: var(--text); }
 
 /* ---- piano ---- */
 #piano-wrap {
-  overflow-x: auto;
-  padding: 10px;
+  padding: 10px 12px 12px;
   max-width: 100%;
 }
+.piano-scroll { overflow-x: auto; }
 
 #piano {
   position: relative;
@@ -614,6 +741,15 @@ select option { background: var(--phthalo-card); color: var(--text); }
   flex: 2 1 420px;
 }
 
+/* ---- section labels (the gilt row labels, from the walled-garden style) ---- */
+.section-label {
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: var(--straw-soft);
+  margin: 4px 0 8px 2px;
+  text-transform: uppercase;
+}
+
 /* ---- intended-key selector ---- */
 .keysec {
   padding: 10px 12px 12px;
@@ -627,13 +763,8 @@ select option { background: var(--phthalo-card); color: var(--text); }
   color: var(--muted);
 }
 .keysec-controls select {
-  background: #08110E;
-  border: 1px solid var(--phthalo-border);
-  border-left: 3px solid var(--royal);
-  border-radius: 2px;
-  color: var(--text);
-  padding: 2px 6px;
   font-size: 11px;
+  padding: 2px 6px;
 }
 .listen-btn {
   display: inline-flex;
@@ -678,7 +809,6 @@ li.tonic {
   min-width: 20px;
   height: 20px;
   padding: 0 6px;
-  margin-right: 16px; /* clear the pill-head nub */
   border-radius: 999px;
   user-select: none;
 }
@@ -808,10 +938,6 @@ li.tonic {
   accent-color: var(--royal);
 }
 .stave-controls select {
-  background: #08110E;
-  border: 1px solid var(--phthalo-border);
-  border-left: 3px solid var(--royal);
-  color: var(--text);
   font-size: 11px;
 }
 
@@ -859,6 +985,24 @@ li.tonic {
   color: var(--ok);
 }
 .replay-glyph { font-size: 10px; line-height: 1; }
+
+/* STOP: the halt control — crimson like the reset button; LOOP: straw when armed */
+.stop-btn {
+  border-color: rgba(180, 40, 40, 0.6);
+  color: #f0c9cf;
+}
+.stop-btn:hover {
+  background: rgba(180, 40, 40, 0.35);
+  border-color: #c0392b;
+  color: #fff;
+}
+.loop-btn.active,
+.loop-btn.recording {
+  border-color: var(--ok);
+  border-left: 3px solid var(--ok);
+  background: var(--phthalo-card);
+  color: var(--ok);
+}
 
 #stave {
   background: var(--paper);
@@ -909,33 +1053,9 @@ li.tonic {
 .raw-sidebar {
   padding: 10px 12px;
 }
-.raw-take-head {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  border: 1px solid var(--straw);
-  border-radius: 999px;
-  padding: 6px 8px 6px 16px;
-  margin-bottom: 10px;
-  background: #08110E;
-}
 .raw-take-title {
   font-size: 11px;
   letter-spacing: 2px;
   text-transform: uppercase;
   color: var(--straw-soft);
-}
-.raw-take-clear {
-  font-size: 10px;
-  padding: 2px 6px;
-  background: transparent;
-  border: 1px solid var(--muted);
-  color: var(--muted);
-  cursor: pointer;
-}
-.raw-take-clear:hover {
-  border-color: var(--royal-soft);
-  color: var(--royal-soft);
 }

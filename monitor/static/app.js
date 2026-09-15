@@ -909,10 +909,10 @@ case "replay":
       if (feedList) feedList.innerHTML = "";
     });
   })();
-  // Play/stop take replay. POSTs /api/replay (which serializes the quantized
-  // buffer back to the keyboard's internal voices on a background thread);
-  // while a replay is active the button becomes a STOP that cancels it.
-  // The SSE handler flips replayActive + feeds it back through setReplayBtn().
+  // Play/restart take replay. POSTs /api/replay (which serializes the
+  // quantized buffer back to the keyboard's internal voices on a background
+  // thread). The button always says "play": pressing it again while a take is
+  // sounding restarts from the beginning. STOP is the separate halt control.
   var setReplayBtn = null;
   (function () {
     var btn = document.getElementById("replay-btn");
@@ -920,19 +920,7 @@ case "replay":
     var glyph = document.getElementById("replay-btn-glyph");
     if (!btn) return;
 
-    function render() {
-      btn.classList.toggle("playing", replayActive);
-      if (glyph) glyph.textContent = replayActive ? "\u25a0" : "\u25b6";
-      if (lab) lab.textContent = replayActive ? "stop" : "play take";
-    }
-    setReplayBtn = render;
-
-    btn.addEventListener("click", function () {
-      if (replayActive) {
-        fetch("/api/replay/stop", { method: "POST" })
-          .catch(function () { /* transient */ });
-        return;
-      }
+    function startReplay() {
       var voiceSel = document.getElementById("replay-voice");
       var voiceVal = voiceSel ? voiceSel.value : "auto";
       fetch("/api/replay", {
@@ -944,6 +932,24 @@ case "replay":
           if (!res.ok) addFeed("REPLAY  " + (res.error || "failed"), "replay");
         })
         .catch(function () { /* transient */ });
+    }
+
+    function render() {
+      btn.classList.toggle("playing", replayActive);
+      if (glyph) glyph.textContent = "\u25b6";
+      if (lab) lab.textContent = "play";
+    }
+    setReplayBtn = render;
+
+    btn.addEventListener("click", function () {
+      if (replayActive) {
+        // Already playing: restart from the beginning.
+        fetch("/api/replay/stop", { method: "POST" })
+          .then(function () { startReplay(); })
+          .catch(function () { /* transient */ });
+        return;
+      }
+      startReplay();
     });
 
     // Pinning: a hand-picked non-auto voice stops the default from following
@@ -1459,6 +1465,19 @@ if (typeof s.time_signature === "string" && s.time_signature.indexOf("/") > 0) {
           // We assume it's always enabled for UI purposes; the control set enables/disables it
           // but we keep UI showing it as enabled so user can adjust parameters
           // (disabled state is handled by the backend; UI always allows tweaking)
+        }
+        // Sync humanizer settings from backend state
+        if (typeof s.humanizer_enabled === "boolean") {
+          var hchk = document.getElementById("humanizer-enabled");
+          if (hchk && document.activeElement !== hchk) hchk.checked = s.humanizer_enabled;
+        }
+        if (typeof s.humanizer_timing_ms !== "undefined") {
+          var htim = document.getElementById("humanizer-timing");
+          if (htim && document.activeElement !== htim) htim.value = String(s.humanizer_timing_ms);
+        }
+        if (typeof s.humanizer_velocity !== "undefined") {
+          var hvel = document.getElementById("humanizer-velocity");
+          if (hvel && document.activeElement !== hvel) hvel.value = String(s.humanizer_velocity);
         }
         seedHeld(s.held || []);
       // Sync the REC/STOP control with the backend recording state.

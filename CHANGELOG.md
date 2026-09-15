@@ -809,3 +809,30 @@ that file lean. History is chronological; most lines start with a version tag.
 - Ver 58: quantization grid extended to 0.25 (whole notes) and coarser (half, 8th, 16th, 32nd, 64th); replaced loose/normal/tight labels with explicit values; stave tint now uses event->heads map (headsForEvent) to recolour playback notes regardless of VexFlow id propagation; key change re-render confirmed via tonic+scale selector
 - Ver 59: stave tint now uses eventHeadMap built during render (placeAccidentals called with recordMap=true) so playback purple works regardless of VexFlow id propagation; headsForEvent skips rest events; project renamed to Abora in title/header
 - Ver 60: VELOCITY COMPRESSOR + HUMANIZER + STOP/LOOP REPLAY BUTTONS. Added velocity compressor stage (after quantization/transposition, before expansion) with threshold/compress modes and auto-detect standard velocity. Added humanizer stage (at end of chain) with ±timing_ms and ±velocity jitter for organic feel. Enhanced replay controls with dedicated STOP (immediate halt) and LOOP (continuous repeat until stopped) buttons alongside voice selector. All features integrate into existing transform chain and expose via /api/velocity, /api/humanizer, /api/replay/loop endpoints with real-time UI sync.
+- Ver 61: UI POLISH — nilotic cartouches, op-stage transform card, restart-on-play.
+  Every card title is now an official cartouche: unified .cartouche pill with the
+  straw bar on the right (::after nub) on ALL nine headers (note stream, raw midi
+  buffer, keyboard, tempo & meter, tonic & scale, transform, out, notation, last
+  chord/interval) — stave-head bar restored, chain-head + raw-take-head gained
+  theirs. Each cartouche carries a small circular medallion icon (28px straw-gold
+  ring, phthalo radial fill, inline SVG glyph: notes/midi/piano/metro/key/
+  sliders/out/staff/spark) matching the walled-garden dashboard idiom.
+  The transform card now reads as FOUR distinct stages, each in its own .op
+  module with a labelled cartouche head (dot + uppercase title), its own accent
+  from the triadic palette (quantize royal / transpose straw-gold / velocity
+  royal-bright / humanize straw) and dashed divider: quantize (grid + live chain
+  status), transpose (semitones), velocity (compress checkbox, std/detect, width,
+  mode), humanize (on/timing/vel). Duplicate humanizer control removed from the
+  tempo card (was clashing duplicate IDs); snapshot now syncs humanizer enabled/
+  timing/velocity to the single UI instance. Base select restyled to match the
+  reference (appearance:none, custom straw chevron, ui-monospace, straw-soft on
+  phthalo); timesig/keysec/stave select overrides merged down.
+  The out card play button is now a simple ▶ play that RESTARTS from the
+  beginning when pressed while a take is sounding (stop-then-start); the label no
+  longer flips to "stop", so STOP stays the dedicated halt control (crimson
+  danger styling) and LOOP gets a straw "armed" state. Section labels
+  (capture / interpret & tune / transform & play) added above the card rows.
+  Piano scrollwrapped (.piano-scroll) so its cartouche no longer scrolls with
+  the keys. Verified live in the browser: zero console errors, all 9 cartouches
+  bar-nubbed, all 9 icons present, no duplicate ids, catch-tooltip still works.
+  Committed agent:, pushed.
