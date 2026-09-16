@@ -141,9 +141,6 @@ class State:
         self.echo_enabled = False
         # Voice the echo path plays ("auto" = leave the keyboard as-is).
         self.echo_voice = "auto"
-        # On-screen piano audition: clicks inject into the capture stream and
-        # (when enabled) also play the note directly on the board via amidi.
-        self.audition_enabled = True
         # Near-simultaneous window (seconds) for grouping chord members when
         # bypassing (no grid to snap them together). Grouping ALSO requires
         # overlap (next onset lands while the group still sounds) so fast
@@ -1370,7 +1367,6 @@ class State:
             "local_control": self.local_control,
             "echo_enabled": self.echo_enabled,
             "echo_voice": self.echo_voice,
-            "audition_enabled": self.audition_enabled,
             "seq_outs": list(self.seq_outs),
             "raw_outs": list(self.raw_outs),
             "midi_channel": self.midi_channel,

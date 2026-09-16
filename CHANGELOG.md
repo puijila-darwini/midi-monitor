@@ -1015,13 +1015,11 @@ that file lean. History is chronological; most lines start with a version tag.
   Verified via browser: all four modes set local/echo state correctly, zero
   console errors. Committed agent:, pushed.
 
-- Ver 70b: ON-SCREEN PIANO AUDITION PREVIEW — clicking a key also plays it
-  through the board via /api/audition, so you can hear a voice before
-  committing to a take (toggle on the keyboard card header, persisted).
-  The preview respects the routing mode: it fires ONLY in 'keys' mode;
-  in 'layer'/'echo' the injected note already sounds via the echo path and
-  preview stays silent (would only double it); in 'midi' mode the pipes stay
-  strictly silent (keys emit MIDI only). Drove by the user clicking keys in
-  midi mode and hearing them — fixed by gating on window.keysMode.
-  /api/audition {note,velocity,on}; /api/audition/enable {enabled};
-  state.audition_enabled. Committed agent:, pushed.
+- Ver 70b: ON-SCREEN PIANO AUDITION — clicks inject into the capture
+  stream (always, for analysis/stave/feed) AND, because the capture
+  loop re-sends keybed notes to the board when echo is on, they sound
+  through the board PURELY VIA THE ECHO PATH — so they only play in
+  LAYER and ECHO modes. In keys/midi they stay silent for analysis.
+  No second send path (/api/audition) — one mechanism, the echo
+  capture-loop note_on/note_off, handles both.
+  Committed agent:, pushed.
