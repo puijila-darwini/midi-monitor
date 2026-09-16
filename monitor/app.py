@@ -410,6 +410,7 @@ def api_ctrl():
     if request.method == "GET":
         return jsonify({
             "ok": True,
+            "device": bool(state.online),
             "out": dict(state.control_values),
             "out_pitch_bend": state.control_pitch_bend,
             "local_control": state.local_control,
@@ -418,40 +419,49 @@ def api_ctrl():
         })
     body = request.get_json(silent=True) or {}
     ch = state.midi_channel
+    sent = False
     try:
         if "cc" in body:
             cc = int(body["cc"])
             value = int(body["value"])
             if not (0 <= cc <= 127 and 0 <= value <= 127):
                 return jsonify({"ok": False, "error": "cc/value must be 0-127"}), 400
-            control_change(cc, value, channel=ch)
+            sent = control_change(cc, value, channel=ch)
             state.control_values[cc] = value
             if cc == 122:
                 state.local_control = value
-            return jsonify({"ok": True, "cc": cc, "value": value})
-        if "pitch" in body:
+            extra = {"cc": cc, "value": value}
+        elif "pitch" in body:
             semi = float(body["pitch"])
             if not (-24.0 <= semi <= 24.0):
                 return jsonify({"ok": False, "error": "pitch must be -24..24"}), 400
-            pitch_bend(semi, channel=ch)
+            sent = pitch_bend(semi, channel=ch)
             state.control_pitch_bend = round(semi, 2)
-            return jsonify({"ok": True, "pitch": state.control_pitch_bend})
-        action = body.get("action")
-        if action == "panic":
-            midi_panic()
-            return jsonify({"ok": True, "action": "panic"})
-        if action == "gmreset":
-            gm_system_on()
-            state.control_values.pop(0, None)
-            return jsonify({"ok": True, "action": "gmreset"})
-        if action == "local":
-            value = int(body.get("value", 0))
-            control_change(122, value, channel=ch)
-            state.local_control = value
-            return jsonify({"ok": True, "local_control": value})
+            extra = {"pitch": state.control_pitch_bend}
+        else:
+            action = body.get("action")
+            if action == "panic":
+                sent = midi_panic()
+                extra = {"action": "panic"}
+            elif action == "gmreset":
+                sent = gm_system_on()
+                state.control_values.pop(0, None)
+                extra = {"action": "gmreset"}
+            elif action == "local":
+                value = int(body.get("value", 0))
+                sent = control_change(122, value, channel=ch)
+                state.local_control = value
+                extra = {"local_control": value}
+            else:
+                return jsonify({"ok": False, "error": "nothing to do"}), 400
     except ValueError:
         return jsonify({"ok": False, "error": "bad numeric field"}), 400
-    return jsonify({"ok": False, "error": "nothing to do"}), 400
+    resp = {"ok": True, "device": bool(sent), **extra}
+    if not sent:
+        # Keyboard detached (NORMAL): the intent is recorded anyway, but the
+        # UI should know the line stayed silent.
+        resp["warning"] = "keyboard offline - send dropped"
+    return jsonify(resp)
 
 
 @app.route("/api/record", methods=["POST"])

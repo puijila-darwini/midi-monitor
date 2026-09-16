@@ -1390,44 +1390,72 @@ case "replay":
   // Out control surface: send CCs / pitch to the keyboard (raw hw:2,0,0) and
   // track what comes back from it. Wire the knobs + panic/gm reset buttons.
   (function () {
-    function postCtrl(body) {
+    var ctrlStatusEl = document.getElementById("ctrl-status");
+    var ctrlStatusTimer = null;
+    function flashCtrlStatus(text, bad) {
+      if (!ctrlStatusEl) return;
+      ctrlStatusEl.textContent = text;
+      ctrlStatusEl.classList.toggle("bad", !!bad);
+      ctrlStatusEl.hidden = false;
+      if (ctrlStatusTimer) clearTimeout(ctrlStatusTimer);
+      ctrlStatusTimer = setTimeout(function () { ctrlStatusEl.hidden = true; }, 2600);
+    }
+    function describeCtrl(body) {
+      if (body.cc) return "CC" + body.cc + " = " + body.value;
+      if (body.pitch !== undefined) return "pitch " + (body.pitch > 0 ? "+" : "") + body.pitch;
+      if (body.action) return body.action;
+      return "send";
+    }
+    function postCtrl(label, body) {
       fetch("/api/ctrl", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body)
-      }).catch(function () { /* ignore transient */ });
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (res && res.ok) {
+            addFeed('SENT \u2192 ' + label + (res.device === false ? " (board offline)" : ""), "ctrl_out");
+            if (res.warning) flashCtrlStatus("keyboard offline \u2014 " + label + " dropped", true);
+            else flashCtrlStatus(label + " sent", false);
+          } else if (res && res.error) {
+            flashCtrlStatus(res.error, true);
+          }
+        })
+        .catch(function () { flashCtrlStatus("send failed", true); });
     }
-    function wireRange(id, bodyFn) {
+    function wireRange(id, bodyFn, label) {
       var el = document.getElementById(id);
       if (!el) return;
       var out = document.getElementById(id + "-out");
       el.addEventListener("input", function () {
         if (out) out.textContent = el.value;
-        postCtrl(bodyFn(el));
+        postCtrl(label + " " + el.value, bodyFn(el));
       });
     }
-    wireRange("ctrl-porta-time", function (el) { return { cc: 5, value: parseInt(el.value, 10) }; });
-    wireRange("ctrl-volume", function (el) { return { cc: 7, value: parseInt(el.value, 10) }; });
-    wireRange("ctrl-expression", function (el) { return { cc: 11, value: parseInt(el.value, 10) }; });
-    wireRange("ctrl-mod", function (el) { return { cc: 1, value: parseInt(el.value, 10) }; });
-    wireRange("ctrl-pitch", function (el) { return { pitch: parseFloat(el.value) }; });
-    function wireCheck(id, cc) {
+    wireRange("ctrl-porta-time", function (el) { return { cc: 5, value: parseInt(el.value, 10) }; }, "porta time");
+    wireRange("ctrl-volume", function (el) { return { cc: 7, value: parseInt(el.value, 10) }; }, "volume");
+    wireRange("ctrl-expression", function (el) { return { cc: 11, value: parseInt(el.value, 10) }; }, "expression");
+    wireRange("ctrl-mod", function (el) { return { cc: 1, value: parseInt(el.value, 10) }; }, "mod");
+    wireRange("ctrl-pitch", function (el) { return { pitch: parseFloat(el.value) }; }, "pitch");
+    function wireCheck(id, cc, label) {
       var el = document.getElementById(id);
       if (!el) return;
       el.addEventListener("change", function () {
-        if (cc) postCtrl({ cc: cc, value: el.checked ? 127 : 0 });
-        else postCtrl({ action: "local", value: el.checked ? 127 : 0 });
+        var v = el.checked ? 127 : 0;
+        if (cc) postCtrl(label + " " + (el.checked ? "on" : "off"), { cc: cc, value: v });
+        else postCtrl(label + " " + (el.checked ? "on" : "off"), { action: "local", value: v });
       });
     }
-    wireCheck("ctrl-sustain", 64);
-    wireCheck("ctrl-porta", 65);
-    wireCheck("ctrl-local", null);
-    function wireBtn(id, bodyFn) {
+    wireCheck("ctrl-sustain", 64, "sustain");
+    wireCheck("ctrl-porta", 65, "portamento");
+    wireCheck("ctrl-local", null, "local");
+    function wireBtn(id, bodyFn, label) {
       var el = document.getElementById(id);
-      if (el) el.addEventListener("click", function () { postCtrl(bodyFn()); });
+      if (el) el.addEventListener("click", function () { postCtrl(label, bodyFn()); });
     }
-    wireBtn("ctrl-panic", function () { return { action: "panic" }; });
-    wireBtn("ctrl-gmreset", function () { return { action: "gmreset" }; });
+    wireBtn("ctrl-panic", function () { return { action: "panic" }; }, "panic");
+    wireBtn("ctrl-gmreset", function () { return { action: "gmreset" }; }, "gm reset");
   })();
 
   // Quantization grid selector (explicit note values, off = bypass)

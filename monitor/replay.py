@@ -71,15 +71,27 @@ VOICES = {
 }
 
 def _send(hexstr):
-    subprocess.run(["amidi", "-p", DEVICE, "-S", hexstr], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    """Send a raw MIDI hex string to the keyboard (raw path).
+
+    Returns True if amidi accepted it. amidi failing (returncode != 0) means
+    the board is simply absent/detached — NORMAL per AGENTS.md — so this never
+    raises; callers decide how to surface it.
+    """
+    try:
+        r = subprocess.run(["amidi", "-p", DEVICE, "-S", hexstr],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return r.returncode == 0
+    except Exception:
+        return False
 
 
 def program_change(bank, pc):
     """Send a program change for (bank, pc) to the keyboard (raw path)."""
-    _send("B0 00 %02X" % bank)
+    ok = _send("B0 00 %02X" % bank)
     time.sleep(0.02)
-    _send("C0 %02X" % pc)
+    ok = _send("C0 %02X" % pc) and ok
     time.sleep(0.02)
+    return ok
 
 
 def control_change(cc, value, channel=0):
@@ -87,8 +99,9 @@ def control_change(cc, value, channel=0):
     ch = max(0, min(15, int(channel)))
     cc = max(0, min(127, int(cc)))
     value = max(0, min(127, int(value)))
-    _send("B%X %02X %02X" % (ch, cc, value))
+    ok = _send("B%X %02X %02X" % (ch, cc, value))
     time.sleep(0.01)
+    return ok
 
 
 def pitch_bend(semitones, channel=0):
@@ -97,14 +110,16 @@ def pitch_bend(semitones, channel=0):
     ch = max(0, min(15, int(channel)))
     val = int(round(8192 + max(-24.0, min(24.0, float(semitones))) / 24.0 * 8192))
     val = max(0, min(16383, val))
-    _send("E%X %02X %02X" % (ch, val & 0x7F, (val >> 7) & 0x7F))
+    ok = _send("E%X %02X %02X" % (ch, val & 0x7F, (val >> 7) & 0x7F))
     time.sleep(0.01)
+    return ok
 
 
 def gm_system_on():
     """GM System ON SysEx (F0 7E 7F 09 01 F7): wholesale re-initializer."""
-    _send("F0 7E 7F 09 01 F7")
+    ok = _send("F0 7E 7F 09 01 F7")
     time.sleep(0.05)
+    return ok
 
 
 def midi_panic():
@@ -114,8 +129,9 @@ def midi_panic():
         parts.append("B%X 78 00" % ch)  # All Sound Off (120)
         parts.append("B%X 7B 00" % ch)  # All Notes Off (123)
     parts.append("B0 79 00")            # Reset All Controllers (121)
-    _send(" ".join(parts))
+    ok = _send(" ".join(parts))
     time.sleep(0.05)
+    return ok
 
 
 def plan(quantized_notes, speed=1.0):

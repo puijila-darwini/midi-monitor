@@ -565,6 +565,8 @@ select option {
 
 /* ---- out · ctrl: control surface to/from the keyboard ---- */
 .ctrl-controls { margin-top: 4px; display: flex; flex-direction: column; gap: 8px; }
+.ctrl-status { font-size: 12px; padding: 2px 8px; border-radius: 2px; background: rgba(59,110,165,0.18); color: var(--straw-soft, #e8d5a3); }
+.ctrl-status.bad { background: rgba(180,40,40,0.22); color: #ffcccc; }
 .ctrl-btn-group { display: flex; align-items: center; gap: 6px; }
 .ctrl-grid { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; }
 .ctrl-check { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; }
@@ -692,6 +694,7 @@ select option {
 .feed-list li.interval { color: var(--straw); font-weight: 600; opacity: 1; }
 .feed-list li.program_change { color: var(--straw-gold); font-style: italic; }
 .feed-list li.ctrl_in { color: var(--groove, #7fa2b8); font-style: italic; }
+.feed-list li.ctrl_out { color: var(--royal-bright, #7cc4ff); }
 .feed-list li.pitch_in { color: var(--straw, #C9A86A); }
 .feed-list li.pitch_center { color: var(--muted); }
 .feed-list li.statusline { color: var(--muted); font-style: italic; }

@@ -971,3 +971,19 @@ that file lean. History is chronological; most lines start with a version tag.
   -> POST /api/ctrl) + boot-sync; removed a stale merge-artifact comment in
   app.js. Zero JS console errors on fresh load + clear. Committed agent:,
   pushed.
+
+- Ver 69: CONTROL SURFACE ROBUSTNESS + FEEDBACK — "buttons not working"
+  investigation. Root cause was a 1-line bug: replay._send() raised
+  CalledProcessError when amidi hit a transiently-absent device (board
+  unplugged/replug handling is NORMAL per AGENTS.md), so POST /api/ctrl
+  returned a 500 on the very send the user was testing and the frontend
+  swallowed it silently -> controls appeared dead. Fix: _send() never
+  raises; returns bool. replay helpers (control_change/pitch_bend/
+  gm_system_on/midi_panic/program_change) pass it through. /api/ctrl
+  records the intent in state even when the board is off, returns
+  {"ok":true,"device":false,"warning":...} instead of a crash; GET now
+  reports "device". UI: every control send posts a "SENT -> ..." feed
+  line + a status flash in the card ("keyboard offline - dropped" when
+  the board is gone). Verified: valid amidi -> device:true, bogus hex ->
+  graceful False, gm reset + sliders round-trip with SENT feed lines,
+  zero 500s. Committed agent:, pushed.
