@@ -122,6 +122,17 @@ class State:
         # leave SILENT — a staccato gap). 0 = legato: each note ends exactly
         # when the next attacks (and may never outlast it).
         self.articulation_gap = 0.0
+        # Received-control watch (signals arriving FROM the keyboard: wheel ->
+        # pitch bend + CC1, panel voice buttons -> bank/PC, aux 120/121/123).
+        # {controller: last value 0-127}; pitch bend in semitones (+-24).
+        self.received_ctrl = {}
+        self.received_pitch_bend = 0.0
+        # Out control surface: last values we SENT to the keyboard, for UI
+        # boot-sync. {controller: value 0-127}, pitch bend in semitones, and
+        # the CC122 local-control state (None until first set).
+        self.control_values = {}
+        self.control_pitch_bend = 0.0
+        self.local_control = None
         # Near-simultaneous window (seconds) for grouping chord members when
         # bypassing (no grid to snap them together). Grouping ALSO requires
         # overlap (next onset lands while the group still sounds) so fast
@@ -1103,6 +1114,14 @@ class State:
                 {"type": "program_change", "program": event["program"],
                  "bank": self.bank, "channel": event.get("channel", 0), "time": event["time"]}
             )
+        elif etype == "control_change":
+            # Watch received CCs (wheel -> CC1, panel -> aux resets, etc.).
+            self.received_ctrl[int(event["controller"])] = int(event["value"])
+        elif etype == "pitch_bend":
+            # aseqdump reports the full 14-bit value (0-16383, center 8192);
+            # the PSS-A50 bends +-24 semitones over that whole range.
+            v = int(event["value"])
+            self.received_pitch_bend = round((v - 8192) / 8192.0 * 24.0, 2)
         elif etype == "offline":
             self.online = False
             self.recent.append({"type": "offline", "time": event["time"]})
@@ -1333,6 +1352,11 @@ class State:
             "humanizer_timing_ms": self.humanizer_timing_ms,
             "humanizer_velocity": self.humanizer_velocity,
             "articulation_gap": self.articulation_gap,
+            "received_ctrl": dict(self.received_ctrl),
+            "received_pitch_bend": self.received_pitch_bend,
+            "control_values": dict(self.control_values),
+            "control_pitch_bend": self.control_pitch_bend,
+            "local_control": self.local_control,
             "seq_outs": list(self.seq_outs),
             "raw_outs": list(self.raw_outs),
             "midi_channel": self.midi_channel,

@@ -562,6 +562,20 @@ select option {
   color: var(--muted);
 }
 .out-controls { margin-top: 4px; }
+
+/* ---- out · ctrl: control surface to/from the keyboard ---- */
+.ctrl-controls { margin-top: 4px; display: flex; flex-direction: column; gap: 8px; }
+.ctrl-btn-group { display: flex; align-items: center; gap: 6px; }
+.ctrl-grid { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; }
+.ctrl-check { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; }
+.ctrl-check input { accent-color: var(--royal, #3b6ea5); }
+.ctrl-slider { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
+.ctrl-slider .ctrl-range { width: 150px; accent-color: var(--royal, #3b6ea5); }
+.ctrl-slider.ctrl-pitch .ctrl-range { width: 190px; }
+.ctrl-out { min-width: 28px; text-align: right; font-variant-numeric: tabular-nums; color: var(--straw-soft, #e8d5a3); }
+.ctrl-received { align-items: baseline; border-top: 1px dashed var(--straw-gold, rgba(201,168,106,.35)); padding-top: 6px; font-size: 12px; }
+.ctrl-rx-title { color: var(--muted); }
+.ctrl-rx { color: var(--straw-soft, #e8d5a3); font-variant-numeric: tabular-nums; }
 .chain-controls label,
 .op-body label {
   display: flex;
@@ -677,6 +691,9 @@ select option {
 .feed-list li.arpeggio { color: var(--royal-bright); font-weight: 600; opacity: 1; }
 .feed-list li.interval { color: var(--straw); font-weight: 600; opacity: 1; }
 .feed-list li.program_change { color: var(--straw-gold); font-style: italic; }
+.feed-list li.ctrl_in { color: var(--groove, #7fa2b8); font-style: italic; }
+.feed-list li.pitch_in { color: var(--straw, #C9A86A); }
+.feed-list li.pitch_center { color: var(--muted); }
 .feed-list li.statusline { color: var(--muted); font-style: italic; }
 .feed-list li.on .nmark { color: var(--straw-soft); font-weight: 700; }
 .feed-list li.off { color: var(--muted); }
@@ -707,10 +724,17 @@ select option {
 }
 *::-webkit-scrollbar-corner { background: var(--phthalo-deep); }
 
-/* ---- piano ---- */
+/* ---- piano (+ last chord/interval) sit side by side at the top ---- */
+.top-row {
+  display: flex;
+  align-items: stretch;
+  gap: 14px;
+  flex-wrap: wrap;
+}
 #piano-wrap {
   padding: 10px 12px 12px;
   max-width: 100%;
+  flex: 1 1 640px;
 }
 .piano-scroll { overflow-x: auto; }
 
@@ -1150,7 +1174,7 @@ li.tonic {
 }
 .mini-stave-wrap {
   flex: 0 0 auto;
-  width: 560px;
+  width: 220px;
   padding: 10px 12px;
 }
 .mini-stave-wrap #flash {

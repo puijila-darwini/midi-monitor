@@ -110,15 +110,28 @@
 
     <!-- Right main area -->
     <main id="main-area" class="main-area">
-      <section id="piano-wrap" class="card">
-        <div class="cartouche piano-head">
-          <span class="cartouche-title">keyboard</span>
-          <div class="cartouche-end">
-            <span class="corner" aria-hidden="true"><svg class="corner-ic"><use href="#ic-piano"/></svg></span>
+      <div class="top-row">
+        <section id="piano-wrap" class="card">
+          <div class="cartouche piano-head">
+            <span class="cartouche-title">keyboard</span>
+            <div class="cartouche-end">
+              <span class="corner" aria-hidden="true"><svg class="corner-ic"><use href="#ic-piano"/></svg></span>
+            </div>
           </div>
-        </div>
-        <div class="piano-scroll"><div id="piano"></div></div>
-      </section>
+          <div class="piano-scroll"><div id="piano"></div></div>
+        </section>
+
+        <section id="mini-stave-wrap" class="mini-stave-wrap card">
+          <div class="cartouche mini-stave-head">
+            <span class="cartouche-title mini-stave-title">last chord / interval</span>
+            <div class="cartouche-end">
+              <span class="corner" aria-hidden="true"><svg class="corner-ic"><use href="#ic-spark"/></svg></span>
+            </div>
+          </div>
+          <div id="flash" class="flash"></div>
+          <div id="mini-stave" class="mini-stave"></div>
+        </section>
+      </div>
 
       <div class="section-label">interpret &amp; tune</div>
 
@@ -405,6 +418,69 @@
             </div>
           </div>
         </section>
+
+        <section id="ctrl-card" class="chain-card card ctrl-card">
+          <div class="cartouche chain-head">
+            <span class="cartouche-title chain-title">out &middot; ctrl</span>
+            <div class="cartouche-end">
+              <span class="corner" aria-hidden="true"><svg class="corner-ic"><use href="#ic-sliders"/></svg></span>
+            </div>
+          </div>
+          <div class="chain-controls ctrl-controls">
+            <div class="ctrl-btn-group">
+              <button id="ctrl-panic" class="record-btn stop-btn" type="button"
+                      title="All Sound Off + All Notes Off on every channel, then Reset All Controllers (kills any stuck/hanging notes)">
+                <span>&#9889;</span><span>panic</span>
+              </button>
+              <button id="ctrl-gmreset" class="reset-btn" type="button"
+                      title="GM System ON SysEx - re-initialize the keyboard (resets voice to Grand Piano)">
+                <span>&#8635;</span><span>gm reset</span>
+              </button>
+            </div>
+            <div class="ctrl-grid">
+              <label class="ctrl-check"><input type="checkbox" id="ctrl-sustain"
+                     title="CC64 sustain pedal (127 on / 0 off)"><span>sustain</span></label>
+              <label class="ctrl-check"><input type="checkbox" id="ctrl-porta"
+                     title="CC65 portamento switch"><span>portamento</span></label>
+              <label class="ctrl-check"><input type="checkbox" id="ctrl-local"
+                     title="CC122 Local Control. ON = keys sound the internal voices (normal). OFF = keys emit MIDI only - use when echoing to avoid double-sound; the keyboard then needs a computer to make sound"><span>local</span></label>
+              <label class="ctrl-slider"><span>porta time</span>
+                <input type="range" id="ctrl-porta-time" class="ctrl-range" min="0" max="127" value="8"
+                       title="CC5 portamento time (0-127)">
+                <output class="ctrl-out" id="ctrl-porta-time-out">8</output>
+              </label>
+            </div>
+            <div class="ctrl-grid">
+              <label class="ctrl-slider"><span>volume</span>
+                <input type="range" id="ctrl-volume" class="ctrl-range" min="0" max="127" value="100"
+                       title="CC7 channel volume">
+                <output class="ctrl-out" id="ctrl-volume-out">100</output>
+              </label>
+              <label class="ctrl-slider"><span>expression</span>
+                <input type="range" id="ctrl-expression" class="ctrl-range" min="0" max="127" value="127"
+                       title="CC11 expression (swell)">
+                <output class="ctrl-out" id="ctrl-expression-out">127</output>
+              </label>
+            </div>
+            <div class="ctrl-grid">
+              <label class="ctrl-slider"><span>mod wheel</span>
+                <input type="range" id="ctrl-mod" class="ctrl-range" min="0" max="127" value="0"
+                       title="CC1 modulation wheel">
+                <output class="ctrl-out" id="ctrl-mod-out">0</output>
+              </label>
+              <label class="ctrl-slider ctrl-pitch"><span>pitch bend</span>
+                <input type="range" id="ctrl-pitch" class="ctrl-range" min="-24" max="24" value="0" step="1"
+                       title="Pitch bend in semitones (-24..+24, 0 = center)">
+                <output class="ctrl-out" id="ctrl-pitch-out">0</output>
+              </label>
+            </div>
+            <div class="ctrl-grid ctrl-received">
+              <span class="ctrl-rx-title">from keyboard &rarr;</span>
+              <span id="ctrl-received" class="ctrl-rx" title="Last signals seen arriving from the keyboard">
+                nothing yet</span>
+            </div>
+          </div>
+        </section>
       </div>
 
       <section id="stave-wrap" class="stave-wrap card">
@@ -419,19 +495,6 @@
         </div>
         <div id="stave" class="stave"></div>
       </section>
-
-      <div class="mini-row">
-        <section id="mini-stave-wrap" class="mini-stave-wrap card">
-          <div class="cartouche mini-stave-head">
-            <span class="cartouche-title mini-stave-title">last chord / interval</span>
-            <div class="cartouche-end">
-              <span class="corner" aria-hidden="true"><svg class="corner-ic"><use href="#ic-spark"/></svg></span>
-            </div>
-          </div>
-          <div id="flash" class="flash"></div>
-          <div id="mini-stave" class="mini-stave"></div>
-        </section>
-      </div>
     </main>
   </div>
 

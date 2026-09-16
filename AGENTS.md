@@ -9,10 +9,12 @@ PSS-A50 USB keyed into this machine.
 - Keyboard is frequently powered OFF / detached. Absence from aconnect
   (or client 24 gone) is NORMAL — just tell the user, don't deep-investigate.
 - The keyboard emits constant `Clock` and `Active Sensing` chatter -
-  ALWAYS filter these out. The PSS-A50 emits MINIMAL MIDI information:
-  only `Note on` / `Note off` events (plus Clock/Active Sensing).
-  No Control Change, Pitch Bend, Channel Pressure, SysEx, or other
-  controller data is emitted over USB.
+  ALWAYS filter these out. Played notes arrive as `Note on` / `Note off`;
+  the board also TRANSMITS pitch bend + CC1 (mod wheel) and, on a panel/voice
+  action (e.g. selecting a voice), Program Change + bank CC0/32 + a burst of
+  controller data (CC6/11/71/72/74/100/101 etc.) and SysEx 120/121/123 aux.
+  `capture.py` parses all of it; capture handles note/ctrl/pitch events (see
+  the out · ctrl card's "received" readout).
 - The PSS-A50 ALSO RECEIVES over the same USB (bidirectional). It plays its
   INTERNAL voices (no softsynth needed): note on/off and full chords sound via
   its own speakers. Send path is the raw device `hw:2,0,0` (amidi) because ALSA

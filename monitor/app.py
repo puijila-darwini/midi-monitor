@@ -13,7 +13,7 @@ from flask import Flask, jsonify, render_template, request, Response
 from .capture import Capture
 from .state import State
 from .analysis import Analyser
-from .replay import Replay, plan_from_raw, VOICES
+from .replay import Replay, plan_from_raw, VOICES, control_change, pitch_bend, gm_system_on, midi_panic
 from . import midiout
 from . import sinks
 from . import chords
@@ -24,6 +24,9 @@ app.config["TEMPLATES_AUTO_RELOAD"] = True
 
 PORT = 5050
 FULL_KEYBOARD = False
+
+# Throttle timestamps for received CC/pitch SSE publish (~4/s per source).
+_ctrl_log_time = {}
 
 # --- Launchable MIDI destinations (data-driven: see monitor/sinks.py) ---
 
@@ -155,6 +158,27 @@ def _run_capture(cap):
                          "channel": event["channel"],
                          "name": Capture.VOICE_BY_PROGRAM.get((event.get("bank", 0), event["program"]), "Unknown"),
                          "time": t})
+        elif etype == "control_change":
+            # Watch CCs arriving FROM the keyboard (wheel, aux resets). Throttle
+            # to ~4/s per controller so a wiggled wheel can't flood the feed.
+            controller = event["controller"]
+            now_ms = time.time() * 1000.0
+            if now_ms - _ctrl_log_time.get(controller, 0.0) >= 250:
+                _ctrl_log_time[controller] = now_ms
+                state.handle(event)
+                hub.publish({"type": "ctrl", "controller": controller,
+                             "value": event["value"], "channel": event["channel"],
+                             "name": Capture.CC_NAMES.get(controller, "CC%d" % controller),
+                             "time": t})
+        elif etype == "pitch_bend":
+            now_ms = time.time() * 1000.0
+            if now_ms - _ctrl_log_time.get("pb", 0.0) >= 250:
+                _ctrl_log_time["pb"] = now_ms
+                prev = state.received_pitch_bend
+                state.handle(event)
+                hub.publish({"type": "pitch", "semitones": state.received_pitch_bend,
+                             "value": event["value"], "time": t,
+                             "down": state.received_pitch_bend - prev})
         elif etype == "offline":
             state.handle(event)
             hub.publish({"type": "status", "online": False, "time": t})
@@ -367,6 +391,67 @@ def api_articulation():
         return jsonify({"ok": False, "error": "gap must be between 0 and 0.9"}), 400
     state.set_articulation(gap)
     return jsonify({"ok": True, "gap": state.articulation_gap})
+
+
+@app.route("/api/ctrl", methods=["GET", "POST"])
+def api_ctrl():
+    """Out control surface to the keyboard (raw path hw:2,0,0).
+
+    GET: return the last out-sent values plus whatever we've seen ARRIVE from
+    the keyboard (received_ctrl / received_pitch_bend).
+
+    POST body (any of):
+      {"cc": int 0-127, "value": int 0-127}      -> send a controller change
+      {"pitch": float -24..24}                   -> 14-bit pitch bend (semis)
+      {"action": "panic"}   all channels all-sound-off + all-notes-off
+      {"action": "gmreset"} GM System ON SysEx
+      {"action": "local", "value": 0|1}          -> CC122 Local Control off/on
+    """
+    if request.method == "GET":
+        return jsonify({
+            "ok": True,
+            "out": dict(state.control_values),
+            "out_pitch_bend": state.control_pitch_bend,
+            "local_control": state.local_control,
+            "received": dict(state.received_ctrl),
+            "received_pitch_bend": state.received_pitch_bend,
+        })
+    body = request.get_json(silent=True) or {}
+    ch = state.midi_channel
+    try:
+        if "cc" in body:
+            cc = int(body["cc"])
+            value = int(body["value"])
+            if not (0 <= cc <= 127 and 0 <= value <= 127):
+                return jsonify({"ok": False, "error": "cc/value must be 0-127"}), 400
+            control_change(cc, value, channel=ch)
+            state.control_values[cc] = value
+            if cc == 122:
+                state.local_control = value
+            return jsonify({"ok": True, "cc": cc, "value": value})
+        if "pitch" in body:
+            semi = float(body["pitch"])
+            if not (-24.0 <= semi <= 24.0):
+                return jsonify({"ok": False, "error": "pitch must be -24..24"}), 400
+            pitch_bend(semi, channel=ch)
+            state.control_pitch_bend = round(semi, 2)
+            return jsonify({"ok": True, "pitch": state.control_pitch_bend})
+        action = body.get("action")
+        if action == "panic":
+            midi_panic()
+            return jsonify({"ok": True, "action": "panic"})
+        if action == "gmreset":
+            gm_system_on()
+            state.control_values.pop(0, None)
+            return jsonify({"ok": True, "action": "gmreset"})
+        if action == "local":
+            value = int(body.get("value", 0))
+            control_change(122, value, channel=ch)
+            state.local_control = value
+            return jsonify({"ok": True, "local_control": value})
+    except ValueError:
+        return jsonify({"ok": False, "error": "bad numeric field"}), 400
+    return jsonify({"ok": False, "error": "nothing to do"}), 400
 
 
 @app.route("/api/record", methods=["POST"])

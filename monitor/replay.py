@@ -82,6 +82,42 @@ def program_change(bank, pc):
     time.sleep(0.02)
 
 
+def control_change(cc, value, channel=0):
+    """Send a control change to the keyboard (raw path, Bn CC VV)."""
+    ch = max(0, min(15, int(channel)))
+    cc = max(0, min(127, int(cc)))
+    value = max(0, min(127, int(value)))
+    _send("B%X %02X %02X" % (ch, cc, value))
+    time.sleep(0.01)
+
+
+def pitch_bend(semitones, channel=0):
+    """Send a 14-bit pitch bend to the keyboard. The PSS-A50 bends +-24
+    semitones over the full range (center 8192)."""
+    ch = max(0, min(15, int(channel)))
+    val = int(round(8192 + max(-24.0, min(24.0, float(semitones))) / 24.0 * 8192))
+    val = max(0, min(16383, val))
+    _send("E%X %02X %02X" % (ch, val & 0x7F, (val >> 7) & 0x7F))
+    time.sleep(0.01)
+
+
+def gm_system_on():
+    """GM System ON SysEx (F0 7E 7F 09 01 F7): wholesale re-initializer."""
+    _send("F0 7E 7F 09 01 F7")
+    time.sleep(0.05)
+
+
+def midi_panic():
+    """Kill all sound on every channel, then reset controllers (ch1)."""
+    parts = []
+    for ch in range(16):
+        parts.append("B%X 78 00" % ch)  # All Sound Off (120)
+        parts.append("B%X 7B 00" % ch)  # All Notes Off (123)
+    parts.append("B0 79 00")            # Reset All Controllers (121)
+    _send(" ".join(parts))
+    time.sleep(0.05)
+
+
 def plan(quantized_notes, speed=1.0):
     """Build a replay timeline from quantized-note dicts.
 

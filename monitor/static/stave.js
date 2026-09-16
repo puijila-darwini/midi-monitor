@@ -158,7 +158,7 @@
     if (miniRenderer) return;
     if (!miniDiv) return;
     miniRenderer = new VF.Renderer(miniDiv, VF.Renderer.Backends.SVG);
-    miniRenderer.resize(560, 150);
+    miniRenderer.resize(190, 150);
     miniContext = miniRenderer.getContext();
   }
 
@@ -665,7 +665,9 @@
     var dur = "h"; // half note for mini stave
     var sn = new VF.StaveNote({ keys: keys, duration: dur });
 
-    var stave = new VF.Stave(10, 20, 520);
+    // One bar is all a single chord/interval ever needs — the mini card
+    // stays compact beside the keyboard.
+    var stave = new VF.Stave(10, 20, 130);
     stave.addClef("treble");
     stave.setContext(miniContext);
     stave.draw();
@@ -679,7 +681,7 @@
     formatter.format([voice], stave.getNoteEndX());
     voice.draw(miniContext, stave);
 
-    if (miniRenderer) miniRenderer.resize(560, 130);
+    if (miniRenderer) miniRenderer.resize(190, 130);
     // Spelling overlay for the mini chord too (never playback-tinted).
     placeAccidentals(miniDiv.querySelector("svg"),
                      [{ kind: "chord", notes: lastChordEvent.notes, id: "mini" }]);

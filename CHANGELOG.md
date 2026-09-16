@@ -944,3 +944,30 @@ that file lean. History is chronological; most lines start with a version tag.
   keep 1.5-1.9s durations, zero blips), plus gridded roll-chord (4 members kept
   0.5s, no blips) and gridded monophonic overlap (clamped). Live round-trip
   reaffirmed; zero JS console errors. Committed agent:, pushed.
+
+- Ver 67: OUT CONTROL SURFACE (interface-level, not qwerty) — send and watch
+  the keyboard's extra control messages over the same USB on hw:2,0,0.
+  replay.py: control_change(cc,value), pitch_bend(semitones), gm_system_on(),
+  midi_panic() (all-ch GUI 120/123 + ch1 121) via amidi. state.py: received_ctrl,
+  received_pitch_bend (14-bit -> ±24 semi), control_values, control_pitch_bend,
+  local_control, all in snapshot(). app.py: POST /api/ctrl ({"cc","value"},
+  {"pitch"}, {"action":"panic"|"gmreset"|"local","value"}), GET returns
+  out/received; capture loop publishes throttled "ctrl"/"pitch" SSE events.
+  UI: "out · ctrl" card — panic, gm reset, sustain (CC64), portamento (CC65),
+  porta time (CC5), volume (CC7), expression (CC11), mod (CC1), pitch bend
+  (-24..24), local control (CC122); #ctrl-received readout shows what the
+  KEYBOARD transmits back. Live first probe: keyboard shipped CCs 6/11/71/72/
+  74/100/101 (voice-load RPN + sound controllers), sustain/pitch round-trips
+  updated out state. Committed agent:, pushed.
+
+- Ver 68: LAST CHORD/INTERVAL CARD SHRUNK + PARKED BESIDE THE KEYBOARD —
+  the mini "last chord / interval" stave moved out of the bottom row into a
+  top flex row right next to the piano card. It renders only a single
+  chord/interval, so the full 520px stave line was pure waste; redrawMini now
+  draws one ~130px bar (VexFlow Stave(10,20,130)) in a 190px canvas, card
+  width 560 -> 220px, so the piano keeps the full remaining width (same row,
+  verified 220px card / piano fills the rest). The big stave/notation, record/
+  stop and flash logic untouched. Added out-ctrl wiring (ranges/checks/buttons
+  -> POST /api/ctrl) + boot-sync; removed a stale merge-artifact comment in
+  app.js. Zero JS console errors on fresh load + clear. Committed agent:,
+  pushed.

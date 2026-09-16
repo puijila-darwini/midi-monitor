@@ -560,6 +560,28 @@ function buildCatchTooltip() {
     flashEl.classList.add("pop");
   }
 
+  // Last signals seen ARRIVING from the keyboard (wheel -> pb/CC1, panel).
+  var ctrlRx = { cc: {}, pb: 0 };
+  var CTRL_NAMES = {
+    1: "mod", 5: "porta time", 7: "vol", 11: "expr", 64: "sustain",
+    65: "porta", 71: "harm", 72: "release", 73: "attack", 74: "bright",
+    84: "porta ctrl", 91: "fx1", 93: "fx3",
+    120: "sound off", 121: "reset ctrl", 122: "local", 123: "notes off"
+  };
+  function setReceivedReadout() {
+    var el = document.getElementById("ctrl-received");
+    if (!el) return;
+    var parts = [];
+    Object.keys(ctrlRx.cc).sort(function (a, b) { return parseInt(a, 10) - parseInt(b, 10); })
+      .forEach(function (c) {
+        var v = ctrlRx.cc[c];
+        parts.push((CTRL_NAMES[c] || ("cc" + c)) + " " +
+          (parseInt(c, 10) >= 120 || c === 64 || c === 65 ? (v ? "on" : "off") : v));
+      });
+    if (ctrlRx.pb) parts.push("pb " + (ctrlRx.pb > 0 ? "+" : "") + ctrlRx.pb);
+    el.textContent = parts.length ? parts.join(" \u00B7 ") : "nothing yet";
+  }
+
   function handleEvent(ev) {
     if (!ev) return;
     switch (ev.type) {
@@ -644,6 +666,19 @@ function buildCatchTooltip() {
         updateReplayVoiceDefault(ev.name);
         addFeed('<span class="time">' + fmtTime(ev.time) +
           '</span>  PGM CHANGE  ' + ev.name + " (prog " + ev.program + ", ch " + ev.channel + ")", "program_change");
+        break;
+      case "ctrl":
+        ctrlRx.cc[ev.controller] = ev.value;
+        addFeed('<span class="time">' + fmtTime(ev.time) +
+          '</span>  CTRL  ' + ev.name + " = " + ev.value, "ctrl_in");
+        setReceivedReadout();
+        break;
+      case "pitch":
+        ctrlRx.pb = ev.semitones;
+        addFeed('<span class="time">' + fmtTime(ev.time) + '</span>  PITCH BEND  ' +
+          (ev.semitones > 0 ? "+" : "") + ev.semitones + " st",
+          ev.semitones === 0 ? "pitch_center" : "pitch_in");
+        setReceivedReadout();
         break;
       case "quantized_note":
         // Tempo display only now: the stave itself renders from the raw
@@ -1352,6 +1387,49 @@ case "replay":
     });
   })();
 
+  // Out control surface: send CCs / pitch to the keyboard (raw hw:2,0,0) and
+  // track what comes back from it. Wire the knobs + panic/gm reset buttons.
+  (function () {
+    function postCtrl(body) {
+      fetch("/api/ctrl", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      }).catch(function () { /* ignore transient */ });
+    }
+    function wireRange(id, bodyFn) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      var out = document.getElementById(id + "-out");
+      el.addEventListener("input", function () {
+        if (out) out.textContent = el.value;
+        postCtrl(bodyFn(el));
+      });
+    }
+    wireRange("ctrl-porta-time", function (el) { return { cc: 5, value: parseInt(el.value, 10) }; });
+    wireRange("ctrl-volume", function (el) { return { cc: 7, value: parseInt(el.value, 10) }; });
+    wireRange("ctrl-expression", function (el) { return { cc: 11, value: parseInt(el.value, 10) }; });
+    wireRange("ctrl-mod", function (el) { return { cc: 1, value: parseInt(el.value, 10) }; });
+    wireRange("ctrl-pitch", function (el) { return { pitch: parseFloat(el.value) }; });
+    function wireCheck(id, cc) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener("change", function () {
+        if (cc) postCtrl({ cc: cc, value: el.checked ? 127 : 0 });
+        else postCtrl({ action: "local", value: el.checked ? 127 : 0 });
+      });
+    }
+    wireCheck("ctrl-sustain", 64);
+    wireCheck("ctrl-porta", 65);
+    wireCheck("ctrl-local", null);
+    function wireBtn(id, bodyFn) {
+      var el = document.getElementById(id);
+      if (el) el.addEventListener("click", function () { postCtrl(bodyFn()); });
+    }
+    wireBtn("ctrl-panic", function () { return { action: "panic" }; });
+    wireBtn("ctrl-gmreset", function () { return { action: "gmreset" }; });
+  })();
+
   // Quantization grid selector (explicit note values, off = bypass)
   (function () {
     var sel = document.getElementById("quantization");
@@ -1733,6 +1811,30 @@ if (typeof s.time_signature === "string" && s.time_signature.indexOf("/") > 0) {
             art.value = String(Math.round(s.articulation_gap * 100));
           }
         }
+        // Sync the OUT control surface (last values we sent) + the received
+        // watch (signals arriving from the keyboard).
+        var cv = s.control_values || {};
+        function chk(id, on) {
+          var el = document.getElementById(id);
+          if (el && document.activeElement !== el) el.checked = !!on;
+        }
+        function setRange(id) {
+          var el = document.getElementById(id);
+          if (el && document.activeElement !== el) el.value = String(arguments[1]);
+          var out = document.getElementById(id + "-out");
+          if (out) out.textContent = arguments[1];
+        }
+        chk("ctrl-sustain", cv[64]);
+        chk("ctrl-porta", cv[65]);
+        chk("ctrl-local", s.local_control === 127);
+        setRange("ctrl-porta-time", typeof cv[5] === "number" ? cv[5] : 8);
+        setRange("ctrl-volume", typeof cv[7] === "number" ? cv[7] : 100);
+        setRange("ctrl-expression", typeof cv[11] === "number" ? cv[11] : 127);
+        setRange("ctrl-mod", typeof cv[1] === "number" ? cv[1] : 0);
+        setRange("ctrl-pitch", typeof s.control_pitch_bend === "number" ? s.control_pitch_bend : 0);
+        ctrlRx.cc = s.received_ctrl || {};
+        ctrlRx.pb = s.received_pitch_bend || 0;
+        setReceivedReadout();
         seedHeld(s.held || []);
       // Sync the REC/STOP control with the backend recording state.
       if (typeof s.recording !== "undefined" && s.recording !== recording) {
@@ -1880,8 +1982,6 @@ function clearRawTake() {
     }
   }, 3000);
 }
-
-// ... existing code ...
 
 fetchRawTake();
 var rawTakeTimer = setInterval(fetchRawTake, 1000);
