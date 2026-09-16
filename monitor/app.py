@@ -287,6 +287,39 @@ def api_note():
                     "velocity": velocity})
 
 
+@app.route("/api/audition/enable", methods=["POST"])
+def api_audition_enable():
+    """Toggle direct-board audition for on-screen piano clicks.
+    On: each click also plays the note through the keyboard (amidi).
+    Off: clicks only inject into the capture stream for analysis.
+    """
+    body = request.get_json(silent=True) or {}
+    enabled = bool(body.get("enabled", True))
+    state.audition_enabled = enabled
+    resp = {"ok": True, "enabled": enabled}
+    return jsonify(resp)
+
+
+@app.route("/api/audition", methods=["POST"])
+def api_audition():
+    """Play a note on the board directly (raw 9n/8n, amidi path)
+    without injecting into the capture stream. Used by on-screen
+    piano clicks so you can hear a key before committing to a take.
+    """
+    body = request.get_json(silent=True) or {}
+    note = int(body.get("note", 0))
+    velocity = int(body.get("velocity", 90))
+    on = bool(body.get("on", True))
+    if not (0 <= note <= 127):
+        return jsonify({"ok": False, "error": "note out of range 0-127"}), 400
+    velocity = max(0, min(127, velocity))
+    sent = note_on(note, velocity, channel=state.midi_channel) if on \
+        else note_off(note, channel=state.midi_channel)
+    resp = {"ok": True, "note": note, "on": on, "velocity": velocity,
+            "device": bool(sent)}
+    return jsonify(resp)
+
+
 @app.route("/api/key/reset", methods=["POST"])
 def api_key_reset():
     analyser.reset_key()

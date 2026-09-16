@@ -1480,6 +1480,8 @@ case "replay":
     var KEYS_MODE_ECHO = { keys: 0, layer: 1, echo: 1, midi: 0 };
     var keysSeg = document.getElementById("ctrl-keys-mode");
     var keysMode = "keys";
+    var previewEl = document.getElementById("piano-preview");
+    window.keysMode = keysMode;
 
     function echoVoiceValue() {
       var sel = document.getElementById("replay-voice");
@@ -1487,6 +1489,8 @@ case "replay":
     }
     function setKeysSeg(mode) {
       keysMode = mode;
+      window.keysMode = mode;
+      if (previewEl) previewEl.disabled = (mode !== "keys");
       if (!keysSeg) return;
       var btns = keysSeg.querySelectorAll("button");
       for (var i = 0; i < btns.length; i++) {
@@ -1946,6 +1950,8 @@ if (typeof s.time_signature === "string" && s.time_signature.indexOf("/") > 0) {
         setRange("ctrl-expression", typeof cv[11] === "number" ? cv[11] : 127);
         setRange("ctrl-mod", typeof cv[1] === "number" ? cv[1] : 0);
         setRange("ctrl-pitch", typeof s.control_pitch_bend === "number" ? s.control_pitch_bend : 0);
+        var pv = document.getElementById("piano-preview");
+        if (pv && document.activeElement !== pv) pv.checked = s.audition_enabled !== false;
         ctrlRx.cc = s.received_ctrl || {};
         ctrlRx.pb = s.received_pitch_bend || 0;
         setReceivedReadout();
@@ -2197,7 +2203,10 @@ if (rawTakeClearBtn) {
   // capture stream, so an injected note goes through the SAME pipeline as a
   // real key press: state/feed/analysis/quantization/SSE/stave. Velocity is
   // imputed (this UI has no touch), and the SSE echo lights the keys. Guarded
-  // so a held mouse click can't double-inject a note_on.
+  // so a held mouse click can't double-inject a note_on. With "preview" on
+  // the key head (default), the click also plays the note through the board
+  // directly (/api/audition) so you can hear the voice before committing to
+  // a take — independent of echo mode.
   var mouseHeld = new Set();
   var pointerNotes = {};  // pointerId -> note (so drags/multitouch each release)
 
@@ -2214,6 +2223,18 @@ if (rawTakeClearBtn) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ note: note, velocity: 90, on: on })
     }).catch(function () { /* transient; SSE catches up */ });
+    // Audition preview: play it through the board so you can hear it, but
+    // only in 'keys' mode. In layer/echo the injected note already sounds via
+    // the echo path (preview would double it), and in midi mode the pipes must
+    // stay silent (keys emit MIDI only).
+    var prev = document.getElementById("piano-preview");
+    if (prev && prev.checked && window.keysMode === "keys") {
+      fetch("/api/audition", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ note: note, velocity: 90, on: on })
+      }).catch(function () {});
+    }
   }
 
   function bindPianoClick() {
@@ -2241,6 +2262,19 @@ if (rawTakeClearBtn) {
     // it mid-press; catch stragglers on the window so nothing stays stuck.
     window.addEventListener("pointerup", release);
   }
+
+  // Audition preview toggle: persist the choice so reloads keep it.
+  (function () {
+    var prev = document.getElementById("piano-preview");
+    if (!prev) return;
+    prev.addEventListener("change", function () {
+      fetch("/api/audition/enable", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: prev.checked })
+      }).catch(function () {});
+    });
+  })();
 
   buildCatchTooltip();
   buildPiano();

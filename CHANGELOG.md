@@ -1014,3 +1014,14 @@ that file lean. History is chronological; most lines start with a version tag.
   syntax error introduced mid-edit (restored the poll() IIFE closer).
   Verified via browser: all four modes set local/echo state correctly, zero
   console errors. Committed agent:, pushed.
+
+- Ver 70b: ON-SCREEN PIANO AUDITION PREVIEW — clicking a key also plays it
+  through the board via /api/audition, so you can hear a voice before
+  committing to a take (toggle on the keyboard card header, persisted).
+  The preview respects the routing mode: it fires ONLY in 'keys' mode;
+  in 'layer'/'echo' the injected note already sounds via the echo path and
+  preview stays silent (would only double it); in 'midi' mode the pipes stay
+  strictly silent (keys emit MIDI only). Drove by the user clicking keys in
+  midi mode and hearing them — fixed by gating on window.keysMode.
+  /api/audition {note,velocity,on}; /api/audition/enable {enabled};
+  state.audition_enabled. Committed agent:, pushed.

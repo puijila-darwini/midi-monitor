@@ -1221,3 +1221,7 @@ li.tonic {
   text-transform: uppercase;
   color: var(--straw-soft);
 }
+.piano-preview-label {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 12px; cursor: pointer;
+}
