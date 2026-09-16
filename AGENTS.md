@@ -25,6 +25,14 @@ PSS-A50 USB keyed into this machine.
 - The board has a LOCAL CONTROL setting (local ON = keys sound their own
   engine; OFF = keys only emit MIDI, sound must come back from a computer)
   — the standard caution for pass-through/echo modes (avoid double sounding).
+- IMPORTANT hardware behavior: incoming Program Change, CC (incl. sustain
+  CC64) and pitch bend affect RECEIVED (MIDI-IN) notes ONLY — the local
+  keybed sound bypasses that control path. So sending sustain/pitch/voice
+  does nothing to keys you play by hand unless the notes come back over MIDI.
+  The app's "echo" mode (see CHANGELOG Ver 70) re-sends keybed notes back to
+  the board to close this gap; with local ON you get a layered double, local
+  OFF the echo alone. Local and RX voices are independent, so echo can layer
+  a different voice against the panel voice.
 
 ## Current architecture: monitor web app
 The one-off CLI scripts (fast.py/listen.py/arpeggio.py/melody.py) were

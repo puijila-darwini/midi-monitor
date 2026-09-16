@@ -115,6 +115,21 @@ def pitch_bend(semitones, channel=0):
     return ok
 
 
+def note_on(note, velocity, channel=0):
+    """Send a note-on (raw path, 9n NN VV) — used by live-echo mode."""
+    ch = max(0, min(15, int(channel)))
+    note = max(0, min(127, int(note)))
+    velocity = max(0, min(127, int(velocity)))
+    return _send("9%X %02X %02X" % (ch, note, velocity))
+
+
+def note_off(note, channel=0):
+    """Send a note-off (raw path, 8n NN 00) — used by live-echo mode."""
+    ch = max(0, min(15, int(channel)))
+    note = max(0, min(127, int(note)))
+    return _send("8%X %02X 00" % (ch, note))
+
+
 def gm_system_on():
     """GM System ON SysEx (F0 7E 7F 09 01 F7): wholesale re-initializer."""
     ok = _send("F0 7E 7F 09 01 F7")

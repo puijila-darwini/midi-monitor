@@ -987,3 +987,30 @@ that file lean. History is chronological; most lines start with a version tag.
   the board is gone). Verified: valid amidi -> device:true, bogus hex ->
   graceful False, gm reset + sliders round-trip with SENT feed lines,
   zero 500s. Committed agent:, pushed.
+
+- Ver 70: LIVE ECHO MODE + COUPLED KEYS ROUTING + PITCH SNAP —
+  "sustain button does nothing" root cause was NOT our code: the PSS-A50
+  applies incoming program change / CC (incl. sustain CC64) / pitch bend to
+  RECEIVED (MIDI-IN) notes ONLY. Local keybed sound bypasses the MIDI-IN
+  control path. Proven: CC64 held an RX note until sustain-off, but with
+  sustain ON a locally-played-and-released note cut immediately; likewise
+  echo played Grand Piano while the OUT voice only affected replay.
+
+  Echo mode closes the gap: the capture loop re-sends each keybed note back
+  to the board as an RX note (replay.note_on/note_off), so sustain/porta/mod/
+  pitch bend now audibly apply to live playing. Echo also applies the
+  OUT-MIDI voice (program_change on enable + whenever the voice picker
+  changes), giving TRUE LAYERING — verified: local keys stay on the panel
+  voice while the echo plays the selected voice (board keeps the two paths
+  independent). /api/echo {"enabled","voice"}; state.echo_enabled/echo_voice;
+  startup normalizes CC122 local ON so a restart can't leave keys silent.
+
+  UI: echo and local are now one coupled 'keys' segmented control with all
+  four combinations — keys (local on/echo off), layer (local on/echo on),
+  echo (local off/echo on), midi (local off/echo off) — so they can't drift
+  apart. Pitch bend gains a 'snap' checkbox: checked springs to 0 on release
+  (wheel-like), unchecked is sticky. Dropped the earlier detune slider (the
+  pitch wheel already bends the echo; local keys never bend). Fixed a JS
+  syntax error introduced mid-edit (restored the poll() IIFE closer).
+  Verified via browser: all four modes set local/echo state correctly, zero
+  console errors. Committed agent:, pushed.

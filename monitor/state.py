@@ -133,6 +133,14 @@ class State:
         self.control_values = {}
         self.control_pitch_bend = 0.0
         self.local_control = None
+        # Live-echo mode: when on, incoming keybed notes are routed back to
+        # the keyboard as RX notes, so the controls that only bind to received
+        # notes (program/voice, sustain, CC, pitch) apply to live playing.
+        # Local control is independent (keys/layer/echo/midi in the UI): local
+        # on layers the echo against the panel voice, local off is echo alone.
+        self.echo_enabled = False
+        # Voice the echo path plays ("auto" = leave the keyboard as-is).
+        self.echo_voice = "auto"
         # Near-simultaneous window (seconds) for grouping chord members when
         # bypassing (no grid to snap them together). Grouping ALSO requires
         # overlap (next onset lands while the group still sounds) so fast
@@ -1357,6 +1365,8 @@ class State:
             "control_values": dict(self.control_values),
             "control_pitch_bend": self.control_pitch_bend,
             "local_control": self.local_control,
+            "echo_enabled": self.echo_enabled,
+            "echo_voice": self.echo_voice,
             "seq_outs": list(self.seq_outs),
             "raw_outs": list(self.raw_outs),
             "midi_channel": self.midi_channel,

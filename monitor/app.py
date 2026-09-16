@@ -13,7 +13,8 @@ from flask import Flask, jsonify, render_template, request, Response
 from .capture import Capture
 from .state import State
 from .analysis import Analyser
-from .replay import Replay, plan_from_raw, VOICES, control_change, pitch_bend, gm_system_on, midi_panic
+from .replay import (Replay, plan_from_raw, VOICES, control_change, pitch_bend,
+                     gm_system_on, midi_panic, note_on, note_off, program_change)
 from . import midiout
 from . import sinks
 from . import chords
@@ -127,6 +128,13 @@ def _run_capture(cap):
         t = event["time"]
         if etype == "note_on":
             state.handle(event)
+            if state.echo_enabled:
+                # Route the keyed note back to the board as an RX note so the
+                # controls that only bind to received notes (program, sustain,
+                # CC, pitch) apply to live playing. With local on this layers
+                # against the panel voice; local off leaves the echo alone.
+                note_on(event["note"], event["velocity"],
+                        channel=event.get("channel", 0))
             analyser.on_note(t, event["note"])
             hub.publish({"type": "note", "note": event["note"],
                          "name": _note_name(event["note"]),
@@ -148,6 +156,8 @@ def _run_capture(cap):
                 hub.publish({"type": "key", **kann, "time": t})
         elif etype == "note_off":
             state.handle(event)
+            if state.echo_enabled:
+                note_off(event["note"], channel=event.get("channel", 0))
             hub.publish({"type": "noteoff", "note": event["note"],
                          "name": _note_name(event["note"]),
                          "time": t, "held": sorted(state.held)})
@@ -461,6 +471,40 @@ def api_ctrl():
         # Keyboard detached (NORMAL): the intent is recorded anyway, but the
         # UI should know the line stayed silent.
         resp["warning"] = "keyboard offline - send dropped"
+    return jsonify(resp)
+
+
+@app.route("/api/echo", methods=["POST"])
+def api_echo():
+    """Live-echo mode: route keyed notes back to the keyboard as RX notes.
+    Received notes are the only ones the keyboard lets program change / CC /
+    pitch bend affect, so echoing makes those controls apply to live playing.
+
+    Local Control is deliberately LEFT ALONE: with local ON you get a layered
+    / chorused double (the panel voice + the echo voice); use the 'keys'
+    segmented control to pick local/echo off for echo alone or MIDI-only.
+
+    Body: {"enabled": bool, "voice": "auto"|name}
+      voice = program to put the echo on (so it can differ from the panel
+      voice for layering); "auto" leaves the keyboard's current voice.
+    """
+    body = request.get_json(silent=True) or {}
+    enabled = bool(body.get("enabled", True))
+    voice_name = body.get("voice", "auto")
+    state.echo_enabled = enabled
+    state.echo_voice = voice_name
+    device = True
+    if enabled and voice_name and voice_name != "auto":
+        bank_pc = _voice_to_bank_pc(voice_name)
+        if bank_pc is not None:
+            bank, pc = bank_pc
+            state.receive_program = pc
+            state.receive_bank = bank
+            device = program_change(bank, pc)
+    resp = {"ok": True, "enabled": enabled, "voice": voice_name,
+            "device": bool(device)}
+    if not device:
+        resp["warning"] = "keyboard offline - echo set but no device"
     return jsonify(resp)
 
 
@@ -882,6 +926,13 @@ def start_capture_thread():
 
 
 def main():
+    # Normalize the keyboard on startup: echo defaults OFF and the UI defaults
+    # to 'keys' mode, so make sure Local Control is ON. Otherwise a restart
+    # that left local off (echo/midi mode) would leave the keys silent.
+    # Fire-and-forget.
+    threading.Thread(
+        target=lambda: control_change(122, 127, channel=state.midi_channel),
+        daemon=True).start()
     start_capture_thread()
     app.run(host="127.0.0.1", port=PORT, debug=False, threaded=True)
 

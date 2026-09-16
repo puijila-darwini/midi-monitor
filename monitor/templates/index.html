@@ -438,13 +438,24 @@
                 <span>&#8635;</span><span>gm reset</span>
               </button>
             </div>
+            <div class="ctrl-grid ctrl-keys-grid">
+              <span class="ctrl-seg-label" title="How the keybed is routed. echo routes the keyed notes back through the app as received notes, so program/voice, sustain, portamento, mod and pitch bend audibly apply to live playing (they only bind to received notes); local lets the board sound its own keys.">keys</span>
+              <div class="ctrl-seg" id="ctrl-keys-mode" role="group" aria-label="keys routing">
+                <button type="button" data-mode="keys" class="active"
+                        title="local on, echo off - normal: keys sound the panel voice directly">keys</button>
+                <button type="button" data-mode="layer"
+                        title="local on, echo on - layer: panel voice plus the OUT voice (chorus/flange by ear)">layer</button>
+                <button type="button" data-mode="echo"
+                        title="local off, echo on - echo alone: keys are silent locally and sound only via the app (use for sustain/pitch/mod to apply)">echo</button>
+                <button type="button" data-mode="midi"
+                        title="local off, echo off - MIDI only: keys emit MIDI but make no sound (feed an external synth/DAW)">midi</button>
+              </div>
+            </div>
             <div class="ctrl-grid">
               <label class="ctrl-check"><input type="checkbox" id="ctrl-sustain"
                      title="CC64 sustain pedal (127 on / 0 off)"><span>sustain</span></label>
               <label class="ctrl-check"><input type="checkbox" id="ctrl-porta"
                      title="CC65 portamento switch"><span>portamento</span></label>
-              <label class="ctrl-check"><input type="checkbox" id="ctrl-local"
-                     title="CC122 Local Control. ON = keys sound the internal voices (normal). OFF = keys emit MIDI only - use when echoing to avoid double-sound; the keyboard then needs a computer to make sound"><span>local</span></label>
               <label class="ctrl-slider"><span>porta time</span>
                 <input type="range" id="ctrl-porta-time" class="ctrl-range" min="0" max="127" value="8"
                        title="CC5 portamento time (0-127)">
@@ -474,6 +485,8 @@
                        title="Pitch bend in semitones (-24..+24, 0 = center)">
                 <output class="ctrl-out" id="ctrl-pitch-out">0</output>
               </label>
+              <label class="ctrl-check ctrl-pitch-snap"><input type="checkbox" id="ctrl-pitch-snap" checked
+                     title="Snap-back: release the pitch slider and it springs to 0 (like a real wheel). Uncheck for sticky - the bend stays where you leave it."><span>snap</span></label>
             </div>
             <div class="ctrl-grid ctrl-received">
               <span class="ctrl-rx-title">from keyboard &rarr;</span>

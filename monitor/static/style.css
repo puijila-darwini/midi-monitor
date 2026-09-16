@@ -575,6 +575,22 @@ select option {
 .ctrl-slider .ctrl-range { width: 150px; accent-color: var(--royal, #3b6ea5); }
 .ctrl-slider.ctrl-pitch .ctrl-range { width: 190px; }
 .ctrl-out { min-width: 28px; text-align: right; font-variant-numeric: tabular-nums; color: var(--straw-soft, #e8d5a3); }
+.ctrl-keys-grid { gap: 8px; }
+.ctrl-seg-label { font-size: 12px; color: var(--muted); }
+.ctrl-seg { display: inline-flex; border: 1px solid var(--royal, #3b6ea5); border-radius: 3px; overflow: hidden; }
+.ctrl-seg button {
+  border: 0;
+  border-right: 1px solid var(--royal, #3b6ea5);
+  background: rgba(59,110,165,0.10);
+  color: var(--straw-soft, #e8d5a3);
+  font-size: 12px;
+  font-family: inherit;
+  padding: 3px 12px;
+  cursor: pointer;
+}
+.ctrl-seg button:last-child { border-right: 0; }
+.ctrl-seg button:hover { background: rgba(59,110,165,0.26); }
+.ctrl-seg button.active { background: var(--royal, #3b6ea5); color: #fff; }
 .ctrl-received { align-items: baseline; border-top: 1px dashed var(--straw-gold, rgba(201,168,106,.35)); padding-top: 6px; font-size: 12px; }
 .ctrl-rx-title { color: var(--muted); }
 .ctrl-rx { color: var(--straw-soft, #e8d5a3); font-variant-numeric: tabular-nums; }

@@ -1438,6 +1438,20 @@ case "replay":
     wireRange("ctrl-expression", function (el) { return { cc: 11, value: parseInt(el.value, 10) }; }, "expression");
     wireRange("ctrl-mod", function (el) { return { cc: 1, value: parseInt(el.value, 10) }; }, "mod");
     wireRange("ctrl-pitch", function (el) { return { pitch: parseFloat(el.value) }; }, "pitch");
+    // Pitch snap-back: on release the slider springs to 0 like a real wheel,
+    // unless "snap" is unchecked (sticky bend stays where you leave it).
+    (function () {
+      var pel = document.getElementById("ctrl-pitch");
+      var psnap = document.getElementById("ctrl-pitch-snap");
+      if (!pel) return;
+      pel.addEventListener("change", function () {
+        if (psnap && !psnap.checked) return;
+        pel.value = "0";
+        var pout = document.getElementById("ctrl-pitch-out");
+        if (pout) pout.textContent = "0";
+        postCtrl("pitch 0", { pitch: 0 });
+      });
+    })();
     function wireCheck(id, cc, label) {
       var el = document.getElementById(id);
       if (!el) return;
@@ -1449,13 +1463,83 @@ case "replay":
     }
     wireCheck("ctrl-sustain", 64, "sustain");
     wireCheck("ctrl-porta", 65, "portamento");
-    wireCheck("ctrl-local", null, "local");
     function wireBtn(id, bodyFn, label) {
       var el = document.getElementById(id);
       if (el) el.addEventListener("click", function () { postCtrl(label, bodyFn()); });
     }
     wireBtn("ctrl-panic", function () { return { action: "panic" }; }, "panic");
     wireBtn("ctrl-gmreset", function () { return { action: "gmreset" }; }, "gm reset");
+    // Keys routing: 'echo' (notes routed back from the app) and 'local'
+    // (board sounds its own keys) are two switches with four combined modes.
+    // One segmented control sets both so they can't drift apart.
+    //   keys  = local on,  echo off   (normal play)
+    //   layer = local on,  echo on    (panel voice + echo voice)
+    //   echo  = local off, echo on    (echo alone)
+    //   midi  = local off, echo off   (keys emit MIDI only, silent)
+    var KEYS_MODE_LOCAL = { keys: 1, layer: 1, echo: 0, midi: 0 };
+    var KEYS_MODE_ECHO = { keys: 0, layer: 1, echo: 1, midi: 0 };
+    var keysSeg = document.getElementById("ctrl-keys-mode");
+    var keysMode = "keys";
+
+    function echoVoiceValue() {
+      var sel = document.getElementById("replay-voice");
+      return sel ? sel.value : "auto";
+    }
+    function setKeysSeg(mode) {
+      keysMode = mode;
+      if (!keysSeg) return;
+      var btns = keysSeg.querySelectorAll("button");
+      for (var i = 0; i < btns.length; i++) {
+        btns[i].classList.toggle("active", btns[i].getAttribute("data-mode") === mode);
+      }
+    }
+    function sendEcho(enabled) {
+      fetch("/api/echo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: enabled, voice: echoVoiceValue() })
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (res && res.ok) {
+            var lbl = "echo " + (enabled ? "on" : "off");
+            var v = (res.voice && res.voice !== "auto") ? " \u00b7 " + res.voice : "";
+            addFeed("SENT \u2192 " + lbl + v +
+                    (res.device === false ? " (board offline)" : ""), "ctrl_out");
+            if (res.warning) flashCtrlStatus("keyboard offline \u2014 " + lbl + " dropped", true);
+          } else if (res && res.error) {
+            flashCtrlStatus(res.error, true);
+          }
+        })
+        .catch(function () { flashCtrlStatus("echo toggle failed", true); });
+    }
+    function applyKeysMode(mode) {
+      if (!(mode in KEYS_MODE_ECHO)) mode = "keys";
+      setKeysSeg(mode);
+      var localOn = KEYS_MODE_LOCAL[mode];
+      postCtrl("local " + (localOn ? "on" : "off"),
+               { action: "local", value: localOn ? 127 : 0 });
+      sendEcho(!!KEYS_MODE_ECHO[mode]);
+      flashCtrlStatus("keys: " + mode, false);
+    }
+    if (keysSeg) {
+      keysSeg.addEventListener("click", function (e) {
+        var b = e.target.closest("button");
+        if (b && b.getAttribute("data-mode")) applyKeysMode(b.getAttribute("data-mode"));
+      });
+    }
+    // Boot-sync from server state (local_control + echo_enabled) without sending.
+    window.syncKeysMode = function (localOn, echoOn) {
+      var mode = echoOn ? (localOn ? "layer" : "echo") : (localOn ? "keys" : "midi");
+      setKeysSeg(mode);
+    };
+    // Changing the OUT voice while echo is on re-applies it to the echo path.
+    var rvSel = document.getElementById("replay-voice");
+    if (rvSel) {
+      rvSel.addEventListener("change", function () {
+        if (KEYS_MODE_ECHO[keysMode]) sendEcho(true);
+      });
+    }
   })();
 
   // Quantization grid selector (explicit note values, off = bypass)
@@ -1854,7 +1938,9 @@ if (typeof s.time_signature === "string" && s.time_signature.indexOf("/") > 0) {
         }
         chk("ctrl-sustain", cv[64]);
         chk("ctrl-porta", cv[65]);
-        chk("ctrl-local", s.local_control === 127);
+        if (window.syncKeysMode) {
+          window.syncKeysMode(s.local_control !== 0, !!s.echo_enabled);
+        }
         setRange("ctrl-porta-time", typeof cv[5] === "number" ? cv[5] : 8);
         setRange("ctrl-volume", typeof cv[7] === "number" ? cv[7] : 100);
         setRange("ctrl-expression", typeof cv[11] === "number" ? cv[11] : 127);
