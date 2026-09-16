@@ -901,3 +901,24 @@ that file lean. History is chronological; most lines start with a version tag.
   Verified: save/load/delete via HTTP and UI, settings restored on load
   (transpose 5 probe), empty-buffer/empty-library guards, slug sanitization;
   zero JS console errors. Committed agent:, pushed.
+
+- Ver 66: RELEASE ARTICULATION — fix quantized-note ring-overlap (the root
+  cause of "notes continuing when it's time for a new one"). Quantized notes
+  extend their duration to the next grid onset; when the player's raw timing
+  isn't an exact grid multiple the extended duration overshoots the true next
+  attack → two notes sounding simultaneously, especially audible on pad/sustained
+  voices through the keyboard's own synth.
+  State gains articulation_gap (fraction 0..0.9 of the slot left SILENT before
+  the next attack) with set_articulation() and _apply_articulation(notes) — a
+  post-pass over quantized takes: no note's off_time may ever exceed the next
+  note's on_time (hard clamp at gap=0; at higher gaps each note ends early for
+  staccato articulation). Chord members (same on_time) are never pruned against
+  each other. The pass sits in requantize() before _expand_midi, so notation,
+  replay (amidi + seq) and the stave all reflect the clamp.
+  Verified offline: the exact earlier overlap failure (51ms on 67→9, 118ms on a
+  sub-grid chord roll) now produces zero overlaps at gap=0, and clean 60%
+  trimmed staccato durations at gap=0.3; live UI end-to-end: input →
+  /api/articulation → requantize → notation re-render, boot-sync from /api/state,
+  zero JS console errors. New: state.py _apply_articulation + set_articulation,
+  app.py POST /api/articulation, index.html release spinbutton in the quantize
+  module, app.js change handler + initial state sync. Committed agent:, pushed.

@@ -118,6 +118,10 @@ class State:
         self.humanizer_enabled = False
         self.humanizer_timing_ms = 10.0   # ±10ms default
         self.humanizer_velocity = 5       # ±5 velocity default
+        # Release articulation (percent of the slot before the next onset to
+        # leave SILENT — a staccato gap). 0 = legato: each note ends exactly
+        # when the next attacks (and may never outlast it).
+        self.articulation_gap = 0.0
         # Near-simultaneous window (seconds) for grouping chord members when
         # bypassing (no grid to snap them together). Grouping ALSO requires
         # overlap (next onset lands while the group still sounds) so fast
@@ -174,6 +178,52 @@ class State:
         self.humanizer_timing_ms = max(0.0, self.humanizer_timing_ms)
         self.humanizer_velocity = max(0, self.humanizer_velocity)
         self.requantize()
+
+    def set_articulation(self, gap=None):
+        """Set the release-articulation stage: the fraction of each note's slot
+        (time to the next attack) left SILENT. 0 = legato/clamped. Max 0.9 so a
+        note never shrinks to nothing."""
+        if gap is not None:
+            try:
+                gap = float(gap)
+            except (TypeError, ValueError):
+                return
+            self.articulation_gap = max(0.0, min(0.9, gap))
+        self.requantize()
+
+    def _apply_articulation(self, notes):
+        """Post-pass over a quantized take: no note may ever ring into the next
+        attack, and an optional 'release gap' trims the tail of each note's slot
+        for staccato articulation.
+
+        Chord members attack together (shared on_time in the same slot) and are
+        never pruned against each other — only a LATER attack clamps an earlier
+        note's release. Rests are silence, not attacks; each note is measured
+        against its next actual note.
+        """
+        if not notes:
+            return
+        frac = min(0.9, max(0.0, self.articulation_gap))
+        prev = None
+        for qn in sorted(notes, key=lambda q: q.get("on_time", 0.0)):
+            if qn.get("rest"):
+                continue
+            if prev is not None:
+                try:
+                    prev_on = float(prev["on_time"])
+                    cur_on = float(qn["on_time"])
+                except (TypeError, ValueError):
+                    prev = qn
+                    continue
+                if cur_on > prev_on:
+                    slot = cur_on - prev_on
+                    # Hard clamp: never outlast the successor's attack; with a
+                    # release gap, also leave a silent tail.
+                    max_off = prev_on + slot * (1.0 - frac)
+                    if prev["off_time"] > max_off:
+                        prev["off_time"] = max_off
+                        prev["duration"] = max_off - prev_on
+            prev = qn
 
     def _apply_humanizer(self, events):
         """Apply the humanizer to the transformed MIDI events (OUT side)."""
@@ -527,6 +577,9 @@ class State:
         # Apply velocity compressor (if enabled)
         if self.velocity_enabled:
             self._apply_velocity_compressor(qns)
+        # Release articulation: clamp releases to their successor's attack and
+        # apply the optional staccato gap (never any ring-over).
+        self._apply_articulation(qns)
         self.quantized_take = qns
         self.transformed_events = self._expand_midi(self.quantized_take)
         # Apply humanizer (if enabled) to the final output events
@@ -1069,6 +1122,7 @@ class State:
             "humanizer_enabled": self.humanizer_enabled,
             "humanizer_timing_ms": self.humanizer_timing_ms,
             "humanizer_velocity": self.humanizer_velocity,
+            "articulation_gap": self.articulation_gap,
             "tempo_bpm": self.tempo_bpm,
             "user_tempo_bpm": self.user_tempo_bpm,
             "time_signature": self.time_signature,
@@ -1131,6 +1185,13 @@ class State:
             hv = int(settings.get("humanizer_velocity", 5))
             if 0 <= hv <= 127:
                 self.humanizer_velocity = hv
+        except (TypeError, ValueError):
+            pass
+
+        try:
+            ag = float(settings.get("articulation_gap", 0.0))
+            if 0 <= ag <= 0.9:
+                self.articulation_gap = ag
         except (TypeError, ValueError):
             pass
 
@@ -1231,6 +1292,7 @@ class State:
             "humanizer_enabled": self.humanizer_enabled,
             "humanizer_timing_ms": self.humanizer_timing_ms,
             "humanizer_velocity": self.humanizer_velocity,
+            "articulation_gap": self.articulation_gap,
             "seq_outs": list(self.seq_outs),
             "raw_outs": list(self.raw_outs),
             "midi_channel": self.midi_channel,

@@ -1327,6 +1327,31 @@ case "replay":
     });
   })();
 
+  // Release articulation (staccato gap): % of each note's slot left silent
+  // before the next attack. 0 = legato; releases never ring into successors.
+  (function () {
+    var input = document.getElementById("articulation-input");
+    if (!input) return;
+    function apply() {
+      var raw = input.value.trim();
+      var pct = raw === "" ? 0 : parseInt(raw, 10);
+      if (isNaN(pct)) return;
+      pct = Math.max(0, Math.min(90, pct));
+      input.value = String(pct);
+      fetch("/api/articulation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ gap: pct / 100 })
+      }).then(function (r) { return r.json(); })
+        .then(function () { renderNotationFromBuffer(); })
+        .catch(function () { /* ignore transient */ });
+    }
+    input.addEventListener("change", apply);
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") { input.blur(); apply(); }
+    });
+  })();
+
   // Quantization grid selector (explicit note values, off = bypass)
   (function () {
     var sel = document.getElementById("quantization");
@@ -1701,6 +1726,12 @@ if (typeof s.time_signature === "string" && s.time_signature.indexOf("/") > 0) {
         if (typeof s.humanizer_velocity !== "undefined") {
           var hvel = document.getElementById("humanizer-velocity");
           if (hvel && document.activeElement !== hvel) hvel.value = String(s.humanizer_velocity);
+        }
+        if (typeof s.articulation_gap !== "undefined") {
+          var art = document.getElementById("articulation-input");
+          if (art && document.activeElement !== art) {
+            art.value = String(Math.round(s.articulation_gap * 100));
+          }
         }
         seedHeld(s.held || []);
       // Sync the REC/STOP control with the backend recording state.

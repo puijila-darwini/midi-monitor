@@ -351,6 +351,24 @@ def api_humanizer():
     })
 
 
+@app.route("/api/articulation", methods=["POST"])
+def api_articulation():
+    """Set the release-articulation stage: the fraction (0..0.9) of each
+    note's slot left SILENT before the next attack. 0 = legato; releases are
+    always clamped to the next onset so no note rings into its successor.
+    Body: {"gap": <float 0..0.9>}.
+    """
+    body = request.get_json(silent=True) or {}
+    try:
+        gap = float(body.get("gap", state.articulation_gap))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "gap must be a number"}), 400
+    if not (0.0 <= gap <= 0.9):
+        return jsonify({"ok": False, "error": "gap must be between 0 and 0.9"}), 400
+    state.set_articulation(gap)
+    return jsonify({"ok": True, "gap": state.articulation_gap})
+
+
 @app.route("/api/record", methods=["POST"])
 def api_record():
     """Start or stop a recording take. Stopping flushes the trailing pending
