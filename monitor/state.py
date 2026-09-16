@@ -192,38 +192,78 @@ class State:
         self.requantize()
 
     def _apply_articulation(self, notes):
-        """Post-pass over a quantized take: no note may ever ring into the next
-        attack, and an optional 'release gap' trims the tail of each note's slot
-        for staccato articulation.
+        """Quantized-take post-pass: no monophonic line may ring into the next
+        attack, and an optional "release gap" trims each note's slot for
+        staccato articulation.
 
-        Chord members attack together (shared on_time in the same slot) and are
-        never pruned against each other — only a LATER attack clamps an earlier
-        note's release. Rests are silence, not attacks; each note is measured
-        against its next actual note.
+        Notes struck within ROLL_WINDOW of the group start and still sounding
+        are treated as CHORD MEMBERS: they keep their true durations and are
+        only ever trimmed/lowered against the NEXT group's attack, never
+        against each other — so a real chord with natural roll keeps every
+        member (no 1ms blips), while a genuine successive note still cuts the
+        previous one.
+
+        Only fires in the GRIDDED (quantize-enabled) path: in the bypass path
+        the take already holds the player's real durations, chords legitimately
+        overlap, and a clamp would destroy polyphony (Ver 66 regression). The
+        release gap is a grid/articulation concept and simply does not apply
+        off-grid.
         """
         if not notes:
             return
+        if not self.quantize_enabled:
+            return
         frac = min(0.9, max(0.0, self.articulation_gap))
-        prev = None
-        for qn in sorted(notes, key=lambda q: q.get("on_time", 0.0)):
-            if qn.get("rest"):
-                continue
-            if prev is not None:
+        ROLL_WINDOW = 0.10  # seconds: natural chord roll tolerance
+        ordered = sorted(notes, key=lambda q: q.get("on_time", 0.0))
+        group = []
+        group_start = None
+        group_max_off = None
+
+        def finalize(attack_on):
+            """End the current group: cap its members against the next real
+            attack (optionally leaving a staccato gap before it)."""
+            if not group:
+                return
+            cap = attack_on
+            if frac > 0 and group_start is not None:
+                cap = group_start + (attack_on - group_start) * (1.0 - frac)
+            for m in group:
                 try:
-                    prev_on = float(prev["on_time"])
-                    cur_on = float(qn["on_time"])
+                    mo = float(m["off_time"])
                 except (TypeError, ValueError):
-                    prev = qn
                     continue
-                if cur_on > prev_on:
-                    slot = cur_on - prev_on
-                    # Hard clamp: never outlast the successor's attack; with a
-                    # release gap, also leave a silent tail.
-                    max_off = prev_on + slot * (1.0 - frac)
-                    if prev["off_time"] > max_off:
-                        prev["off_time"] = max_off
-                        prev["duration"] = max_off - prev_on
-            prev = qn
+                if mo > cap:
+                    m["off_time"] = cap
+                    try:
+                        m["duration"] = max(0.0, cap - float(m["on_time"]))
+                    except (TypeError, ValueError):
+                        pass
+
+        for qn in ordered:
+            if qn.get("rest"):
+                # Silence: the group may release into it (staccato tail).
+                finalize(qn.get("on_time", float("inf")))
+                group = []
+                group_start = None
+                group_max_off = None
+                continue
+            try:
+                on = float(qn["on_time"])
+                off = float(qn["off_time"])
+            except (TypeError, ValueError):
+                continue
+            if group and group_start is not None and group_max_off is not None:
+                if on - group_start < ROLL_WINDOW and on < group_max_off:
+                    # Chord member: struck with the group, still sounding.
+                    group.append(qn)
+                    group_max_off = max(group_max_off, off)
+                    continue
+            finalize(on)
+            group = [qn]
+            group_start = on
+            group_max_off = off
+        finalize(float("inf"))
 
     def _apply_humanizer(self, events):
         """Apply the humanizer to the transformed MIDI events (OUT side)."""

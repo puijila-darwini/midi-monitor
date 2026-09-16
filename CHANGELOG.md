@@ -922,3 +922,25 @@ that file lean. History is chronological; most lines start with a version tag.
   zero JS console errors. New: state.py _apply_articulation + set_articulation,
   app.py POST /api/articulation, index.html release spinbutton in the quantize
   module, app.js change handler + initial state sync. Committed agent:, pushed.
+
+- Ver 66b: RELEASE-ARTICULATION REGRESSION FIX — the Ver 66 clamp destroyed
+  real chords in the NO-QUANTIZE (bypass) path. Symptom (user report): played
+  a chord with natural 1-8ms roll; in the bypass path the take's first two
+  members rendered as 1ms blips while only the last-struck note kept its true
+  ~1.85s duration. Root cause: _apply_articulation walked notes sorted by
+  on_time and treated each later-struck chord member as a "successor attack"
+  to clamp against, cutting every member whose onset was a few ms after the
+  previous one. It only handled chords with byte-identical on_times.
+  Fix: (1) the pass now returns early when quantize_enabled is False — in the
+  bypass path the take already carries the player's real durations, chords
+  legitimately overlap, and a clamp is destructive (the release-gap knob is a
+  grid/articulation concept and stays off-grid too); (2) in the gridded path
+  the walker groups notes struck within a 100ms ROLL_WINDOW and still sounding
+  as CHORD MEMBERS — they keep true durations and are only capped/trimmed
+  against the NEXT group's attack, never against each other. Monophonic
+  successive notes still cut the previous note (Ver 66's guarantee preserved:
+  the gridded 67→69 extension-overlap still clamps to zero overlap).
+  Verified offline on the user's exact 4-chord raw data (bypass: all 12 notes
+  keep 1.5-1.9s durations, zero blips), plus gridded roll-chord (4 members kept
+  0.5s, no blips) and gridded monophonic overlap (clamped). Live round-trip
+  reaffirmed; zero JS console errors. Committed agent:, pushed.
