@@ -58,12 +58,15 @@ folded into a single web app package in `monitor/`:
                           Endpoints /api/patterns list/save/load/delete.
                           Patterns carry a letter tag + bar length (auto/override)
                           for the arranger.
-- `monitor/arrange.py` - arrangement tracker: "AA BC ..." strings of pattern
-                          tags (*N repeat, +/-N transpose, (Voice) per-slot
-                          voice) laid out on the bar grid at a tempo, clipped
-                          per slot; arrangements persist in arrangements/.
-                          Voices travel mid-stream as program events through
-                          replay; /api/arrange/play uses the shared replayer.
+- `monitor/arrange.py` - arrangement tracker: 64 fixed slots (base64
+                          A-Z a-z 0-9 +/), each pointing at a stored pattern
+                          with its own transpose + voice (slots.json,
+                          gitignored). The arrangement string is pure slot
+                          characters in order, laid out on the bar grid at a
+                          tempo, clipped per slot; arrangements persist in
+                          arrangements/. Voices travel mid-stream as program
+                          events through replay; /api/arrange/play uses the
+                          shared replayer.
 - `monitor/templates/index.html` + `static/` - full 88-key piano (A0-C8,
                           transpose-safe), scrolling note feed, chord/arp flash.
 
