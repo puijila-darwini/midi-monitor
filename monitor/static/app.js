@@ -941,6 +941,17 @@ case "replay":
 
     renderButton();
   })();
+  // Let the raw card's clear button ("new empty buffer") drop out of
+  // recording mode too, so the button UI can't disagree with the backend.
+  window.syncRecording = function (on) {
+    recording = !!on;
+    var btn = document.getElementById("record-btn");
+    var dot = document.getElementById("record-btn-dot");
+    var lab = document.getElementById("record-btn-label");
+    if (btn) btn.classList.toggle("recording", recording);
+    if (dot) dot.classList.toggle("recording", recording);
+    if (lab) lab.textContent = recording ? "stop" : "rec";
+  };
 
   // Note stream clear: stream display only, never touches the raw buffer
   // or the notation derived from it (those belong to the raw card's clear).
@@ -2079,9 +2090,12 @@ function fetchRawTake() {
 }
 
 function clearRawTake() {
-  // Clears the raw buffer (the source take) plus the notation derived from
-  // it. The note stream has its own clear button (stream display only).
-  // (REC-start still wipes via the backend as part of beginning a new take.)
+  // New empty buffer: stop any recording and wipe the take plus the notation
+  // derived from it, so the next notes start from nothing instead of
+  // appending to the old take. (REC-start still wipes via the backend as
+  // part of beginning a new take.) The note stream has its own clear button
+  // (stream display only).
+  if (window.syncRecording) window.syncRecording(false);
   if (rawTakeEl) {
     rawTakeEl.innerHTML = '<li class="statusline">no raw events yet</li>';
   }

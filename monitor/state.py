@@ -1323,6 +1323,23 @@ class State:
                 self.version += 1
             self.recording = False
 
+    def reset_take(self):
+        """New empty buffer: stop any recording and wipe every take-derived
+        buffer, discarding an open pending note WITHOUT flushing it into the
+        take. The next notes start from nothing instead of appending to the
+        old take. (The live note feed `recent` is left alone — it has its own
+        stream-only clear.)"""
+        with self._emit_lock:
+            self._pending = None
+            self.quantized_notes = []
+            self.raw_take_events = []
+            self.take_notes = []
+            self.quantized_take = []
+            self.transformed_events = []
+            self.held = {}
+            self.version += 1
+        self.recording = False
+
     def _get_receive_voice_name(self):
         """Return the name of the current receive voice from bank/program."""
         return VOICES_BY_PROGRAM.get((self.receive_bank, self.receive_program), "Unknown")

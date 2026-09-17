@@ -757,12 +757,11 @@ def api_notation():
 
 @app.route("/api/take/clear", methods=["POST"])
 def api_take_clear():
-    """Clear the raw take events buffer (plus the transform output derived
-    from it, so nothing stale survives)."""
-    state.raw_take_events = []
-    state.quantized_take = []
-    state.transformed_events = []
-    return jsonify({"ok": True, "cleared": True})
+    """New empty buffer: stop any recording (an open pending note is
+    discarded, not flushed) and wipe the take plus every derived buffer, so
+    the next notes start from nothing instead of appending to the old take."""
+    state.reset_take()
+    return jsonify({"ok": True, "cleared": True, "recording": False})
 
 
 @app.route("/api/patterns", methods=["GET"])

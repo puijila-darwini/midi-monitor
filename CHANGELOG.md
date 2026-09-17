@@ -1042,3 +1042,13 @@ that file lean. History is chronological; most lines start with a version tag.
   play/stop/loop/tempo/save/load. Verified live: "A B(Strings)" = 4 bars,
   11 notes (was 171 unclipped), Strings PC fires at the slot, readout
   follows; zero console errors. Committed agent:, pushed.
+
+- Ver 71b: NEW EMPTY BUFFER — the raw card's clear button now does a full
+  reset (state.reset_take): stops any recording (open notes discarded, not
+  flushed) and wipes the take + frozen take + quantizer window + derived
+  buffers, so new notes start from nothing instead of appending to the old
+  take. Needed because recording defaults ON from page load (the take
+  accumulates in the background) and the old clear left recording running.
+  Frontend drops the rec button back to "rec" via window.syncRecording.
+  /api/take/clear returns recording:false. Verified: rec -> 2 events ->
+  clear -> 0 events, recording false. Committed agent:, pushed.
