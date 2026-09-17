@@ -70,6 +70,8 @@ def list_patterns():
             "duration": (data.get("meta") or {}).get("duration", 0.0),
             "tempo_bpm": (data.get("settings") or {}).get("tempo_bpm"),
             "time_signature": (data.get("settings") or {}).get("time_signature"),
+            # Legacy arrangement tag (pre-slots): only used to seed matching
+            # slots once on first run. The tag system is otherwise retired.
             "tag": data.get("tag"),
             "bars": arrange.pattern_bars(data.get("events", []), tempo,
                                          settings.get("time_signature"), bars_ov),
@@ -131,7 +133,6 @@ def load_pattern(slug):
         "events": data.get("events", []),
         "settings": data.get("settings", {}),
         "meta": data.get("meta", {}),
-        "tag": data.get("tag"),
         "bars": data.get("bars"),
     }
 
@@ -154,43 +155,6 @@ def _update_file(slug, mutate):
         json.dump(data, f, indent=1)
     os.replace(tmp, p)
     return True, None
-
-
-def set_pattern_tag(slug, tag):
-    """Set (or clear with "") a pattern's single-letter arrangement tag.
-
-    Tags are unique across patterns so an arrangement letter is unambiguous.
-    Returns (tag, error): tag is the stored value (None when cleared)."""
-    tag = (tag or "").strip().upper()
-    if tag == "":
-        tag = None
-    elif not re.match(r"^[A-Z]$", tag):
-        return None, "tag must be a single letter A-Z"
-    if not os.path.isdir(PATTERNS_DIR):
-        return None, "no such pattern: %s" % slug
-    if tag is not None:
-        for fn in os.listdir(PATTERNS_DIR):
-            if not fn.endswith(".json"):
-                continue
-            if fn[:-5] == _slug(slug):
-                continue
-            try:
-                with open(os.path.join(PATTERNS_DIR, fn), "r",
-                          encoding="utf-8") as f:
-                    other = json.load(f)
-            except (OSError, ValueError):
-                continue
-            if (other.get("tag") or "").upper() == tag:
-                return None, "tag %s is already on '%s'" % (
-                    tag, other.get("name", fn[:-5]))
-
-    def mutate(data):
-        data["tag"] = tag
-        return True, None
-    ok, err = _update_file(slug, mutate)
-    if not ok:
-        return None, err
-    return tag, None
 
 
 def set_pattern_bars(slug, bars):

@@ -103,11 +103,6 @@
             <button id="patterns-del" class="mini-btn danger" type="button" disabled>del</button>
           </div>
           <div class="patterns-row">
-            <input id="pattern-tag" class="pattern-tag" type="text" maxlength="1"
-                   spellcheck="false" placeholder="tag"
-                   title="Single-letter tag for arrangements (A-Z); blank clears" />
-            <button id="patterns-set-tag" class="mini-btn" type="button" disabled
-                    title="Set the arrangement tag on the selected pattern">tag</button>
             <input id="pattern-bars" class="pattern-bars" type="text" inputmode="numeric"
                    spellcheck="false" placeholder="bars"
                    title="Bar-length override for arrangements; blank = auto" />
@@ -116,14 +111,37 @@
           </div>
           <div id="patterns-status" class="patterns-status"></div>
         </div>
-        <!-- Arrangement tracker: chain tagged patterns into songs with a text
-             string like "AA BC AA BC D BC A" (*N repeat, +/-N transpose,
-             (Voice) per-slot voice). Plays through the shared replayer. -->
+        <!-- Slot grid: 64 fixed arrangement slots (base64 addresses A-Z a-z
+             0-9 +/). Click a slot to select it, then assign the pattern chosen
+             above with its own transpose + voice. The arrangement string is
+             just slot characters in order. -->
+        <div id="slots-box" class="arrange-box">
+          <div id="slot-grid" class="slot-grid" role="group" aria-label="pattern slots"></div>
+          <div class="patterns-row">
+            <span id="slot-detail" class="slot-detail" title="Selected slot">slot –</span>
+          </div>
+          <div class="patterns-row">
+            <input id="slot-transpose" class="pattern-bars" type="text" inputmode="numeric"
+                   spellcheck="false" placeholder="+/-"
+                   title="Slot transpose in semitones (-60..60)" />
+            <select id="slot-voice" title="Slot voice (program change at the slot start; blank = leave)">
+              <option value="">voice…</option>
+            </select>
+            <button id="slot-assign" class="mini-btn" type="button" disabled
+                    title="Point the selected slot at the chosen pattern">assign</button>
+            <button id="slot-clear" class="mini-btn danger" type="button" disabled
+                    title="Empty the selected slot">clear</button>
+          </div>
+          <div id="slots-status" class="patterns-status"></div>
+        </div>
+        <!-- Arrangement tracker: chain slots into songs with a text string
+             of slot characters like "AABCCDAA" (| is a visual separator).
+             Plays through the shared replayer. -->
         <div id="arrange-box" class="arrange-box">
           <div class="patterns-row">
             <input id="arrange-text" class="pattern-name" type="text"
-                   spellcheck="false" placeholder="AA BC AA BC D BC A"
-                   title="Arrangement: letters are pattern tags; A*4 repeats, B+2 transposes, C(Strings) sets the slot voice, | is a visual separator" />
+                   spellcheck="false" placeholder="AABCCDAA"
+                   title="Arrangement: slot characters in order (A-Z a-z 0-9 +/); spaces and | are visual separators" />
             <button id="arrange-play" class="mini-btn" type="button"
                     title="Play the arrangement">play</button>
             <button id="arrange-stop" class="mini-btn stop-btn" type="button"

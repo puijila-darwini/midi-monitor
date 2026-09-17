@@ -38,3 +38,7 @@ patterns/
 # Playwright browser automation snapshots & screenshots (ephemeral test artifacts)
 .playwright-mcp/
 *.png
+
+# Arrangement library + slot assignments (user data, like patterns/)
+arrangements/
+slots.json

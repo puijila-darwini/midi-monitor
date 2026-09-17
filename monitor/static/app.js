@@ -2284,8 +2284,6 @@ if (rawTakeClearBtn) {
     var loadBtn = document.getElementById("patterns-load");
     var delBtn = document.getElementById("patterns-del");
     var statusEl = document.getElementById("patterns-status");
-    var tagInput = document.getElementById("pattern-tag");
-    var tagBtn = document.getElementById("patterns-set-tag");
     var barsInput = document.getElementById("pattern-bars");
     var barsBtn = document.getElementById("patterns-set-bars");
 
@@ -2302,17 +2300,15 @@ if (rawTakeClearBtn) {
       (patterns || []).forEach(function (p) {
         var opt = document.createElement("option");
         opt.value = p.filename;
-        var tag = p.tag ? "[" + p.tag + "] " : "";
         var kind = p.kind === "out" ? " [out]" : "";
         var n = (typeof p.note_count === "number") ? " \u2013 " + p.note_count + "n" : "";
         var b = (typeof p.bars === "number") ? " \u2013 " + p.bars + "b" + (p.bars_auto ? "" : "*") : "";
-        opt.textContent = tag + p.name + kind + n + b;
+        opt.textContent = p.name + kind + n + b;
         sel.appendChild(opt);
       });
       var has = sel.options.length !== 0;
       loadBtn.disabled = !has;
       delBtn.disabled = !has;
-      if (tagBtn) tagBtn.disabled = !has;
       if (barsBtn) barsBtn.disabled = !has;
       if (!has) status("no patterns saved yet");
     }
@@ -2401,30 +2397,22 @@ if (rawTakeClearBtn) {
     loadBtn.addEventListener("click", load);
     delBtn.addEventListener("click", del);
 
-    function setMeta(kind) {
+    function setBars() {
       var slug = sel.value;
       if (!slug) return;
-      var isTag = kind === "tag";
-      var input = isTag ? tagInput : barsInput;
-      var val = input ? (input.value || "").trim() : "";
-      if (isTag && !val) {
-        // Blank tag clears it (no confirm needed; tags are cheap).
-      } else if (!val && !isTag) {
-        // Blank bars clears the override back to auto.
-      }
-      status("setting " + kind + "\u2026");
-      var body = {};
-      body[kind] = isTag ? val : (val === "" ? null : val);
-      fetch("/api/patterns/" + encodeURIComponent(slug) + "/" + kind, {
+      var val = barsInput ? (barsInput.value || "").trim() : "";
+      // Blank clears the override back to auto.
+      status("setting bars\u2026");
+      fetch("/api/patterns/" + encodeURIComponent(slug) + "/bars", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body)
+        body: JSON.stringify({ bars: val === "" ? null : val })
       }).then(function (r) { return r.json(); })
         .then(function (res) {
           if (res && res.ok) {
-            var shown = isTag ? (res.tag || "(cleared)") : (res.bars === null || res.bars === undefined ? "(auto)" : res.bars + " bars");
-            status(kind + " \u2192 " + shown, "ok");
-            if (input) input.value = "";
+            var shown = (res.bars === null || res.bars === undefined) ? "(auto)" : res.bars + " bars";
+            status("bars \u2192 " + shown, "ok");
+            if (barsInput) barsInput.value = "";
             refresh();
           } else {
             status((res && res.error) || "set failed", "err");
@@ -2433,8 +2421,7 @@ if (rawTakeClearBtn) {
         .catch(function () { status("set failed", "err"); });
     }
 
-    if (tagBtn) tagBtn.addEventListener("click", function () { setMeta("tag"); });
-    if (barsBtn) barsBtn.addEventListener("click", function () { setMeta("bars"); });
+    if (barsBtn) barsBtn.addEventListener("click", setBars);
     if (nameInput) {
       nameInput.addEventListener("keydown", function (e) {
         if (e.key === "Enter") { e.preventDefault(); save("raw"); }
@@ -2445,10 +2432,164 @@ if (rawTakeClearBtn) {
     setInterval(refresh, 15000); // keep the library honest across tabs
   })();
 
-  // Arrangement tracker: a text string of pattern tags ("AA BC ...") is
-  // concatenated on the bar grid and played through the shared replayer
-  // (so the replay stop button stops it too). Saved strings live in
-  // arrangements/ next to patterns/.
+  // Slot grid: 64 fixed arrangement slots (base64 A-Z a-z 0-9 +/). Click a
+  // cell to select it, then assign the pattern chosen in the strip above
+  // with its own transpose + voice. The arrangement string is just slot
+  // characters in order; repetition = repeat the character.
+  (function () {
+    var grid = document.getElementById("slot-grid");
+    if (!grid) return;
+    var detail = document.getElementById("slot-detail");
+    var transpEl = document.getElementById("slot-transpose");
+    var voiceEl = document.getElementById("slot-voice");
+    var assignBtn = document.getElementById("slot-assign");
+    var clearBtn = document.getElementById("slot-clear");
+    var statusEl = document.getElementById("slots-status");
+    var selIndex = 0;
+    var cache = [];
+
+    // Voice choices mirror the replay voice list (blank = leave the voice).
+    (function () {
+      var src = document.getElementById("replay-voice");
+      if (!src || !voiceEl) return;
+      for (var i = 0; i < src.options.length; i++) {
+        var o = document.createElement("option");
+        o.value = src.options[i].value;
+        o.textContent = src.options[i].textContent;
+        voiceEl.appendChild(o);
+      }
+    })();
+
+    function status(msg, cls) {
+      if (statusEl) {
+        statusEl.textContent = msg || "";
+        statusEl.className = "patterns-status" + (cls ? " " + cls : "");
+      }
+    }
+
+    function fmtTranspose(t) {
+      t = parseInt(t, 10) || 0;
+      return (t > 0 ? "+" + t : String(t));
+    }
+
+    function renderDetail() {
+      var s = cache[selIndex];
+      if (!s) {
+        if (detail) detail.textContent = "slot –";
+        return;
+      }
+      var parts = ["slot " + s.slot];
+      parts.push(s.name || "(empty)");
+      if (s.pattern) {
+        if (s.transpose) parts.push(fmtTranspose(s.transpose));
+        if (s.voice) parts.push(s.voice);
+        if (typeof s.bars === "number") parts.push(s.bars + "b");
+      }
+      if (detail) detail.textContent = parts.join(" · ");
+      if (transpEl && document.activeElement !== transpEl) {
+        transpEl.value = s.transpose ? String(s.transpose) : "";
+      }
+      if (voiceEl && document.activeElement !== voiceEl) {
+        voiceEl.value = s.voice || "";
+      }
+      var has = !!s.pattern;
+      if (assignBtn) assignBtn.disabled = false;
+      if (clearBtn) clearBtn.disabled = !has;
+    }
+
+    function renderGrid(slots) {
+      cache = slots || [];
+      grid.innerHTML = "";
+      cache.forEach(function (s, i) {
+        var b = document.createElement("button");
+        b.type = "button";
+        b.className = "slot-cell" + (s.pattern ? " filled" : "") +
+                      (i === selIndex ? " sel" : "");
+        b.textContent = s.slot;
+        var tip = "slot " + s.slot;
+        if (s.pattern) {
+          tip += ": " + (s.name || s.pattern);
+          if (s.transpose) tip += ", " + fmtTranspose(s.transpose);
+          if (s.voice) tip += ", " + s.voice;
+          if (typeof s.bars === "number") tip += ", " + s.bars + " bars";
+        } else {
+          tip += " (empty)";
+        }
+        b.title = tip;
+        b.setAttribute("aria-label", tip);
+        b.addEventListener("click", function () {
+          selIndex = i;
+          var cells = grid.querySelectorAll(".slot-cell");
+          for (var k = 0; k < cells.length; k++) {
+            cells[k].classList.toggle("sel", k === selIndex);
+          }
+          renderDetail();
+        });
+        grid.appendChild(b);
+      });
+      renderDetail();
+    }
+
+    function refresh() {
+      fetch("/api/slots", { cache: "no-store" })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (res && res.ok) renderGrid(res.slots);
+        })
+        .catch(function () { /* transient */ });
+    }
+
+    function assign() {
+      var pat = document.getElementById("patterns-select");
+      var slug = pat ? pat.value : "";
+      if (!slug) { status("choose a pattern in the strip first", "err"); return; }
+      var body = { pattern: slug };
+      var tv = transpEl ? (transpEl.value || "").trim() : "";
+      body.transpose = tv === "" ? 0 : parseInt(tv, 10);
+      if (isNaN(body.transpose)) { status("transpose must be a number", "err"); return; }
+      body.voice = voiceEl ? (voiceEl.value || "") : "";
+      if (!body.voice) body.voice = null;
+      status("assigning slot " + (cache[selIndex] || {}).slot + "\u2026");
+      fetch("/api/slots/" + selIndex, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      }).then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (res && res.ok) {
+            status("slot " + res.slot + " \u2192 " + slug, "ok");
+            refresh();
+          } else {
+            status((res && res.error) || "assign failed", "err");
+          }
+        })
+        .catch(function () { status("assign failed", "err"); });
+    }
+
+    function clear() {
+      status("clearing slot " + (cache[selIndex] || {}).slot + "\u2026");
+      fetch("/api/slots/" + selIndex, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pattern: null })
+      }).then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (res && res.ok) { status("slot " + res.slot + " emptied", "ok"); refresh(); }
+          else status((res && res.error) || "clear failed", "err");
+        })
+        .catch(function () { status("clear failed", "err"); });
+    }
+
+    if (assignBtn) assignBtn.addEventListener("click", assign);
+    if (clearBtn) clearBtn.addEventListener("click", clear);
+    refresh();
+    setInterval(refresh, 15000);
+  })();
+
+  // Arrangement tracker: a text string of slot characters ("AABCCDAA",
+  // base64 addresses A-Z a-z 0-9 +/) is concatenated on the bar grid and
+  // played through the shared replayer (so the replay stop button stops it
+  // too). Saved strings live in arrangements/ next to patterns/.
   (function () {
     var textEl = document.getElementById("arrange-text");
     if (!textEl) return;
@@ -2511,7 +2652,7 @@ if (rawTakeClearBtn) {
         .then(function (res) {
           if (playBtn) playBtn.disabled = false;
           if (res && res.ok) {
-            var seq = (res.slots || []).map(function (s) { return s.tag; }).join(" ");
+            var seq = (res.slots || []).map(function (s) { return s.slot; }).join(" ");
             status("playing " + seq + " \u2014 " + res.bars + " bars, " +
                    res.notes + " notes (~" + Math.round(res.duration * 1000) +
                    " ms)" + (res.loop ? " [loop]" : ""), "ok");

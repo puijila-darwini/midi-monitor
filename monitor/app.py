@@ -838,18 +838,6 @@ def api_patterns_delete(slug):
     return jsonify({"ok": True, "deleted": slug})
 
 
-@app.route("/api/patterns/<slug>/tag", methods=["POST"])
-def api_patterns_tag(slug):
-    """Set (or clear with "") a pattern's single-letter arrangement tag."""
-    body = request.get_json(silent=True) or {}
-    tag, err = patterns.set_pattern_tag(slug, body.get("tag", ""))
-    if err:
-        return jsonify({"ok": False, "error": err}), 400
-    hub.publish({"type": "patterns", "action": "tag",
-                 "filename": slug, "tag": tag, "time": time.time()})
-    return jsonify({"ok": True, "filename": slug, "tag": tag})
-
-
 @app.route("/api/patterns/<slug>/bars", methods=["POST"])
 def api_patterns_bars(slug):
     """Override a pattern's bar length (int), or clear with null/""."""
@@ -860,6 +848,70 @@ def api_patterns_bars(slug):
     hub.publish({"type": "patterns", "action": "bars",
                  "filename": slug, "bars": bars, "time": time.time()})
     return jsonify({"ok": True, "filename": slug, "bars": bars})
+
+
+def _slots_view():
+    """64 slot dicts enriched for the UI (char, pattern name, bars)."""
+    slots = arrange.load_slots(patterns.list_patterns())
+    meta = {}
+    for m in patterns.list_patterns():
+        meta[m["filename"]] = m
+    view = []
+    for i, ch in enumerate(arrange.SLOT_ALPHABET):
+        s = slots[i]
+        m = meta.get(s["pattern"] or "")
+        view.append({"index": i, "slot": ch, "pattern": s["pattern"],
+                     "name": (m["name"] if m else None),
+                     "transpose": s["transpose"], "voice": s["voice"],
+                     "bars": (m["bars"] if m else None),
+                     "bars_auto": (m["bars_auto"] if m else True)})
+    return view
+
+
+@app.route("/api/slots", methods=["GET"])
+def api_slots_list():
+    """The 64 arrangement slots (base64 addresses A-Z a-z 0-9 +/)."""
+    return jsonify({"ok": True, "slots": _slots_view()})
+
+
+@app.route("/api/slots/<int:index>", methods=["POST"])
+def api_slots_set(index):
+    """Assign a slot. Body: {"pattern": slug|null, "transpose": int,
+    "voice": name|null}. Omitted keys keep their current values."""
+    if not 0 <= index < 64:
+        return jsonify({"ok": False, "error": "slot index out of range 0-63"}), 404
+    body = request.get_json(silent=True) or {}
+    slots = arrange.load_slots(patterns.list_patterns())
+    cur = slots[index]
+    pattern = body.get("pattern", cur["pattern"])
+    if pattern is not None:
+        pattern = str(pattern).strip() or None
+    if pattern is not None:
+        try:
+            patterns.load_pattern(pattern)
+        except ValueError:
+            return jsonify({"ok": False,
+                            "error": "no such pattern: %s" % pattern}), 400
+    transpose = body.get("transpose", cur["transpose"])
+    voice = body.get("voice", cur["voice"])
+    if isinstance(voice, str):
+        voice = voice.strip() or None
+    if voice:
+        if _voice_to_bank_pc(voice) is None:
+            return jsonify({"ok": False,
+                            "error": "unknown voice '%s'" % voice}), 400
+    try:
+        slot = arrange.set_slot(slots, index, pattern, transpose, voice)
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+    try:
+        arrange.save_slots(slots)
+    except (OSError, ValueError) as e:
+        return jsonify({"ok": False, "error": "could not save slots: %s" % e}), 500
+    hub.publish({"type": "slots", "action": "set", "index": index,
+                 "slot": arrange.SLOT_ALPHABET[index], "time": time.time()})
+    return jsonify({"ok": True, "index": index,
+                    "slot": arrange.SLOT_ALPHABET[index], **slot})
 
 
 @app.route("/api/arrangements", methods=["GET"])
@@ -899,17 +951,18 @@ def api_arrangements_delete(slug):
 def api_arrange_play():
     """Play an arrangement string through every selected destination.
 
-    Body: {"text": "AA BC ...", "tempo": <bpm, default current>, "loop": bool}.
-    Slots are laid out on the bar grid at the arrangement tempo; per-slot
-    voices from (Voice) tokens are sent mid-stream as program changes. Uses
-    the shared replayer, so /api/replay/stop stops it too.
+    Body: {"text": "AABCCDAA", "tempo": <bpm, default current>, "loop": bool}.
+    Each character is a base64 slot address (A-Z a-z 0-9 +/); whitespace and
+    "|" are ignored. Slots are laid out on the bar grid at the arrangement
+    tempo; per-slot transpose/voice come from the slot assignment. Uses the
+    shared replayer, so /api/replay/stop stops it too.
     """
     if replayer.active:
         return jsonify({"ok": False, "error": "already replaying"}), 409
     if not state.seq_outs and not state.raw_outs:
         return jsonify({"ok": False, "error": "no output destinations"}), 400
     body = request.get_json(silent=True) or {}
-    slots, err = arrange.parse_arrangement(body.get("text", ""))
+    chars, err = arrange.parse_arrangement(body.get("text", ""))
     if err:
         return jsonify({"ok": False, "error": err}), 400
     try:
@@ -919,21 +972,23 @@ def api_arrange_play():
     if tempo <= 0:
         return jsonify({"ok": False, "error": "tempo must be > 0"}), 400
     sig = state.time_signature or "4/4"
-    by_tag = {}
-    for m in patterns.list_patterns():
-        if m.get("tag"):
-            by_tag[m["tag"]] = m["filename"]
+    slots = arrange.load_slots(patterns.list_patterns())
 
-    def resolve(tag):
-        slug = by_tag.get(tag)
-        if not slug:
-            raise ValueError("no pattern tagged '%s'" % tag)
-        pat = patterns.load_pattern(slug)
-        return {"events": pat["events"], "settings": pat["settings"],
-                "bars": pat.get("bars"), "name": pat["name"]}
+    def resolve(ch):
+        i = arrange.slot_index(ch)
+        s = slots[i]
+        if not s.get("pattern"):
+            raise ValueError("slot '%s' is empty — assign a pattern first" % ch)
+        try:
+            pat = patterns.load_pattern(s["pattern"])
+        except ValueError:
+            raise ValueError("slot '%s' points at a missing pattern" % ch)
+        return {"pattern": {"events": pat["events"], "settings": pat["settings"],
+                            "bars": pat.get("bars"), "name": pat["name"]},
+                "transpose": s["transpose"], "voice": s["voice"]}
 
     try:
-        built = arrange.build_arrangement(slots, resolve, tempo, sig,
+        built = arrange.build_arrangement(chars, resolve, tempo, sig,
                                           _voice_to_bank_pc)
     except ValueError as e:
         return jsonify({"ok": False, "error": str(e)}), 400

@@ -1052,3 +1052,19 @@ that file lean. History is chronological; most lines start with a version tag.
   Frontend drops the rec button back to "rec" via window.syncRecording.
   /api/take/clear returns recording:false. Verified: rec -> 2 events ->
   clear -> 0 events, recording false. Committed agent:, pushed.
+
+- Ver 72: SLOTS, NOT TAGS — arrangement addressing rebuilt on 64 fixed
+  slots (base64 A-Z a-z 0-9 +/). Each slot points at one stored pattern and
+  carries its own transpose + voice; the arrangement string is pure slot
+  characters ("AABCCDAA", repetition = repeat the char, spaces/| ignored).
+  monitor/arrange.py: paren-aware tokenizer replaced by char validation,
+  build takes slot chars + a slot resolver, slots persist in slots.json
+  (index-addressed API dodges +// URL-encoding), legacy pattern tags seed
+  matching slots once on first run. Tag machinery removed from patterns/UI.
+  UI reworked from scratch: 8x8 slot grid (filled/selected states, tooltips),
+  detail line, transpose + voice (cloned from the replay voice list),
+  assign/clear; strip keeps bars only. Endpoints /api/slots list/set,
+  /api/arrange/play takes slot chars (empty slot = "assign a pattern
+  first"). Verified: 64 cells, assign/select/play end-to-end in the browser,
+  "AAB" = 3 bars with transpose + Strings PC, clean errors for bad chars
+  and empty slots, zero console errors. Committed agent:, pushed.
