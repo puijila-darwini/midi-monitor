@@ -55,7 +55,7 @@
   <div id="capture-error" class="capture-error" role="alert"></div>
 
   <div class="main-grid">
-    <!-- Left column: note stream (top half) + raw midi buffer (bottom half) -->
+    <!-- Left column: note stream + raw midi buffer + pattern arranger -->
     <div class="left-col">
       <div class="section-label">capture</div>
       <aside id="feed-sidebar" class="feed-sidebar card">
@@ -70,7 +70,7 @@
       </aside>
 
       <!-- Raw midi buffer: the source buffer. Record/stop, playback and the
-           single clear control all live here (notation is derived from it). -->
+           single clear control all live here, plus the event list. -->
       <aside id="raw-sidebar" class="raw-sidebar card">
         <div class="cartouche raw-take-head">
           <span class="cartouche-title raw-take-title">raw midi buffer</span>
@@ -85,6 +85,19 @@
                   title="REC: start a new take (clears the buffer). STOP: freeze the take and flush the last note.">
             <span id="record-btn-dot" class="record-dot"></span><span id="record-btn-label">rec</span>
           </button>
+        </div>
+        <ul id="raw-take" class="feed-list raw-take"></ul>
+      </aside>
+
+      <!-- Pattern arranger: the pattern library, the 64 slot grid and the
+           arrangement tracker. Patterns are saved from the raw/out buffers;
+           slots point at patterns; the arrangement string plays the slots. -->
+      <aside id="arranger-sidebar" class="raw-sidebar card">
+        <div class="cartouche raw-take-head">
+          <span class="cartouche-title raw-take-title">pattern arranger</span>
+          <div class="cartouche-end">
+            <span class="corner" aria-hidden="true"><svg class="corner-ic"><use href="#ic-notes"/></svg></span>
+          </div>
         </div>
         <!-- Pattern library: save/load named snapshots of the raw (IN) or
              out (OUT) buffer. Loading restores events + chain settings. -->
@@ -166,7 +179,6 @@
           </div>
           <div id="arrange-status" class="patterns-status"></div>
         </div>
-        <ul id="raw-take" class="feed-list raw-take"></ul>
       </aside>
     </div>
 

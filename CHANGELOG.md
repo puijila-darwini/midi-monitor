@@ -1068,3 +1068,10 @@ that file lean. History is chronological; most lines start with a version tag.
   first"). Verified: 64 cells, assign/select/play end-to-end in the browser,
   "AAB" = 3 bars with transpose + Strings PC, clean errors for bad chars
   and empty slots, zero console errors. Committed agent:, pushed.
+
+- Ver 72b: CARD SPLIT — the left column's "raw midi buffer" card no longer
+  houses the library: it keeps head + rec/stop + clear + the event list,
+  and a new sibling "pattern arranger" card holds patterns-box + slot grid
+  + arrange box. Pure HTML move (no JS ID changes); verified live that
+  rec/clear/raw-take sit in the raw card and patterns/slots/arrange-text
+  in the arranger, zero console errors. Committed agent:, pushed.
