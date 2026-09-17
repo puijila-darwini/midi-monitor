@@ -19,6 +19,7 @@ from . import midiout
 from . import sinks
 from . import chords
 from . import patterns
+from . import arrange
 
 app = Flask(__name__)
 app.config["TEMPLATES_AUTO_RELOAD"] = True
@@ -836,6 +837,128 @@ def api_patterns_delete(slug):
     hub.publish({"type": "patterns", "action": "delete",
                  "filename": slug, "time": time.time()})
     return jsonify({"ok": True, "deleted": slug})
+
+
+@app.route("/api/patterns/<slug>/tag", methods=["POST"])
+def api_patterns_tag(slug):
+    """Set (or clear with "") a pattern's single-letter arrangement tag."""
+    body = request.get_json(silent=True) or {}
+    tag, err = patterns.set_pattern_tag(slug, body.get("tag", ""))
+    if err:
+        return jsonify({"ok": False, "error": err}), 400
+    hub.publish({"type": "patterns", "action": "tag",
+                 "filename": slug, "tag": tag, "time": time.time()})
+    return jsonify({"ok": True, "filename": slug, "tag": tag})
+
+
+@app.route("/api/patterns/<slug>/bars", methods=["POST"])
+def api_patterns_bars(slug):
+    """Override a pattern's bar length (int), or clear with null/""."""
+    body = request.get_json(silent=True) or {}
+    bars, err = patterns.set_pattern_bars(slug, body.get("bars"))
+    if err:
+        return jsonify({"ok": False, "error": err}), 400
+    hub.publish({"type": "patterns", "action": "bars",
+                 "filename": slug, "bars": bars, "time": time.time()})
+    return jsonify({"ok": True, "filename": slug, "bars": bars})
+
+
+@app.route("/api/arrangements", methods=["GET"])
+def api_arrangements_list():
+    """Saved arrangement strings (name -> text)."""
+    return jsonify({"ok": True, "arrangements": arrange.list_arrangements()})
+
+
+@app.route("/api/arrangements", methods=["POST"])
+def api_arrangements_save():
+    """Save an arrangement string. Body: {"name", "text"}."""
+    body = request.get_json(silent=True) or {}
+    try:
+        meta = arrange.save_arrangement(body.get("name"), body.get("text", ""))
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+    return jsonify({"ok": True, "arrangement": meta})
+
+
+@app.route("/api/arrangements/<slug>", methods=["GET"])
+def api_arrangements_get(slug):
+    try:
+        data = arrange.load_arrangement(slug)
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 404
+    return jsonify({"ok": True, **data})
+
+
+@app.route("/api/arrangements/<slug>", methods=["DELETE"])
+def api_arrangements_delete(slug):
+    if not arrange.delete_arrangement(slug):
+        return jsonify({"ok": False, "error": "no such arrangement"}), 404
+    return jsonify({"ok": True, "deleted": slug})
+
+
+@app.route("/api/arrange/play", methods=["POST"])
+def api_arrange_play():
+    """Play an arrangement string through every selected destination.
+
+    Body: {"text": "AA BC ...", "tempo": <bpm, default current>, "loop": bool}.
+    Slots are laid out on the bar grid at the arrangement tempo; per-slot
+    voices from (Voice) tokens are sent mid-stream as program changes. Uses
+    the shared replayer, so /api/replay/stop stops it too.
+    """
+    if replayer.active:
+        return jsonify({"ok": False, "error": "already replaying"}), 409
+    if not state.seq_outs and not state.raw_outs:
+        return jsonify({"ok": False, "error": "no output destinations"}), 400
+    body = request.get_json(silent=True) or {}
+    slots, err = arrange.parse_arrangement(body.get("text", ""))
+    if err:
+        return jsonify({"ok": False, "error": err}), 400
+    try:
+        tempo = float(body.get("tempo") or state.tempo_bpm or 120.0)
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "tempo must be a number"}), 400
+    if tempo <= 0:
+        return jsonify({"ok": False, "error": "tempo must be > 0"}), 400
+    sig = state.time_signature or "4/4"
+    by_tag = {}
+    for m in patterns.list_patterns():
+        if m.get("tag"):
+            by_tag[m["tag"]] = m["filename"]
+
+    def resolve(tag):
+        slug = by_tag.get(tag)
+        if not slug:
+            raise ValueError("no pattern tagged '%s'" % tag)
+        pat = patterns.load_pattern(slug)
+        return {"events": pat["events"], "settings": pat["settings"],
+                "bars": pat.get("bars"), "name": pat["name"]}
+
+    try:
+        built = arrange.build_arrangement(slots, resolve, tempo, sig,
+                                          _voice_to_bank_pc)
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+    if not built["events"]:
+        return jsonify({"ok": False, "error": "arrangement is empty"}), 400
+    loop = bool(body.get("loop", False))
+
+    def on_event(ev):
+        if ev.get("phase") == "voice":
+            state.receive_program = ev.get("pc", state.receive_program)
+            state.receive_bank = ev.get("bank", state.receive_bank)
+        try:
+            hub.publish(ev)
+        except Exception:
+            pass
+
+    replayer.play(built["events"], speed=1.0, on_event=on_event,
+                  voice=None, loop=loop)
+    hub.publish({"type": "arrange", "action": "play", "slots": built["slots"],
+                 "bars": built["total_bars"], "time": time.time()})
+    return jsonify({"ok": True, "slots": built["slots"],
+                    "bars": built["total_bars"],
+                    "duration": built["duration"], "notes": built["notes"],
+                    "tempo": tempo, "loop": loop})
 
 
 @app.route("/api/events")

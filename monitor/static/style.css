@@ -479,6 +479,39 @@ select option {
 }
 .patterns-status.ok { color: var(--accent, #7EC8A5); }
 .patterns-status.err { color: #E06C5D; }
+.arrange-box {
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  border-radius: 2px;
+  background: #08110E;
+  font-size: 11px;
+  color: var(--muted);
+}
+.pattern-tag {
+  flex: 0 0 34px;
+  width: 34px;
+  font-size: 11px;
+  padding: 3px 6px;
+  text-transform: uppercase;
+}
+.pattern-bars {
+  flex: 0 0 52px;
+  width: 52px;
+  font-size: 11px;
+  padding: 3px 6px;
+}
+#arrange-select {
+  flex: 1 1 90px;
+  font-size: 11px;
+}
+.arrange-loop {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  cursor: pointer;
+}
 
 /* ---- output routing checkboxes ("route to") ---- */
 .out-routing {

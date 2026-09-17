@@ -328,6 +328,26 @@ class Replay:
                             if seq is not None:
                                 seq.close()
                             return
+                    if kind == "pc":
+                        # Mid-stream voice change (arrangement slots). Last one
+                        # at a tied timestamp wins; the board applies PC to
+                        # received notes only, which is exactly this path.
+                        bank, pc = batch[-1]
+                        if seq is not None:
+                            for t in self.seq_targets:
+                                try:
+                                    seq.send_program_change(t, bank, pc,
+                                                            channel=self.channel)
+                                except Exception:
+                                    pass
+                            try:
+                                seq.flush()
+                            except Exception:
+                                pass
+                        if self.raw_devices:
+                            program_change(bank, pc)
+                        emit("voice", bank=bank, pc=pc)
+                        continue
                     self._send_batch(seq, kind, batch)
                     if kind == "on":
                         emit("step", notes=[n for n, _ in batch])
@@ -423,26 +443,59 @@ def plan_from_raw(raw_events, speed=1.0):
     # Group events by time for chord detection
     events_by_time = {}
     for ev in raw_events:
-        if ev["type"] not in ("note_on", "note_off"):
+        if not isinstance(ev, dict):
             continue
-        try:
-            note = int(ev["note"])
-            if not (0 <= note <= 127):
+        kind = ev.get("type")
+        if kind == "program":
+            # Mid-stream voice change (arrangement slots): {bank, pc, time}.
+            try:
+                bank = int(ev.get("bank", 0))
+                pc = int(ev.get("pc", 0))
+                t = float(ev["time"])
+            except (TypeError, ValueError):
                 continue
-            t = float(ev["time"])
-        except (TypeError, ValueError):
+            if not (0 <= bank <= 127 and 0 <= pc <= 127):
+                continue
+        elif kind in ("note_on", "note_off"):
+            try:
+                note = int(ev["note"])
+                if not (0 <= note <= 127):
+                    continue
+                t = float(ev["time"])
+            except (TypeError, ValueError):
+                continue
+        else:
             continue
-            
+
         if t not in events_by_time:
             events_by_time[t] = []
         events_by_time[t].append(ev)
     
     # Process each timestamp
+    pcs = []
+    # Anchor the timeline on the earliest note OR program event, so a slot's
+    # leading program change (voice at the slot start) keeps its head start
+    # over a pattern with leading silence.
+    t0 = None
+    for t in sorted(events_by_time.keys()):
+        if any(ev.get("type") in ("note_on", "note_off", "program")
+               for ev in events_by_time[t]):
+            t0 = t
+            break
     for t in sorted(events_by_time.keys()):
         # Find note_on and note_off events at this time
-        note_ons = [ev for ev in events_by_time[t] if ev["type"] == "note_on"]
-        note_offs = [ev for ev in events_by_time[t] if ev["type"] == "note_off"]
-        
+        note_ons = [ev for ev in events_by_time[t] if ev.get("type") == "note_on"]
+        note_offs = [ev for ev in events_by_time[t] if ev.get("type") == "note_off"]
+        progs = [ev for ev in events_by_time[t] if ev.get("type") == "program"]
+
+        # Voice changes (bank/pc already validated above)
+        for ev in progs:
+            bank = int(ev.get("bank", 0))
+            pc = int(ev.get("pc", 0))
+            rel_pc = (t - t0) * speed
+            pcs.append((rel_pc, "pc", (bank, pc)))
+            last = max(last, rel_pc)
+
         # Process note_ons
         for ev in note_ons:
             note = int(ev["note"])
@@ -466,8 +519,11 @@ def plan_from_raw(raw_events, speed=1.0):
             offs.append((rel_off, "off", (note, 0)))  # velocity 0 for note_off
             last = max(last, rel_off)
     
-    # Merge simultaneous events
-    raw = sorted(ons + offs, key=lambda e: (e[0], 0 if e[1] == "off" else 1))
+    # Merge simultaneous events. At a tie, offs go first (release the old
+    # chord), then program changes (voice before the notes that use it),
+    # then ons.
+    _ORDER = {"off": 0, "pc": 1, "on": 2}
+    raw = sorted(ons + offs + pcs, key=lambda e: (e[0], _ORDER.get(e[1], 2)))
     events = []
     for rel_t, kind, pair in raw:
         if events and events[-1][0] == rel_t and events[-1][1] == kind:

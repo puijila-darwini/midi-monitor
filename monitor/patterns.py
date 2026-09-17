@@ -33,6 +33,7 @@ def _path(slug):
 
 def list_patterns():
     """Metadata for every saved pattern, newest first."""
+    from . import arrange
     if not os.path.isdir(PATTERNS_DIR):
         return []
     out = []
@@ -45,6 +46,21 @@ def list_patterns():
                 data = json.load(f)
         except (OSError, ValueError):
             continue
+        settings = data.get("settings") or {}
+        tempo = settings.get("tempo_bpm") or 120.0
+        try:
+            tempo = float(tempo)
+        except (TypeError, ValueError):
+            tempo = 120.0
+        if tempo <= 0:
+            tempo = 120.0
+        bars_ov = data.get("bars")
+        try:
+            bars_ov = int(bars_ov) if bars_ov is not None else None
+            if bars_ov is not None and not 1 <= bars_ov <= 64:
+                bars_ov = None
+        except (TypeError, ValueError):
+            bars_ov = None
         out.append({
             "filename": fn[:-5],
             "name": data.get("name", fn[:-5]),
@@ -54,6 +70,10 @@ def list_patterns():
             "duration": (data.get("meta") or {}).get("duration", 0.0),
             "tempo_bpm": (data.get("settings") or {}).get("tempo_bpm"),
             "time_signature": (data.get("settings") or {}).get("time_signature"),
+            "tag": data.get("tag"),
+            "bars": arrange.pattern_bars(data.get("events", []), tempo,
+                                         settings.get("time_signature"), bars_ov),
+            "bars_auto": bars_ov is None,
         })
     out.sort(key=lambda m: (m.get("created") or 0), reverse=True)
     return out
@@ -111,7 +131,87 @@ def load_pattern(slug):
         "events": data.get("events", []),
         "settings": data.get("settings", {}),
         "meta": data.get("meta", {}),
+        "tag": data.get("tag"),
+        "bars": data.get("bars"),
     }
+
+
+def _update_file(slug, mutate):
+    """Read-modify-write a pattern file atomically. mutate(data)->(ok, error)."""
+    p = _path(_slug(slug))
+    if not p or not os.path.isfile(p):
+        return False, "no such pattern: %s" % slug
+    try:
+        with open(p, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return False, "pattern file is corrupt: %s" % slug
+    ok, err = mutate(data)
+    if not ok:
+        return False, err
+    tmp = p + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=1)
+    os.replace(tmp, p)
+    return True, None
+
+
+def set_pattern_tag(slug, tag):
+    """Set (or clear with "") a pattern's single-letter arrangement tag.
+
+    Tags are unique across patterns so an arrangement letter is unambiguous.
+    Returns (tag, error): tag is the stored value (None when cleared)."""
+    tag = (tag or "").strip().upper()
+    if tag == "":
+        tag = None
+    elif not re.match(r"^[A-Z]$", tag):
+        return None, "tag must be a single letter A-Z"
+    if not os.path.isdir(PATTERNS_DIR):
+        return None, "no such pattern: %s" % slug
+    if tag is not None:
+        for fn in os.listdir(PATTERNS_DIR):
+            if not fn.endswith(".json"):
+                continue
+            if fn[:-5] == _slug(slug):
+                continue
+            try:
+                with open(os.path.join(PATTERNS_DIR, fn), "r",
+                          encoding="utf-8") as f:
+                    other = json.load(f)
+            except (OSError, ValueError):
+                continue
+            if (other.get("tag") or "").upper() == tag:
+                return None, "tag %s is already on '%s'" % (
+                    tag, other.get("name", fn[:-5]))
+
+    def mutate(data):
+        data["tag"] = tag
+        return True, None
+    ok, err = _update_file(slug, mutate)
+    if not ok:
+        return None, err
+    return tag, None
+
+
+def set_pattern_bars(slug, bars):
+    """Override a pattern's bar length (int 1-64), or clear with None."""
+    if bars is None or (isinstance(bars, str) and not bars.strip()):
+        bars = None
+    else:
+        try:
+            bars = int(bars)
+        except (TypeError, ValueError):
+            return None, "bars must be a whole number 1-64"
+        if not 1 <= bars <= 64:
+            return None, "bars must be a whole number 1-64"
+
+    def mutate(data):
+        data["bars"] = bars
+        return True, None
+    ok, err = _update_file(slug, mutate)
+    if not ok:
+        return None, err
+    return bars, None
 
 
 def delete_pattern(slug):

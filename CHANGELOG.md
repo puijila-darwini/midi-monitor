@@ -1023,3 +1023,22 @@ that file lean. History is chronological; most lines start with a version tag.
   No second send path (/api/audition) — one mechanism, the echo
   capture-loop note_on/note_off, handles both.
   Committed agent:, pushed.
+
+- Ver 71: ARRANGEMENT TRACKER (text string) — chain tagged patterns into
+  songs like "AA BC AA BC D BC A". Patterns get a single-letter tag (unique,
+  set in the strip) and a bar length (auto = ceil to the grid at the recorded
+  tempo, or a stored override shown as 2b*). New monitor/arrange.py (pure,
+  unit-tested): paren-aware tokenizer (voice names hold spaces), bare runs
+  ("AA" = A-twice), *N repeat, +/-N transpose, (Voice) per-slot voice, |
+  separators. Slots lay out on the bar grid at the arrangement tempo (slot
+  seconds->beats at recorded tempo->seconds), clipped to the window with
+  ringing notes cut at the edge and every on paired to an off. Voices go
+  mid-stream as program events: replay.plan_from_raw passes them through
+  (off < pc < on at ties) and the player sends the PC on raw + seq paths,
+  emitting a "voice" SSE phase so the instrument readout follows. Endpoints:
+  /api/patterns/<slug>/tag|/bars, /api/arrangements CRUD, /api/arrange/play
+  {text, tempo, loop} on the shared replayer (replay/stop stops it).
+  UI: strip labels "[A] name – 12n – 2b", tag/bars setters, arrange box with
+  play/stop/loop/tempo/save/load. Verified live: "A B(Strings)" = 4 bars,
+  11 notes (was 171 unclipped), Strings PC fires at the slot, readout
+  follows; zero console errors. Committed agent:, pushed.

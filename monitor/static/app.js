@@ -726,6 +726,14 @@ case "replay":
           clearRawPlaying();
           addFeed('<span class="time">' + fmtTime(ev.time || 0) +
             "</span>  REPLAY  done", "replay");
+        } else if (ev.phase === "voice") {
+          // Mid-stream program change (arrangement slots): follow the
+          // instrument readout so it shows the voice actually sounding.
+          var vn = PSSA50_VOICES[(ev.bank || 0) + ":" + ev.pc] ||
+            ("bank " + ev.bank + " prog " + ev.pc);
+          setInstrument(ev.pc, vn);
+          addFeed('<span class="time">' + fmtTime(ev.time || 0) +
+            "</span>  REPLAY  voice \u2192 " + vn, "replay");
         } else if (ev.phase === "stopped" || ev.phase === "error") {
           replayActive = false;
           loopActive = false;
@@ -2262,6 +2270,10 @@ if (rawTakeClearBtn) {
     var loadBtn = document.getElementById("patterns-load");
     var delBtn = document.getElementById("patterns-del");
     var statusEl = document.getElementById("patterns-status");
+    var tagInput = document.getElementById("pattern-tag");
+    var tagBtn = document.getElementById("patterns-set-tag");
+    var barsInput = document.getElementById("pattern-bars");
+    var barsBtn = document.getElementById("patterns-set-bars");
 
     function status(msg, cls) {
       if (statusEl) {
@@ -2276,14 +2288,19 @@ if (rawTakeClearBtn) {
       (patterns || []).forEach(function (p) {
         var opt = document.createElement("option");
         opt.value = p.filename;
-        var tag = p.kind === "out" ? " [out]" : "";
+        var tag = p.tag ? "[" + p.tag + "] " : "";
+        var kind = p.kind === "out" ? " [out]" : "";
         var n = (typeof p.note_count === "number") ? " \u2013 " + p.note_count + "n" : "";
-        opt.textContent = p.name + tag + n;
+        var b = (typeof p.bars === "number") ? " \u2013 " + p.bars + "b" + (p.bars_auto ? "" : "*") : "";
+        opt.textContent = tag + p.name + kind + n + b;
         sel.appendChild(opt);
       });
-      loadBtn.disabled = sel.options.length === 0;
-      delBtn.disabled = sel.options.length === 0;
-      if (!sel.options.length) status("no patterns saved yet");
+      var has = sel.options.length !== 0;
+      loadBtn.disabled = !has;
+      delBtn.disabled = !has;
+      if (tagBtn) tagBtn.disabled = !has;
+      if (barsBtn) barsBtn.disabled = !has;
+      if (!has) status("no patterns saved yet");
     }
 
     function refresh() {
@@ -2369,6 +2386,41 @@ if (rawTakeClearBtn) {
     saveOutBtn.addEventListener("click", function () { save("out"); });
     loadBtn.addEventListener("click", load);
     delBtn.addEventListener("click", del);
+
+    function setMeta(kind) {
+      var slug = sel.value;
+      if (!slug) return;
+      var isTag = kind === "tag";
+      var input = isTag ? tagInput : barsInput;
+      var val = input ? (input.value || "").trim() : "";
+      if (isTag && !val) {
+        // Blank tag clears it (no confirm needed; tags are cheap).
+      } else if (!val && !isTag) {
+        // Blank bars clears the override back to auto.
+      }
+      status("setting " + kind + "\u2026");
+      var body = {};
+      body[kind] = isTag ? val : (val === "" ? null : val);
+      fetch("/api/patterns/" + encodeURIComponent(slug) + "/" + kind, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      }).then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (res && res.ok) {
+            var shown = isTag ? (res.tag || "(cleared)") : (res.bars === null || res.bars === undefined ? "(auto)" : res.bars + " bars");
+            status(kind + " \u2192 " + shown, "ok");
+            if (input) input.value = "";
+            refresh();
+          } else {
+            status((res && res.error) || "set failed", "err");
+          }
+        })
+        .catch(function () { status("set failed", "err"); });
+    }
+
+    if (tagBtn) tagBtn.addEventListener("click", function () { setMeta("tag"); });
+    if (barsBtn) barsBtn.addEventListener("click", function () { setMeta("bars"); });
     if (nameInput) {
       nameInput.addEventListener("keydown", function (e) {
         if (e.key === "Enter") { e.preventDefault(); save("raw"); }
@@ -2377,5 +2429,148 @@ if (rawTakeClearBtn) {
     box.classList.remove("hidden");
     refresh();
     setInterval(refresh, 15000); // keep the library honest across tabs
+  })();
+
+  // Arrangement tracker: a text string of pattern tags ("AA BC ...") is
+  // concatenated on the bar grid and played through the shared replayer
+  // (so the replay stop button stops it too). Saved strings live in
+  // arrangements/ next to patterns/.
+  (function () {
+    var textEl = document.getElementById("arrange-text");
+    if (!textEl) return;
+    var playBtn = document.getElementById("arrange-play");
+    var stopBtn = document.getElementById("arrange-stop");
+    var loopEl = document.getElementById("arrange-loop");
+    var tempoEl = document.getElementById("arrange-tempo");
+    var nameEl = document.getElementById("arrange-name");
+    var saveBtn = document.getElementById("arrange-save");
+    var selEl = document.getElementById("arrange-select");
+    var loadBtn = document.getElementById("arrange-load");
+    var delBtn = document.getElementById("arrange-del");
+    var statusEl = document.getElementById("arrange-status");
+
+    function status(msg, cls) {
+      if (statusEl) {
+        statusEl.textContent = msg || "";
+        statusEl.className = "patterns-status" + (cls ? " " + cls : "");
+      }
+    }
+
+    function renderList(items) {
+      if (!selEl) return;
+      selEl.innerHTML = "";
+      (items || []).forEach(function (a) {
+        var opt = document.createElement("option");
+        opt.value = a.filename;
+        opt.textContent = a.name;
+        opt.title = a.text || "";
+        selEl.appendChild(opt);
+      });
+      var has = selEl.options.length !== 0;
+      if (loadBtn) loadBtn.disabled = !has;
+      if (delBtn) delBtn.disabled = !has;
+      if (!has) status("no arrangements saved yet");
+    }
+
+    function refresh() {
+      fetch("/api/arrangements", { cache: "no-store" })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (res && res.ok) renderList(res.arrangements);
+        })
+        .catch(function () { /* transient */ });
+    }
+
+    function play() {
+      var text = (textEl.value || "").trim();
+      if (!text) { status("type an arrangement first", "err"); return; }
+      if (playBtn) playBtn.disabled = true;
+      status("playing\u2026");
+      var body = { text: text, loop: !!(loopEl && loopEl.checked) };
+      var tv = tempoEl ? (tempoEl.value || "").trim() : "";
+      if (tv) body.tempo = tv;
+      fetch("/api/arrange/play", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      }).then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (playBtn) playBtn.disabled = false;
+          if (res && res.ok) {
+            var seq = (res.slots || []).map(function (s) { return s.tag; }).join(" ");
+            status("playing " + seq + " \u2014 " + res.bars + " bars, " +
+                   res.notes + " notes (~" + Math.round(res.duration * 1000) +
+                   " ms)" + (res.loop ? " [loop]" : ""), "ok");
+          } else {
+            status((res && res.error) || "play failed", "err");
+          }
+        })
+        .catch(function () {
+          if (playBtn) playBtn.disabled = false;
+          status("play failed", "err");
+        });
+    }
+
+    function stop() {
+      fetch("/api/replay/stop", { method: "POST" })
+        .then(function () { status("stopped"); })
+        .catch(function () { status("stop failed", "err"); });
+    }
+
+    function save() {
+      var text = (textEl.value || "").trim();
+      if (!text) { status("nothing to save", "err"); return; }
+      status("saving\u2026");
+      fetch("/api/arrangements", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: (nameEl.value || "").trim(), text: text })
+      }).then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (res && res.ok) {
+            status("saved \u201C" + res.arrangement.name + "\u201D", "ok");
+            if (nameEl) nameEl.value = "";
+            refresh();
+          } else {
+            status((res && res.error) || "save failed", "err");
+          }
+        })
+        .catch(function () { status("save failed", "err"); });
+    }
+
+    function load() {
+      var slug = selEl.value;
+      if (!slug || (loadBtn && loadBtn.disabled)) return;
+      fetch("/api/arrangements/" + encodeURIComponent(slug))
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (res && res.ok) {
+            textEl.value = res.text || "";
+            status("loaded \u201C" + res.name + "\u201D", "ok");
+          } else {
+            status((res && res.error) || "load failed", "err");
+          }
+        })
+        .catch(function () { status("load failed", "err"); });
+    }
+
+    function del() {
+      var slug = selEl.value;
+      if (!slug || (delBtn && delBtn.disabled)) return;
+      fetch("/api/arrangements/" + encodeURIComponent(slug), { method: "DELETE" })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (res && res.ok) { status("deleted", "ok"); refresh(); }
+          else status((res && res.error) || "delete failed", "err");
+        })
+        .catch(function () { status("delete failed", "err"); });
+    }
+
+    if (playBtn) playBtn.addEventListener("click", play);
+    if (stopBtn) stopBtn.addEventListener("click", stop);
+    if (saveBtn) saveBtn.addEventListener("click", save);
+    if (loadBtn) loadBtn.addEventListener("click", load);
+    if (delBtn) delBtn.addEventListener("click", del);
+    refresh();
   })();
 })();

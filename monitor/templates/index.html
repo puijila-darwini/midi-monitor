@@ -102,7 +102,51 @@
             <button id="patterns-load" class="mini-btn" type="button" disabled>load</button>
             <button id="patterns-del" class="mini-btn danger" type="button" disabled>del</button>
           </div>
+          <div class="patterns-row">
+            <input id="pattern-tag" class="pattern-tag" type="text" maxlength="1"
+                   spellcheck="false" placeholder="tag"
+                   title="Single-letter tag for arrangements (A-Z); blank clears" />
+            <button id="patterns-set-tag" class="mini-btn" type="button" disabled
+                    title="Set the arrangement tag on the selected pattern">tag</button>
+            <input id="pattern-bars" class="pattern-bars" type="text" inputmode="numeric"
+                   spellcheck="false" placeholder="bars"
+                   title="Bar-length override for arrangements; blank = auto" />
+            <button id="patterns-set-bars" class="mini-btn" type="button" disabled
+                    title="Set the bar-length override on the selected pattern">bars</button>
+          </div>
           <div id="patterns-status" class="patterns-status"></div>
+        </div>
+        <!-- Arrangement tracker: chain tagged patterns into songs with a text
+             string like "AA BC AA BC D BC A" (*N repeat, +/-N transpose,
+             (Voice) per-slot voice). Plays through the shared replayer. -->
+        <div id="arrange-box" class="arrange-box">
+          <div class="patterns-row">
+            <input id="arrange-text" class="pattern-name" type="text"
+                   spellcheck="false" placeholder="AA BC AA BC D BC A"
+                   title="Arrangement: letters are pattern tags; A*4 repeats, B+2 transposes, C(Strings) sets the slot voice, | is a visual separator" />
+            <button id="arrange-play" class="mini-btn" type="button"
+                    title="Play the arrangement">play</button>
+            <button id="arrange-stop" class="mini-btn stop-btn" type="button"
+                    title="Stop playback">stop</button>
+            <label class="arrange-loop" title="Loop the arrangement">
+              <input type="checkbox" id="arrange-loop"><span>loop</span>
+            </label>
+          </div>
+          <div class="patterns-row">
+            <input id="arrange-tempo" class="pattern-bars" type="text" inputmode="decimal"
+                   spellcheck="false" placeholder="tempo"
+                   title="Arrangement tempo in BPM; blank = current tempo" />
+            <input id="arrange-name" class="pattern-name" type="text"
+                   spellcheck="false" placeholder="arrangement name" />
+            <button id="arrange-save" class="mini-btn" type="button"
+                    title="Save the arrangement string">save</button>
+          </div>
+          <div class="patterns-row">
+            <select id="arrange-select" title="Saved arrangements"></select>
+            <button id="arrange-load" class="mini-btn" type="button" disabled>load</button>
+            <button id="arrange-del" class="mini-btn danger" type="button" disabled>del</button>
+          </div>
+          <div id="arrange-status" class="patterns-status"></div>
         </div>
         <ul id="raw-take" class="feed-list raw-take"></ul>
       </aside>
