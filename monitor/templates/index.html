@@ -55,7 +55,7 @@
   <div id="capture-error" class="capture-error" role="alert"></div>
 
   <div class="main-grid">
-    <!-- Left column: note stream + raw midi buffer + pattern arranger -->
+    <!-- Left column: the two live streams - note stream + raw midi buffer -->
     <div class="left-col">
       <div class="section-label">capture</div>
       <aside id="feed-sidebar" class="feed-sidebar card">
@@ -87,98 +87,6 @@
           </button>
         </div>
         <ul id="raw-take" class="feed-list raw-take"></ul>
-      </aside>
-
-      <!-- Pattern arranger: the pattern library, the 64 slot grid and the
-           arrangement tracker. Patterns are saved from the raw/out buffers;
-           slots point at patterns; the arrangement string plays the slots. -->
-      <aside id="arranger-sidebar" class="raw-sidebar card">
-        <div class="cartouche raw-take-head">
-          <span class="cartouche-title raw-take-title">pattern arranger</span>
-          <div class="cartouche-end">
-            <span class="corner" aria-hidden="true"><svg class="corner-ic"><use href="#ic-notes"/></svg></span>
-          </div>
-        </div>
-        <!-- Pattern library: save/load named snapshots of the raw (IN) or
-             out (OUT) buffer. Loading restores events + chain settings. -->
-        <div id="patterns-box" class="patterns-box hidden">
-          <div class="patterns-row">
-            <input id="pattern-name" class="pattern-name" type="text"
-                   spellcheck="false" placeholder="pattern name" />
-            <button id="patterns-save" class="mini-btn" type="button"
-                    title="Save the raw (IN) buffer as a named pattern">save raw</button>
-            <button id="patterns-save-out" class="mini-btn" type="button"
-                    title="Save the OUT (transformed) buffer as a named pattern">save out</button>
-          </div>
-          <div class="patterns-row">
-            <select id="patterns-select" title="Saved patterns"></select>
-            <button id="patterns-load" class="mini-btn" type="button" disabled>load</button>
-            <button id="patterns-del" class="mini-btn danger" type="button" disabled>del</button>
-          </div>
-          <div class="patterns-row">
-            <input id="pattern-bars" class="pattern-bars" type="text" inputmode="numeric"
-                   spellcheck="false" placeholder="bars"
-                   title="Bar-length override for arrangements; blank = auto" />
-            <button id="patterns-set-bars" class="mini-btn" type="button" disabled
-                    title="Set the bar-length override on the selected pattern">bars</button>
-          </div>
-          <div id="patterns-status" class="patterns-status"></div>
-        </div>
-        <!-- Slot grid: 64 fixed arrangement slots (base64 addresses A-Z a-z
-             0-9 +/). Click a slot to select it, then assign the pattern chosen
-             above with its own transpose + voice. The arrangement string is
-             just slot characters in order. -->
-        <div id="slots-box" class="arrange-box">
-          <div id="slot-grid" class="slot-grid" role="group" aria-label="pattern slots"></div>
-          <div class="patterns-row">
-            <span id="slot-detail" class="slot-detail" title="Selected slot">slot –</span>
-          </div>
-          <div class="patterns-row">
-            <input id="slot-transpose" class="pattern-bars" type="text" inputmode="numeric"
-                   spellcheck="false" placeholder="+/-"
-                   title="Slot transpose in semitones (-60..60)" />
-            <select id="slot-voice" title="Slot voice (program change at the slot start; blank = leave)">
-              <option value="">voice…</option>
-            </select>
-            <button id="slot-assign" class="mini-btn" type="button" disabled
-                    title="Point the selected slot at the chosen pattern">assign</button>
-            <button id="slot-clear" class="mini-btn danger" type="button" disabled
-                    title="Empty the selected slot">clear</button>
-          </div>
-          <div id="slots-status" class="patterns-status"></div>
-        </div>
-        <!-- Arrangement tracker: chain slots into songs with a text string
-             of slot characters like "AABCCDAA" (| is a visual separator).
-             Plays through the shared replayer. -->
-        <div id="arrange-box" class="arrange-box">
-          <div class="patterns-row">
-            <input id="arrange-text" class="pattern-name" type="text"
-                   spellcheck="false" placeholder="AABCCDAA"
-                   title="Arrangement: slot characters in order (A-Z a-z 0-9 +/); spaces and | are visual separators" />
-            <button id="arrange-play" class="mini-btn" type="button"
-                    title="Play the arrangement">play</button>
-            <button id="arrange-stop" class="mini-btn stop-btn" type="button"
-                    title="Stop playback">stop</button>
-            <label class="arrange-loop" title="Loop the arrangement">
-              <input type="checkbox" id="arrange-loop"><span>loop</span>
-            </label>
-          </div>
-          <div class="patterns-row">
-            <input id="arrange-tempo" class="pattern-bars" type="text" inputmode="decimal"
-                   spellcheck="false" placeholder="tempo"
-                   title="Arrangement tempo in BPM; blank = current tempo" />
-            <input id="arrange-name" class="pattern-name" type="text"
-                   spellcheck="false" placeholder="arrangement name" />
-            <button id="arrange-save" class="mini-btn" type="button"
-                    title="Save the arrangement string">save</button>
-          </div>
-          <div class="patterns-row">
-            <select id="arrange-select" title="Saved arrangements"></select>
-            <button id="arrange-load" class="mini-btn" type="button" disabled>load</button>
-            <button id="arrange-del" class="mini-btn danger" type="button" disabled>del</button>
-          </div>
-          <div id="arrange-status" class="patterns-status"></div>
-        </div>
       </aside>
     </div>
 
@@ -583,6 +491,124 @@
         </div>
         <div id="stave" class="stave"></div>
       </section>
+
+      <!-- ===== patterns & arrangement: the pipeline below the notation =====
+           buffer (left column) -> pattern -> slot -> arrangement string. -->
+      <div class="section-label">patterns &amp; arrangement</div>
+      <div class="arrange-row">
+        <!-- patterns: the library. Save the current raw (IN) or out (OUT)
+             buffer as a named pattern, then load/delete from the list. -->
+        <section id="patterns-card" class="card arrange-card">
+          <div class="cartouche raw-take-head">
+            <span class="cartouche-title raw-take-title">patterns</span>
+            <div class="cartouche-end">
+              <span id="pattern-count" class="arrange-count"></span>
+              <span class="corner" aria-hidden="true"><svg class="corner-ic"><use href="#ic-midi"/></svg></span>
+            </div>
+          </div>
+          <div id="patterns-box" class="patterns-box hidden">
+            <div class="patterns-row">
+              <span class="ctrl-seg-label">new pattern</span>
+            </div>
+            <div class="patterns-row">
+              <input id="pattern-name" class="pattern-name" type="text"
+                     spellcheck="false" placeholder="name" />
+              <button id="patterns-save" class="mini-btn" type="button"
+                      title="Save the raw midi buffer as a pattern">save</button>
+            </div>
+            <div class="patterns-row">
+              <span class="ctrl-seg-label" title="Which buffer to snapshot">source</span>
+              <div class="ctrl-seg" id="pattern-source" role="group" aria-label="pattern source">
+                <button type="button" data-src="raw" class="active"
+                        title="The raw (IN) buffer exactly as played">IN raw</button>
+                <button type="button" data-src="out"
+                        title="The OUT buffer after the transform chain">OUT</button>
+              </div>
+            </div>
+            <div id="pattern-list" class="pattern-list"></div>
+            <div id="pattern-selected" class="pattern-selected">no pattern selected</div>
+            <div class="patterns-row">
+              <span class="ctrl-seg-label">bar length</span>
+              <input id="pattern-bars" class="pattern-bars" type="text" inputmode="numeric"
+                     spellcheck="false" placeholder="auto"
+                     title="Bar-length override for arrangements; blank = auto" />
+              <button id="patterns-set-bars" class="mini-btn" type="button" disabled
+                      title="Set the bar-length override on the selected pattern">set</button>
+            </div>
+            <div id="patterns-status" class="patterns-status"></div>
+          </div>
+        </section>
+
+        <!-- slots: 64 fixed addresses (base64 A-Z a-z 0-9 +/). Click a slot,
+             then attach the pattern chosen below with its own transpose/voice. -->
+        <section id="slots-card" class="card arrange-card">
+          <div class="cartouche raw-take-head">
+            <span class="cartouche-title raw-take-title">slots</span>
+            <div class="cartouche-end">
+              <span class="corner" aria-hidden="true"><svg class="corner-ic"><use href="#ic-notes"/></svg></span>
+            </div>
+          </div>
+          <div id="slot-grid" class="slot-grid" role="group" aria-label="pattern slots"></div>
+          <div id="slot-detail" class="slot-detail" title="Selected slot">slot –</div>
+          <div class="sub-label">assign</div>
+          <div class="patterns-row">
+            <select id="patterns-select" class="pattern-attach"
+                    title="The pattern to attach to the selected slot"></select>
+          </div>
+          <div class="patterns-row">
+            <input id="slot-transpose" class="pattern-bars" type="text" inputmode="numeric"
+                   spellcheck="false" placeholder="+/-"
+                   title="Slot transpose in semitones (-60..60)" />
+            <select id="slot-voice" title="Slot voice (program change at the slot start; blank = leave)">
+              <option value="">voice…</option>
+            </select>
+            <button id="slot-assign" class="mini-btn" type="button" disabled
+                    title="Point the selected slot at the chosen pattern">attach</button>
+            <button id="slot-clear" class="mini-btn danger" type="button" disabled
+                    title="Empty the selected slot">empty</button>
+          </div>
+          <div id="slots-status" class="patterns-status"></div>
+        </section>
+
+        <!-- arrangement: a string of slot characters played in order. -->
+        <section id="arrangement-card" class="card arrange-card">
+          <div class="cartouche raw-take-head">
+            <span class="cartouche-title raw-take-title">arrangement</span>
+            <div class="cartouche-end">
+              <span class="corner" aria-hidden="true"><svg class="corner-ic"><use href="#ic-staff"/></svg></span>
+            </div>
+          </div>
+          <div id="arrange-box" class="arrange-box">
+            <div class="patterns-row">
+              <input id="arrange-text" class="pattern-name" type="text"
+                     spellcheck="false" placeholder="AABCCDAA"
+                     title="Arrangement: slot characters in order (A-Z a-z 0-9 +/); spaces and | are visual separators" />
+              <button id="arrange-play" class="mini-btn" type="button"
+                      title="Play the arrangement">play</button>
+              <button id="arrange-stop" class="mini-btn stop-btn" type="button"
+                      title="Stop playback">stop</button>
+              <label class="arrange-loop" title="Loop the arrangement">
+                <input type="checkbox" id="arrange-loop"><span>loop</span>
+              </label>
+            </div>
+            <div class="patterns-row">
+              <input id="arrange-tempo" class="pattern-bars" type="text" inputmode="decimal"
+                     spellcheck="false" placeholder="tempo"
+                     title="Arrangement tempo in BPM; blank = current tempo" />
+              <input id="arrange-name" class="pattern-name" type="text"
+                     spellcheck="false" placeholder="name" />
+              <button id="arrange-save" class="mini-btn" type="button"
+                      title="Save the arrangement string">save</button>
+            </div>
+            <div class="patterns-row">
+              <select id="arrange-select" title="Saved arrangements"></select>
+              <button id="arrange-load" class="mini-btn" type="button" disabled>load</button>
+              <button id="arrange-del" class="mini-btn danger" type="button" disabled>del</button>
+            </div>
+            <div id="arrange-status" class="patterns-status"></div>
+          </div>
+        </section>
+      </div>
     </main>
   </div>
 

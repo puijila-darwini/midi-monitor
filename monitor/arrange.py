@@ -131,6 +131,58 @@ def save_slots(slots):
     return slots
 
 
+def read_slots():
+    """Read the 64 slot assignments without migrating or writing.
+
+    Unlike load_slots() this never touches the file, so it is safe to call
+    on read paths (library listings) regardless of whether slots.json exists.
+    """
+    if not os.path.isfile(SLOTS_PATH):
+        return blank_slots()
+    try:
+        with open(SLOTS_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return blank_slots()
+    if not isinstance(data, list):
+        return blank_slots()
+    slots = [_coerce_slot(s) for s in data[:64]]
+    while len(slots) < 64:
+        slots.append({"pattern": None, "transpose": 0, "voice": None})
+    return slots
+
+
+def pattern_usage():
+    """Map pattern slug -> list of slot chars that reference it."""
+    usage = {}
+    for i, s in enumerate(read_slots()):
+        pat = s.get("pattern")
+        if pat:
+            usage.setdefault(pat, []).append(SLOT_ALPHABET[i])
+    return usage
+
+
+def clear_pattern_slots(slug):
+    """Empty every slot that points at slug. Returns the slot chars cleared.
+
+    Used when a pattern is deleted so no slot is left dangling.
+    """
+    slug = str(slug or "")
+    if not slug:
+        return []
+    slots = load_slots()
+    cleared = []
+    for i, s in enumerate(slots):
+        if s.get("pattern") == slug:
+            s["pattern"] = None
+            s["transpose"] = 0
+            s["voice"] = None
+            cleared.append(SLOT_ALPHABET[i])
+    if cleared:
+        save_slots(slots)
+    return cleared
+
+
 def set_slot(slots, index, pattern, transpose=0, voice=None):
     """Assign one slot in a loaded slot list (index 0-63). Returns the slot."""
     if not 0 <= int(index) < 64:

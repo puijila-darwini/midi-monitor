@@ -833,9 +833,12 @@ def api_patterns_load(slug):
 def api_patterns_delete(slug):
     if not patterns.delete_pattern(slug):
         return jsonify({"ok": False, "error": "no such pattern"}), 404
+    # Never leave slots pointing at a deleted pattern: empty them and report.
+    cleared = arrange.clear_pattern_slots(slug)
     hub.publish({"type": "patterns", "action": "delete",
-                 "filename": slug, "time": time.time()})
-    return jsonify({"ok": True, "deleted": slug})
+                 "filename": slug, "cleared_slots": cleared,
+                 "time": time.time()})
+    return jsonify({"ok": True, "deleted": slug, "cleared_slots": cleared})
 
 
 @app.route("/api/patterns/<slug>/bars", methods=["POST"])

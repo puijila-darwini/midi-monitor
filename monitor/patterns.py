@@ -36,6 +36,7 @@ def list_patterns():
     from . import arrange
     if not os.path.isdir(PATTERNS_DIR):
         return []
+    usage = arrange.pattern_usage()
     out = []
     for fn in sorted(os.listdir(PATTERNS_DIR)):
         if not fn.endswith(".json"):
@@ -76,6 +77,8 @@ def list_patterns():
             "bars": arrange.pattern_bars(data.get("events", []), tempo,
                                          settings.get("time_signature"), bars_ov),
             "bars_auto": bars_ov is None,
+            # Arrangement slots that currently point at this pattern.
+            "used_slots": usage.get(fn[:-5], []),
         })
     out.sort(key=lambda m: (m.get("created") or 0), reverse=True)
     return out

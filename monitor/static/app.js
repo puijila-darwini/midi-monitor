@@ -2081,6 +2081,11 @@ function fetchRawTake() {
           return;
         }
         rawTakeCleared = false;
+        var n = (data.raw_events || []).length;
+        if (window.__rawTakeCount !== n) {
+          window.__rawTakeCount = n;
+          if (window.__onRawTakeCount) window.__onRawTakeCount(n);
+        }
         renderRawTake(data.raw_events || []);
       }
     })
@@ -2102,6 +2107,8 @@ function clearRawTake() {
   replayRawCursor = 0;
   if (window.StavePanel) window.StavePanel.clear();
   rawTakeCleared = true;
+  window.__rawTakeCount = 0;
+  if (window.__onRawTakeCount) window.__onRawTakeCount(0);
   fetch("/api/take/clear", { method: "POST" })
     .then(function (r) { return r.json(); })
     .catch(function () {
@@ -2270,22 +2277,29 @@ if (rawTakeClearBtn) {
   buildPiano();
   bindPianoClick();
 
-  // Pattern library (raw midi buffer card): save/load named snapshots of the
-  // raw (IN) and out (OUT) buffers. Saving stores the events plus the current
-  // transform-chain settings; loading restores both in the backend, then the
-  // whole page reloads so every control re-syncs to the restored settings.
+  // Pattern library ("patterns" card): save the current buffer as a named
+  // pattern, then load or delete from the list. Patterns are the raw material
+  // the slot grid attaches to; deleting one empties any slots that pointed at
+  // it (the backend does the clearing and reports the slots back). Saving
+  // stores the events plus the current transform settings; loading restores
+  // both, then the whole page reloads so every control re-syncs.
   (function () {
     var box = document.getElementById("patterns-box");
     if (!box) return;
     var nameInput = document.getElementById("pattern-name");
     var saveBtn = document.getElementById("patterns-save");
-    var saveOutBtn = document.getElementById("patterns-save-out");
-    var sel = document.getElementById("patterns-select");
-    var loadBtn = document.getElementById("patterns-load");
-    var delBtn = document.getElementById("patterns-del");
-    var statusEl = document.getElementById("patterns-status");
+    var srcSeg = document.getElementById("pattern-source");
+    var listEl = document.getElementById("pattern-list");
+    var countEl = document.getElementById("pattern-count");
+    var selDetail = document.getElementById("pattern-selected");
     var barsInput = document.getElementById("pattern-bars");
     var barsBtn = document.getElementById("patterns-set-bars");
+    var statusEl = document.getElementById("patterns-status");
+    var picker = document.getElementById("patterns-select");
+    if (!picker) picker = document.querySelector("#patterns-box select");
+    var source = "raw";      // IN raw | OUT, from the segmented control
+    var chosen = null;       // slug of the highlighted row
+    var cache = [];
 
     function status(msg, cls) {
       if (statusEl) {
@@ -2294,68 +2308,173 @@ if (rawTakeClearBtn) {
       }
     }
 
-    function renderList(patterns) {
-      if (!sel) return;
-      sel.innerHTML = "";
-      (patterns || []).forEach(function (p) {
-        var opt = document.createElement("option");
-        opt.value = p.filename;
-        var kind = p.kind === "out" ? " [out]" : "";
-        var n = (typeof p.note_count === "number") ? " \u2013 " + p.note_count + "n" : "";
-        var b = (typeof p.bars === "number") ? " \u2013 " + p.bars + "b" + (p.bars_auto ? "" : "*") : "";
-        opt.textContent = p.name + kind + n + b;
-        sel.appendChild(opt);
+    function metaText(p) {
+      var n = (typeof p.note_count === "number") ? p.note_count + "n" : "";
+      var b = (typeof p.bars === "number") ? p.bars + "b" + (p.bars_auto ? "" : "*") : "";
+      var k = p.kind === "out" ? "OUT" : "IN";
+      return [n, b, k].filter(Boolean).join(" \u00b7 ");
+    }
+
+    function renderDetail() {
+      var p = null;
+      for (var i = 0; i < cache.length; i++) {
+        if (cache[i].filename === chosen) { p = cache[i]; break; }
+      }
+      if (barsBtn) barsBtn.disabled = !p;
+      if (selDetail) {
+        if (!p) {
+          selDetail.textContent = cache.length ? "no pattern selected"
+                                               : "no patterns saved yet";
+        } else {
+          selDetail.textContent = "selected: " + p.name + " \u2014 " + metaText(p);
+        }
+      }
+      if (barsInput && document.activeElement !== barsInput) {
+        barsInput.value = (p && !p.bars_auto) ? String(p.bars) : "";
+      }
+    }
+
+    function render() {
+      if (!listEl) return;
+      listEl.innerHTML = "";
+      if (!cache.length) {
+        var empty = document.createElement("div");
+        empty.className = "pattern-empty";
+        empty.textContent = "nothing saved \u2014 record in the raw midi buffer, name it, save";
+        listEl.appendChild(empty);
+      }
+      cache.forEach(function (p) {
+        var row = document.createElement("div");
+        row.className = "pattern-row" + (p.filename === chosen ? " sel" : "");
+        row.setAttribute("data-slug", p.filename);
+        row.title = "slot chars " + ((p.used_slots || []).join(" ") || "(none)") +
+                    " use this pattern";
+
+        var nm = document.createElement("span");
+        nm.className = "pr-name";
+        nm.textContent = p.name;
+        row.appendChild(nm);
+
+        var mt = document.createElement("span");
+        mt.className = "pr-meta";
+        mt.textContent = metaText(p);
+        row.appendChild(mt);
+
+        var chips = document.createElement("span");
+        chips.className = "pattern-chips";
+        (p.used_slots || []).forEach(function (ch) {
+          var c = document.createElement("span");
+          c.className = "pattern-chip";
+          c.textContent = ch;
+          chips.appendChild(c);
+        });
+        row.appendChild(chips);
+
+        var loadB = document.createElement("button");
+        loadB.type = "button";
+        loadB.className = "mini-btn";
+        loadB.textContent = "load";
+        loadB.title = "Load this pattern into the raw midi buffer + settings";
+        loadB.addEventListener("click", function (e) {
+          e.stopPropagation();
+          load(p.filename, p.name);
+        });
+        row.appendChild(loadB);
+
+        var delB = document.createElement("button");
+        delB.type = "button";
+        delB.className = "mini-btn danger";
+        delB.textContent = "del";
+        delB.title = "Delete this pattern";
+        delB.addEventListener("click", function (e) {
+          e.stopPropagation();
+          del(p);
+        });
+        row.appendChild(delB);
+
+        row.addEventListener("click", function () {
+          chosen = p.filename;
+          render();
+        });
+        listEl.appendChild(row);
       });
-      var has = sel.options.length !== 0;
-      loadBtn.disabled = !has;
-      delBtn.disabled = !has;
-      if (barsBtn) barsBtn.disabled = !has;
-      if (!has) status("no patterns saved yet");
+
+      if (countEl) {
+        countEl.textContent = cache.length ? cache.length + " saved" : "";
+      }
+
+      // The slots card's "attach pattern" picker mirrors the library.
+      if (picker) {
+        var keep = picker.value;
+        picker.innerHTML = "";
+        cache.forEach(function (p) {
+          var o = document.createElement("option");
+          o.value = p.filename;
+          o.textContent = p.name + (p.kind === "out" ? " [out]" : "");
+          picker.appendChild(o);
+        });
+        if (keep) {
+          for (var j = 0; j < picker.options.length; j++) {
+            if (picker.options[j].value === keep) { picker.selectedIndex = j; break; }
+          }
+        }
+      }
+      renderDetail();
     }
 
     function refresh() {
       fetch("/api/patterns", { cache: "no-store" })
         .then(function (r) { return r.json(); })
         .then(function (res) {
-          if (res && res.ok) renderList(res.patterns);
+          if (!res || !res.ok) return;
+          cache = res.patterns || [];
+          if (chosen) {
+            var still = false;
+            for (var i = 0; i < cache.length; i++) {
+              if (cache[i].filename === chosen) { still = true; break; }
+            }
+            if (!still) chosen = null;
+          }
+          render();
         })
         .catch(function () { /* transient */ });
     }
 
-    function save(kind) {
-      if (saveBtn.disabled && saveOutBtn.disabled) return;
-      saveBtn.disabled = true;
-      saveOutBtn.disabled = true;
-      status(kind === "out" ? "saving out buffer\u2026" : "saving raw buffer\u2026");
+    function updateSaveEnabled() {
+      if (!saveBtn) return;
+      var n = window.__rawTakeCount || 0;
+      saveBtn.disabled = n <= 0;
+      saveBtn.title = n > 0
+        ? ("Save the " + (source === "out" ? "OUT" : "raw midi") +
+           " buffer as a pattern")
+        : "Buffer is empty \u2014 record in the raw midi buffer first";
+    }
+    window.__onRawTakeCount = updateSaveEnabled;
+    window.__refreshPatterns = refresh; // slots card refreshes chips after attach
+
+    function save() {
+      status("saving " + (source === "out" ? "OUT" : "IN raw") + " buffer\u2026");
       fetch("/api/patterns", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kind: kind, name: (nameInput.value || "").trim() })
+        body: JSON.stringify({ kind: source, name: (nameInput.value || "").trim() })
       }).then(function (r) { return r.json(); })
         .then(function (res) {
-          saveBtn.disabled = false;
-          saveOutBtn.disabled = false;
           if (res && res.ok) {
             status("saved \u201C" + res.pattern.name + "\u201D (" +
                    res.pattern.note_count + " notes)", "ok");
+            chosen = res.pattern.filename;
             if (nameInput) nameInput.value = "";
             refresh();
           } else {
             status((res && res.error) || "save failed", "err");
           }
         })
-        .catch(function () {
-          saveBtn.disabled = false;
-          saveOutBtn.disabled = false;
-          status("save failed", "err");
-        });
+        .catch(function () { status("save failed", "err"); });
     }
 
-    function load() {
-      var slug = sel.value;
-      if (!slug || loadBtn.disabled) return;
-      loadBtn.disabled = true;
-      status("loading\u2026");
+    function load(slug, name) {
+      status("loading \u201C" + name + "\u201D\u2026");
       fetch("/api/patterns/" + encodeURIComponent(slug) + "/load", { method: "POST" })
         .then(function (r) { return r.json(); })
         .then(function (res) {
@@ -2364,55 +2483,52 @@ if (rawTakeClearBtn) {
                    " notes) \u2014 reloading\u2026", "ok");
             setTimeout(function () { location.reload(); }, 600);
           } else {
-            loadBtn.disabled = false;
             status((res && res.error) || "load failed", "err");
           }
         })
-        .catch(function () {
-          loadBtn.disabled = false;
-          status("load failed", "err");
-        });
+        .catch(function () { status("load failed", "err"); });
     }
 
-    function del() {
-      var slug = sel.value;
-      if (!slug || delBtn.disabled) return;
-      delBtn.disabled = true;
-      var n = slug;
-      fetch("/api/patterns/" + encodeURIComponent(slug), { method: "DELETE" })
+    function del(p) {
+      var used = p.used_slots || [];
+      if (used.length) {
+        var ok = window.confirm(
+          "\u201C" + p.name + "\u201D is used in slots " + used.join(", ") +
+          ".\n\nDelete it and empty those slots?");
+        if (!ok) return;
+      }
+      status("deleting \u201C" + p.name + "\u201D\u2026");
+      fetch("/api/patterns/" + encodeURIComponent(p.filename), { method: "DELETE" })
         .then(function (r) { return r.json(); })
         .then(function (res) {
-          delBtn.disabled = false;
-          if (res && res.ok) status("deleted \u201C" + n + "\u201D", "ok");
-          refresh();
+          if (res && res.ok) {
+            var extra = (res.cleared_slots && res.cleared_slots.length)
+              ? " \u2014 emptied slots " + res.cleared_slots.join(", ") : "";
+            status("deleted \u201C" + p.name + "\u201D" + extra, "ok");
+            chosen = null;
+            refresh();
+            if (window.__refreshSlots) window.__refreshSlots();
+          } else {
+            status((res && res.error) || "delete failed", "err");
+          }
         })
-        .catch(function () {
-          delBtn.disabled = false;
-          status("delete failed", "err");
-        });
+        .catch(function () { status("delete failed", "err"); });
     }
 
-    saveBtn.addEventListener("click", function () { save("raw"); });
-    saveOutBtn.addEventListener("click", function () { save("out"); });
-    loadBtn.addEventListener("click", load);
-    delBtn.addEventListener("click", del);
-
     function setBars() {
-      var slug = sel.value;
-      if (!slug) return;
+      if (!chosen) { status("select a pattern first", "err"); return; }
       var val = barsInput ? (barsInput.value || "").trim() : "";
-      // Blank clears the override back to auto.
-      status("setting bars\u2026");
-      fetch("/api/patterns/" + encodeURIComponent(slug) + "/bars", {
+      status("setting bar length\u2026");
+      fetch("/api/patterns/" + encodeURIComponent(chosen) + "/bars", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ bars: val === "" ? null : val })
       }).then(function (r) { return r.json(); })
         .then(function (res) {
           if (res && res.ok) {
-            var shown = (res.bars === null || res.bars === undefined) ? "(auto)" : res.bars + " bars";
-            status("bars \u2192 " + shown, "ok");
-            if (barsInput) barsInput.value = "";
+            var shown = (res.bars === null || res.bars === undefined)
+              ? "(auto)" : res.bars + " bars";
+            status("bar length \u2192 " + shown, "ok");
             refresh();
           } else {
             status((res && res.error) || "set failed", "err");
@@ -2421,13 +2537,26 @@ if (rawTakeClearBtn) {
         .catch(function () { status("set failed", "err"); });
     }
 
+    if (srcSeg) {
+      srcSeg.addEventListener("click", function (e) {
+        var b = e.target.closest("button[data-src]");
+        if (!b) return;
+        source = b.getAttribute("data-src");
+        Array.prototype.forEach.call(srcSeg.querySelectorAll("button"), function (x) {
+          x.classList.toggle("active", x === b);
+        });
+        updateSaveEnabled();
+      });
+    }
+    if (saveBtn) saveBtn.addEventListener("click", save);
     if (barsBtn) barsBtn.addEventListener("click", setBars);
     if (nameInput) {
       nameInput.addEventListener("keydown", function (e) {
-        if (e.key === "Enter") { e.preventDefault(); save("raw"); }
+        if (e.key === "Enter") { e.preventDefault(); save(); }
       });
     }
     box.classList.remove("hidden");
+    updateSaveEnabled();
     refresh();
     setInterval(refresh, 15000); // keep the library honest across tabs
   })();
@@ -2542,7 +2671,7 @@ if (rawTakeClearBtn) {
     function assign() {
       var pat = document.getElementById("patterns-select");
       var slug = pat ? pat.value : "";
-      if (!slug) { status("choose a pattern in the strip first", "err"); return; }
+      if (!slug) { status("no pattern to attach — save one in the patterns card first", "err"); return; }
       var body = { pattern: slug };
       var tv = transpEl ? (transpEl.value || "").trim() : "";
       body.transpose = tv === "" ? 0 : parseInt(tv, 10);
@@ -2559,6 +2688,7 @@ if (rawTakeClearBtn) {
           if (res && res.ok) {
             status("slot " + res.slot + " \u2192 " + slug, "ok");
             refresh();
+            if (window.__refreshPatterns) window.__refreshPatterns();
           } else {
             status((res && res.error) || "assign failed", "err");
           }
@@ -2574,7 +2704,7 @@ if (rawTakeClearBtn) {
         body: JSON.stringify({ pattern: null })
       }).then(function (r) { return r.json(); })
         .then(function (res) {
-          if (res && res.ok) { status("slot " + res.slot + " emptied", "ok"); refresh(); }
+          if (res && res.ok) { status("slot " + res.slot + " emptied", "ok"); refresh(); if (window.__refreshPatterns) window.__refreshPatterns(); }
           else status((res && res.error) || "clear failed", "err");
         })
         .catch(function () { status("clear failed", "err"); });
@@ -2582,6 +2712,7 @@ if (rawTakeClearBtn) {
 
     if (assignBtn) assignBtn.addEventListener("click", assign);
     if (clearBtn) clearBtn.addEventListener("click", clear);
+    window.__refreshSlots = refresh; // patterns card refreshes slots after delete
     refresh();
     setInterval(refresh, 15000);
   })();

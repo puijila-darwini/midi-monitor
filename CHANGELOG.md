@@ -1075,3 +1075,29 @@ that file lean. History is chronological; most lines start with a version tag.
   + arrange box. Pure HTML move (no JS ID changes); verified live that
   rec/clear/raw-take sit in the raw card and patterns/slots/arrange-text
   in the arranger, zero console errors. Committed agent:, pushed.
+
+- Ver 73: THE ARRANGER LEAVES THE SIDEBAR — the left column is again just
+  the two live streams (note stream + raw midi buffer), and a full-width
+  "patterns & arrangement" row now sits below NOTATION in three named cards
+  in pipeline order: patterns, slots, arrangement.
+  patterns card: a real library list (not a combobox) — rows show name,
+  "5n · 1b* · IN/OUT", and chips for the slot chars that use them, each with
+  its own load/del; a "new pattern" block (name + source seg IN raw|OUT +
+  save) whose save button is disabled with an explanatory tooltip while the
+  buffer is empty; and the bar-length override moved under the selected row.
+  slots card: the grid + selected-slot detail, then an "assign" block whose
+  pattern picker is now labeled and lives next to transpose/voice/attach/empty.
+  arrangement card: unchanged controls.
+  Backend: list_patterns() gains used_slots; arrange gains read_slots(),
+  pattern_usage() and clear_pattern_slots(); DELETE /api/patterns/<slug> now
+  empties any slots pointing at the pattern and returns cleared_slots, so
+  deleting can never leave a dangling slot (the UI confirms first, naming the
+  slots). Attach/clear refresh the library chips; delete refreshes the grid.
+  Layout: .main-grid is now content-height with align-items:start and the
+  left column is viewport-capped + sticky, so the streams stay put while the
+  page scrolls down to the arranger.
+  Verified live: left col = 2 cards; arrange row below notation in the right
+  order; create (Enter or save), OUT/IN source, select + bar length, attach
+  to a slot (chips update), delete-with-refs confirm -> slots emptied (grid
+  updates), unreferenced delete no confirm, arrangement "AAB" plays, sticky
+  pins at top, zero console errors. Committed agent:, pushed.

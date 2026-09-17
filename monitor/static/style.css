@@ -366,17 +366,21 @@ select option {
   display: grid;
   grid-template-columns: 280px 1fr;
   gap: 14px;
-  flex: 1;
-  min-height: 0;
+  align-items: start;
 }
 
-/* Left column: note stream (top half) stacked over raw midi buffer (bottom half) */
+/* Left column: the two live streams - note stream + raw midi buffer. The
+   arranger now lives in a full-width row below the notation, so the column
+   is capped to the viewport and stays put while the page scrolls. */
 .left-col {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  min-height: 0;
-  height: 100%;
+  min-height: 340px;
+  height: calc(100vh - 108px);
+  position: sticky;
+  top: 12px;
+  align-self: start;
 }
 
 .feed-sidebar,
@@ -418,11 +422,6 @@ select option {
 
 /* Pattern library controls: save/load named snapshots of the raw/out buffers */
 .patterns-box {
-  margin-bottom: 8px;
-  padding: 6px 8px;
-  border: 1px dashed rgba(255, 255, 255, 0.12);
-  border-radius: 2px;
-  background: #08110E;
   font-size: 11px;
   color: var(--muted);
 }
@@ -480,11 +479,6 @@ select option {
 .patterns-status.ok { color: var(--accent, #7EC8A5); }
 .patterns-status.err { color: #E06C5D; }
 .arrange-box {
-  margin-bottom: 8px;
-  padding: 6px 8px;
-  border: 1px dashed rgba(255, 255, 255, 0.12);
-  border-radius: 2px;
-  background: #08110E;
   font-size: 11px;
   color: var(--muted);
 }
@@ -537,6 +531,88 @@ select option {
   font-size: 11px;
   cursor: pointer;
 }
+
+/* ---- patterns & arrangement row (full width, below the notation) ---- */
+.arrange-row {
+  display: flex;
+  align-items: stretch;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+.arrange-card {
+  padding: 10px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 46vh;
+  overflow-y: auto;
+}
+#patterns-card   { flex: 1.1 1 300px; }
+#slots-card      { flex: 1 1 260px; }
+#arrangement-card { flex: 1.1 1 300px; }
+.arrange-count {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.sub-label {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--straw-soft, #e8d5a3);
+  margin: 8px 0 4px;
+}
+.pattern-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 6px 0 4px;
+  max-height: 22vh;
+  overflow-y: auto;
+}
+.pattern-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 5px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  background: #08110E;
+  font-size: 11px;
+  cursor: pointer;
+}
+.pattern-row:hover { border-color: rgba(201, 168, 106, 0.5); }
+.pattern-row.sel {
+  border-color: var(--royal, #3b6ea5);
+  background: rgba(59, 110, 165, 0.16);
+}
+.pattern-row .pr-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg);
+}
+.pattern-row .pr-meta { flex: 0 0 auto; color: var(--muted); font-size: 10px; }
+.pattern-chips { display: inline-flex; gap: 3px; flex: 0 0 auto; }
+.pattern-chip {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 10px;
+  padding: 0 4px;
+  border-radius: 2px;
+  background: rgba(201, 168, 106, 0.2);
+  color: var(--straw-soft, #e8d5a3);
+}
+.pattern-empty { color: var(--muted); font-size: 11px; padding: 4px 2px; }
+.pattern-selected {
+  font-size: 11px;
+  color: var(--muted);
+  margin: 2px 0 6px;
+  min-height: 13px;
+}
+.pattern-attach { flex: 1 1 140px; font-size: 11px; }
 
 /* ---- output routing checkboxes ("route to") ---- */
 .out-routing {
