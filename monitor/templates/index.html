@@ -69,22 +69,15 @@
         <ul id="feed-list" class="feed-list"></ul>
       </aside>
 
-      <!-- Raw midi buffer: the source buffer. Record/stop, playback and the
-           single clear control all live here, plus the event list. -->
+      <!-- Raw midi buffer: a read-only view of the take buffer. The transport
+           (rec/stop + clear) now lives in the patterns card, where takes are
+           turned into patterns. -->
       <aside id="raw-sidebar" class="raw-sidebar card">
         <div class="cartouche raw-take-head">
           <span class="cartouche-title raw-take-title">raw midi buffer</span>
           <div class="cartouche-end">
-            <button id="raw-take-clear" class="key-reset" type="button"
-                    title="New empty buffer: stop recording and clear the take + notation">clear</button>
             <span class="corner" aria-hidden="true"><svg class="corner-ic"><use href="#ic-midi"/></svg></span>
           </div>
-        </div>
-        <div class="raw-take-controls">
-          <button id="record-btn" class="record-btn" type="button"
-                  title="REC: start a new take (clears the buffer). STOP: freeze the take and flush the last note.">
-            <span id="record-btn-dot" class="record-dot"></span><span id="record-btn-label">rec</span>
-          </button>
         </div>
         <ul id="raw-take" class="feed-list raw-take"></ul>
       </aside>
@@ -507,6 +500,17 @@
             </div>
           </div>
           <div id="patterns-box" class="patterns-box hidden">
+            <!-- transport: the app's single record control. Lives here (with
+                 the pattern workflow) rather than on the read-only buffer. -->
+            <div class="patterns-row transport-row">
+              <button id="record-btn" class="record-btn" type="button"
+                      title="REC: start a new take (clears the buffer). STOP: freeze the take and flush the last note.">
+                <span id="record-btn-dot" class="record-dot"></span><span id="record-btn-label">rec</span>
+              </button>
+              <button id="raw-take-clear" class="mini-btn" type="button"
+                      title="New empty buffer: stop recording and clear the take + notation">clear</button>
+              <span id="buffer-status" class="buffer-status">source buffer: empty</span>
+            </div>
             <div class="patterns-row">
               <span class="ctrl-seg-label">new pattern</span>
             </div>
@@ -552,8 +556,7 @@
           <div id="slot-detail" class="slot-detail" title="Selected slot">slot –</div>
           <div class="sub-label">assign</div>
           <div class="patterns-row">
-            <select id="patterns-select" class="pattern-attach"
-                    title="The pattern to attach to the selected slot"></select>
+            <span id="attach-pattern" class="attach-readout empty">no pattern selected</span>
           </div>
           <div class="patterns-row">
             <input id="slot-transpose" class="pattern-bars" type="text" inputmode="numeric"
@@ -606,6 +609,7 @@
               <button id="arrange-del" class="mini-btn danger" type="button" disabled>del</button>
             </div>
             <div id="arrange-status" class="patterns-status"></div>
+            <div id="arrange-preview" class="arrange-preview"></div>
           </div>
         </section>
       </div>

@@ -736,7 +736,13 @@ def api_replay_stop():
 def api_take():
     """Return the raw take events (semi-raw MIDI events) for piano roll display."""
     raw_events = getattr(state, "raw_take_events", [])
-    return jsonify({"ok": True, "raw_events": raw_events, "recording": state.recording})
+    out_events = getattr(state, "transformed_events", [])
+
+    def _notes(evs):
+        return sum(1 for e in evs if e.get("type") == "note_on")
+
+    return jsonify({"ok": True, "raw_events": raw_events, "recording": state.recording,
+                    "in_notes": _notes(raw_events), "out_notes": _notes(out_events)})
 
 
 @app.route("/api/notation")

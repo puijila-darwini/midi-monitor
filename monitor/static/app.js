@@ -1860,8 +1860,10 @@ case "replay":
     sel.value = currentVoice;
   }
 
-  // initial state
-  fetch("/api/state")
+  // initial state — also re-runnable as an in-place resync (e.g. after a
+  // pattern load), so loading a pattern never needs a full page reload.
+  function refreshState() {
+    fetch("/api/state")
     .then(function (r) { return r.json(); })
     .then(function (s) {
       setStatus(s.online);
@@ -1986,6 +1988,9 @@ if (typeof s.time_signature === "string" && s.time_signature.indexOf("/") > 0) {
       renderNotationFromBuffer();
     })
     .catch(function () { /* server just started? SSE will catch us up */ });
+  }
+  window.refreshState = refreshState;
+  refreshState();
 
   // raw midi buffer card
   var rawTakeEl = document.getElementById("raw-take");
@@ -2082,9 +2087,9 @@ function fetchRawTake() {
         }
         rawTakeCleared = false;
         var n = (data.raw_events || []).length;
-        if (window.__rawTakeCount !== n) {
-          window.__rawTakeCount = n;
-          if (window.__onRawTakeCount) window.__onRawTakeCount(n);
+        window.__rawTakeCount = n;
+        if (window.__onRawTakeCount) {
+          window.__onRawTakeCount({ in: data.in_notes || 0, out: data.out_notes || 0 });
         }
         renderRawTake(data.raw_events || []);
       }
@@ -2108,7 +2113,7 @@ function clearRawTake() {
   if (window.StavePanel) window.StavePanel.clear();
   rawTakeCleared = true;
   window.__rawTakeCount = 0;
-  if (window.__onRawTakeCount) window.__onRawTakeCount(0);
+  if (window.__onRawTakeCount) window.__onRawTakeCount({ in: 0, out: 0 });
   fetch("/api/take/clear", { method: "POST" })
     .then(function (r) { return r.json(); })
     .catch(function () {
@@ -2295,11 +2300,12 @@ if (rawTakeClearBtn) {
     var barsInput = document.getElementById("pattern-bars");
     var barsBtn = document.getElementById("patterns-set-bars");
     var statusEl = document.getElementById("patterns-status");
-    var picker = document.getElementById("patterns-select");
-    if (!picker) picker = document.querySelector("#patterns-box select");
+    var bufferEl = document.getElementById("buffer-status");
+    var attachEl = document.getElementById("attach-pattern");
     var source = "raw";      // IN raw | OUT, from the segmented control
-    var chosen = null;       // slug of the highlighted row
+    var chosen = null;       // slug of the highlighted row (shared selection)
     var cache = [];
+    var counts = { in: 0, out: 0 };
 
     function status(msg, cls) {
       if (statusEl) {
@@ -2403,22 +2409,7 @@ if (rawTakeClearBtn) {
         countEl.textContent = cache.length ? cache.length + " saved" : "";
       }
 
-      // The slots card's "attach pattern" picker mirrors the library.
-      if (picker) {
-        var keep = picker.value;
-        picker.innerHTML = "";
-        cache.forEach(function (p) {
-          var o = document.createElement("option");
-          o.value = p.filename;
-          o.textContent = p.name + (p.kind === "out" ? " [out]" : "");
-          picker.appendChild(o);
-        });
-        if (keep) {
-          for (var j = 0; j < picker.options.length; j++) {
-            if (picker.options[j].value === keep) { picker.selectedIndex = j; break; }
-          }
-        }
-      }
+      renderAttach();
       renderDetail();
     }
 
@@ -2440,17 +2431,44 @@ if (rawTakeClearBtn) {
         .catch(function () { /* transient */ });
     }
 
-    function updateSaveEnabled() {
-      if (!saveBtn) return;
-      var n = window.__rawTakeCount || 0;
-      saveBtn.disabled = n <= 0;
-      saveBtn.title = n > 0
-        ? ("Save the " + (source === "out" ? "OUT" : "raw midi") +
-           " buffer as a pattern")
-        : "Buffer is empty \u2014 record in the raw midi buffer first";
+    function updateBufferStatus() {
+      var n = source === "out" ? counts.out : counts.in;
+      if (bufferEl) {
+        bufferEl.textContent = n
+          ? "source buffer: " + n + (n === 1 ? " note" : " notes") +
+            " \u00b7 " + (source === "out" ? "OUT" : "IN raw")
+          : "source buffer: empty \u2014 press rec";
+        bufferEl.className = "buffer-status" + (n ? "" : " empty");
+      }
+      if (saveBtn) {
+        saveBtn.title = n
+          ? ("Save the " + (source === "out" ? "OUT" : "raw midi") +
+             " buffer as a pattern")
+          : "Buffer is empty \u2014 press rec in the transport row, play, then save";
+      }
     }
-    window.__onRawTakeCount = updateSaveEnabled;
+    // Fed by the shared /api/take poll (fetchRawTake). Never disables save:
+    // the server refuses an empty buffer and we show its message, so a stale
+    // count can't silently eat a click.
+    window.__onRawTakeCount = function (c) {
+      if (c && typeof c === "object") counts = c;
+      else counts = { in: c || 0, out: counts.out };
+      updateBufferStatus();
+    };
     window.__refreshPatterns = refresh; // slots card refreshes chips after attach
+
+    // The selected pattern is shared app-wide (the slots card attaches it),
+    // so both cards read one selection instead of two pickers.
+    function renderAttach() {
+      window.__selectedPattern = chosen;
+      if (!attachEl) return;
+      var p = null;
+      for (var i = 0; i < cache.length; i++) {
+        if (cache[i].filename === chosen) { p = cache[i]; break; }
+      }
+      attachEl.textContent = p ? ("attach: " + p.name) : "no pattern selected";
+      attachEl.className = "attach-readout" + (p ? "" : " empty");
+    }
 
     function save() {
       status("saving " + (source === "out" ? "OUT" : "IN raw") + " buffer\u2026");
@@ -2480,8 +2498,13 @@ if (rawTakeClearBtn) {
         .then(function (res) {
           if (res && res.ok) {
             status("loaded \u201C" + res.name + "\u201D (" + res.note_count +
-                   " notes) \u2014 reloading\u2026", "ok");
-            setTimeout(function () { location.reload(); }, 600);
+                   " notes)", "ok");
+            // In-place resync instead of a full page reload: refreshState()
+            // re-applies every restored setting (quantize/tempo/transpose/
+            // velocity/humanizer/key) and rebuilds the stave; fetchRawTake()
+            // re-renders the buffer list.
+            if (window.refreshState) window.refreshState();
+            fetchRawTake();
           } else {
             status((res && res.error) || "load failed", "err");
           }
@@ -2545,7 +2568,7 @@ if (rawTakeClearBtn) {
         Array.prototype.forEach.call(srcSeg.querySelectorAll("button"), function (x) {
           x.classList.toggle("active", x === b);
         });
-        updateSaveEnabled();
+        updateBufferStatus();
       });
     }
     if (saveBtn) saveBtn.addEventListener("click", save);
@@ -2556,7 +2579,7 @@ if (rawTakeClearBtn) {
       });
     }
     box.classList.remove("hidden");
-    updateSaveEnabled();
+    updateBufferStatus();
     refresh();
     setInterval(refresh, 15000); // keep the library honest across tabs
   })();
@@ -2641,21 +2664,33 @@ if (rawTakeClearBtn) {
           if (s.transpose) tip += ", " + fmtTranspose(s.transpose);
           if (s.voice) tip += ", " + s.voice;
           if (typeof s.bars === "number") tip += ", " + s.bars + " bars";
+          tip += " \u2014 click to append to the arrangement, shift-click to select";
         } else {
-          tip += " (empty)";
+          tip += " (empty) \u2014 click to select";
         }
         b.title = tip;
         b.setAttribute("aria-label", tip);
-        b.addEventListener("click", function () {
-          selIndex = i;
-          var cells = grid.querySelectorAll(".slot-cell");
-          for (var k = 0; k < cells.length; k++) {
-            cells[k].classList.toggle("sel", k === selIndex);
+        b.addEventListener("click", function (ev) {
+          // A filled slot appends its char to the arrangement on a plain click
+          // (the obvious thing); shift-click selects it for assign/transpose.
+          // Empty slots have nothing to append, so they just select.
+          if (s.pattern && !ev.shiftKey && window.__appendSlotChar) {
+            window.__appendSlotChar(s.slot);
+            return;
           }
-          renderDetail();
+          selectSlot(i);
         });
         grid.appendChild(b);
       });
+      renderDetail();
+    }
+
+    function selectSlot(i) {
+      selIndex = i;
+      var cells = grid.querySelectorAll(".slot-cell");
+      for (var k = 0; k < cells.length; k++) {
+        cells[k].classList.toggle("sel", k === selIndex);
+      }
       renderDetail();
     }
 
@@ -2669,9 +2704,8 @@ if (rawTakeClearBtn) {
     }
 
     function assign() {
-      var pat = document.getElementById("patterns-select");
-      var slug = pat ? pat.value : "";
-      if (!slug) { status("no pattern to attach — save one in the patterns card first", "err"); return; }
+      var slug = window.__selectedPattern || "";
+      if (!slug) { status("no pattern selected \u2014 pick one in the patterns card first", "err"); return; }
       var body = { pattern: slug };
       var tv = transpEl ? (transpEl.value || "").trim() : "";
       body.transpose = tv === "" ? 0 : parseInt(tv, 10);
@@ -2734,6 +2768,10 @@ if (rawTakeClearBtn) {
     var loadBtn = document.getElementById("arrange-load");
     var delBtn = document.getElementById("arrange-del");
     var statusEl = document.getElementById("arrange-status");
+    var previewEl = document.getElementById("arrange-preview");
+    var LS_KEY = "midi.arrange.draft";
+    var slotByChar = {};   // slot char -> slot dict (for the live preview)
+    var noteBySlug = {};   // pattern slug -> note count
 
     function status(msg, cls) {
       if (statusEl) {
@@ -2741,6 +2779,80 @@ if (rawTakeClearBtn) {
         statusEl.className = "patterns-status" + (cls ? " " + cls : "");
       }
     }
+
+    // Working string survives a refresh / pattern load (loading a pattern used
+    // to reload the page, which silently discarded whatever you'd typed).
+    function saveDraft() {
+      try {
+        localStorage.setItem(LS_KEY, JSON.stringify({
+          text: textEl.value,
+          name: nameEl ? nameEl.value : "",
+          tempo: tempoEl ? tempoEl.value : "",
+          loop: !!(loopEl && loopEl.checked)
+        }));
+      } catch (e) { /* storage disabled */ }
+    }
+    function loadDraft() {
+      try {
+        var d = JSON.parse(localStorage.getItem(LS_KEY) || "null");
+        if (!d) return;
+        if (typeof d.text === "string") textEl.value = d.text;
+        if (nameEl && typeof d.name === "string") nameEl.value = d.name;
+        if (tempoEl && typeof d.tempo === "string") tempoEl.value = d.tempo;
+        if (loopEl && d.loop) loopEl.checked = true;
+      } catch (e) { /* ignore */ }
+    }
+
+    // Live preview: bars + notes the string will produce, before you play it.
+    // Computed client-side from the slot grid (bars) and the pattern list
+    // (note counts), flagging empty slots and unknown characters.
+    function previewData() {
+      fetch("/api/slots", { cache: "no-store" })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          slotByChar = {};
+          (res.slots || []).forEach(function (s) { slotByChar[s.slot] = s; });
+          renderPreview();
+        }).catch(function () {});
+      fetch("/api/patterns", { cache: "no-store" })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          noteBySlug = {};
+          (res.patterns || []).forEach(function (p) {
+            noteBySlug[p.filename] = p.note_count || 0;
+          });
+          renderPreview();
+        }).catch(function () {});
+    }
+    function renderPreview() {
+      if (!previewEl) return;
+      var chars = (textEl.value || "").replace(/[\s|]/g, "").split("");
+      if (!chars.length) { previewEl.textContent = ""; previewEl.className = "arrange-preview"; return; }
+      var bars = 0, notes = 0, empty = [], unknown = [];
+      chars.forEach(function (c) {
+        var s = slotByChar[c];
+        if (!s) { if (unknown.indexOf(c) < 0) unknown.push(c); return; }
+        if (!s.pattern) { if (empty.indexOf(c) < 0) empty.push(c); return; }
+        bars += (typeof s.bars === "number" ? s.bars : 1);
+        notes += noteBySlug[s.pattern] || 0;
+      });
+      var msg = [chars.length + (chars.length === 1 ? " slot" : " slots"),
+                 bars + (bars === 1 ? " bar" : " bars"),
+                 notes + (notes === 1 ? " note" : " notes")].join(" \u00b7 ");
+      var cls = "arrange-preview";
+      if (unknown.length) { msg += "   unknown: " + unknown.join(" "); cls += " bad"; }
+      if (empty.length) { msg += "   empty slots: " + empty.join(" "); cls += " warn"; }
+      previewEl.textContent = msg;
+      previewEl.className = cls;
+    }
+
+    // Clicking a filled slot cell calls this to build the string.
+    window.__appendSlotChar = function (ch) {
+      textEl.value = (textEl.value || "") + ch;
+      saveDraft();
+      renderPreview();
+      textEl.focus();
+    };
 
     function renderList(items) {
       if (!selEl) return;
@@ -2832,6 +2944,8 @@ if (rawTakeClearBtn) {
         .then(function (res) {
           if (res && res.ok) {
             textEl.value = res.text || "";
+            saveDraft();
+            renderPreview();
             status("loaded \u201C" + res.name + "\u201D", "ok");
           } else {
             status((res && res.error) || "load failed", "err");
@@ -2857,6 +2971,14 @@ if (rawTakeClearBtn) {
     if (saveBtn) saveBtn.addEventListener("click", save);
     if (loadBtn) loadBtn.addEventListener("click", load);
     if (delBtn) delBtn.addEventListener("click", del);
+    textEl.addEventListener("input", function () { saveDraft(); renderPreview(); });
+    if (nameEl) nameEl.addEventListener("input", saveDraft);
+    if (tempoEl) tempoEl.addEventListener("input", saveDraft);
+    if (loopEl) loopEl.addEventListener("change", saveDraft);
+    loadDraft();
+    renderPreview();
+    previewData();
+    setInterval(previewData, 15000); // keep bars/notes honest if slots change
     refresh();
   })();
 })();

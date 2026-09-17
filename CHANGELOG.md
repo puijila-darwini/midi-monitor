@@ -1108,3 +1108,31 @@ that file lean. History is chronological; most lines start with a version tag.
   real `data: {"type":"heartbeat"}` on the queue timeout instead; the client
   switch ignores the unknown type, so only the server needs the change.
   Verified: stream shows one heartbeat per idle window, no reconnect churn.
+
+- Ver 74: transport belongs to the pattern workflow. A data VIEW must not own
+  transport, so rec/stop + clear left the raw midi buffer card (which is now a
+  pure read-only view: title + event list) and moved into a transport row at
+  the top of the patterns card: [rec/stop] [clear] | source buffer: N notes ·
+  IN raw. The buffer line is fed by the shared /api/take poll and names the
+  ACTIVE source (IN raw / OUT), so "saving what" is always explicit.
+  Save is no longer disabled by a client-side count guess — the server already
+  refuses an empty buffer, and the UI now shows that message, so a stale count
+  can't silently eat a click (the old disabled-button no-op was the whole bug).
+  /api/take gains in_notes/out_notes for the status line.
+  One shared "selected pattern": the slots card's separate dropdown is gone,
+  replaced by an "attach: <name>" readout that reads the patterns card's
+  selection, so there's a single source of truth. Save auto-selects the new
+  pattern; delete clears it; assigning an empty selection errors clearly.
+  Arrangement: clicking a filled slot cell appends its char to the string
+  (shift-click selects it for assign/transpose; empty slots just select), so
+  you compose the arrangement on the grid. A live preview under the field
+  shows "<n> slots · <n> bars · <n> notes" computed from /api/slots (bars) and
+  /api/patterns (note_count), flagging unknown chars and empty slots. The
+  working string/name/tempo/loop persist in localStorage, and loading a
+  pattern now does an in-place refreshState() + fetchRawTake() instead of a
+  full page reload — no more losing the arrangement you were building.
+  Verified live: raw card has no rec/clear; transport row + buffer status
+  render and count real input; empty save shows the server's error; shift vs
+  plain slot click; click-built "DABCABC" -> 7 bars/22 notes; draft survives
+  reload; load leaves the page alive (probe intact) and resyncs the stave;
+  zero console errors. Committed agent:, pushed.
