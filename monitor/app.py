@@ -1024,12 +1024,16 @@ def events():
     def gen():
         yield "retry: 2000\n\n"
         while True:
-            # heartbeat so the connection stays alive
+            # Heartbeat so the connection stays alive. MUST be a real `data:`
+            # event, not an SSE comment: the client's watchdog resets its timer
+            # only in onmessage, and comments never fire onmessage, so a
+            # `: keepalive` leaves the client thinking the stream is dead and
+            # forcing a reconnect every esHeartbeatInterval whenever idle.
             try:
                 item = q.get(timeout=15)
                 yield f"data: {json.dumps(item)}\n\n"
             except queue.Empty:
-                yield ": keepalive\n\n"
+                yield f"data: {json.dumps({'type': 'heartbeat'})}\n\n"
     resp = Response(gen(), mimetype="text/event-stream")
     resp.headers["Cache-Control"] = "no-cache"
     resp.headers["X-Accel-Buffering"] = "no"

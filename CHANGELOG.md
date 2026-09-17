@@ -1101,3 +1101,10 @@ that file lean. History is chronological; most lines start with a version tag.
   to a slot (chips update), delete-with-refs confirm -> slots emptied (grid
   updates), unreferenced delete no confirm, arrangement "AAB" plays, sticky
   pins at top, zero console errors. Committed agent:, pushed.
+
+- Ver 73b: SSE heartbeat was an SSE comment (": keepalive"), which never
+  fires onmessage, so the client watchdog (app.js) never saw it and forced a
+  bogus reconnect every 20s whenever the board was idle. Server now emits a
+  real `data: {"type":"heartbeat"}` on the queue timeout instead; the client
+  switch ignores the unknown type, so only the server needs the change.
+  Verified: stream shows one heartbeat per idle window, no reconnect churn.
