@@ -67,6 +67,14 @@ folded into a single web app package in `monitor/`:
                           arrangements/. Voices travel mid-stream as program
                           events through replay; /api/arrange/play uses the
                           shared replayer.
+- `monitor/static/roll.js` - piano roll (pure SVG): a second consumer of the
+                          SAME `/api/notation` events the stave uses, so it
+                          always mirrors the notation. Time fits the card
+                          width, pitch auto-fits the notes present. Renders on
+                          the same triggers as the stave; the replay step's
+                          relative time sweeps a playhead and lights the
+                          sounding block. Built for future editing (render is a
+                          pure function of a `model` of hit-testable blocks).
 - `monitor/templates/index.html` + `static/` - full 88-key piano (A0-C8,
                           transpose-safe), scrolling note feed, chord/arp flash.
 

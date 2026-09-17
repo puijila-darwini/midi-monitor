@@ -350,7 +350,10 @@ class Replay:
                         continue
                     self._send_batch(seq, kind, batch)
                     if kind == "on":
-                        emit("step", notes=[n for n, _ in batch])
+                        # t = seconds since this pass's first onset (resets each
+                        # loop), so the piano roll can sweep its playhead.
+                        emit("step", notes=[n for n, _ in batch],
+                             t=round(rel_t, 4))
                 self._all_off(seq)
                 emit("done", duration=round(duration, 3))
                 if not self._loop:

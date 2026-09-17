@@ -707,6 +707,7 @@ case "replay":
           replayRawCursor = 0;
           clearRawPlaying();
           if (window.StavePanel) StavePanel.resetPlayback();
+          if (window.PianoRoll) PianoRoll.resetPlayback();
           addFeed('<span class="time">' + fmtTime(ev.time || 0) +
             "</span>  REPLAY  playing back " + ev.count + " note" +
             (ev.count === 1 ? "" : "s") + " (~" + (ev.duration * 1000) +
@@ -720,10 +721,15 @@ case "replay":
           });
           markRawPlaying(ev.notes);
           if (window.StavePanel) StavePanel.markPlaying(ev.notes);
+          if (window.PianoRoll) {
+            PianoRoll.showPlayhead(ev.t);
+            PianoRoll.markPlaying(ev.notes);
+          }
         } else if (ev.phase === "done") {
           replayActive = false;
           if (setReplayBtn) setReplayBtn();
           clearRawPlaying();
+          if (window.PianoRoll) PianoRoll.resetPlayback();
           addFeed('<span class="time">' + fmtTime(ev.time || 0) +
             "</span>  REPLAY  done", "replay");
         } else if (ev.phase === "voice") {
@@ -740,6 +746,7 @@ case "replay":
           if (setReplayBtn) setReplayBtn();
           if (setLoopBtn) setLoopBtn();
           clearRawPlaying();
+          if (window.PianoRoll) PianoRoll.resetPlayback();
           if (ev.phase === "stopped") {
             addFeed('<span class="time">' + fmtTime(ev.time || 0) +
               "</span>  REPLAY  stopped", "replay");
@@ -896,6 +903,9 @@ case "replay":
           }
         });
         StavePanel.finishTake(); // fill the final bar with a trailing rest
+        // The piano roll is a second consumer of the SAME events, so it always
+        // mirrors the notation (one fetch drives both cards).
+        if (window.PianoRoll) window.PianoRoll.render(data.events || [], data);
       })
       .catch(function () { /* transient */ });
   }
@@ -919,8 +929,9 @@ case "replay":
       recording = next;
       renderButton();
       if (next) {
-        // Start: backend clears the take, frontend clears the stave.
+        // Start: backend clears the take, frontend clears the stave + roll.
         if (window.StavePanel) window.StavePanel.clear();
+        if (window.PianoRoll) window.PianoRoll.clear();
       }
       fetch("/api/record", {
         method: "POST",

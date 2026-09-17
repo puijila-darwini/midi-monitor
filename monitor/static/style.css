@@ -1214,6 +1214,56 @@ li.tonic {
 }
 
 /* ---- notation stave (the sheet in the garden) ---- */
+/* ---- piano roll ---- */
+.roll-wrap {
+  padding: 10px 12px 12px;
+  width: 100%;
+  overflow-x: auto;
+}
+.roll { width: 100%; }
+.roll-meta {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.roll-empty {
+  color: var(--muted);
+  font-style: italic;
+  font-size: 12px;
+  padding: 60px 12px;
+  text-align: center;
+}
+.roll-svg { display: block; }
+.roll-row.white { fill: rgba(255, 255, 255, 0.02); }
+.roll-row.black { fill: rgba(0, 0, 0, 0.35); }
+.roll-ruler { fill: #08110E; }
+.roll-gridline { stroke: rgba(255, 255, 255, 0.05); stroke-width: 1; }
+.roll-beatline { stroke: rgba(255, 255, 255, 0.10); stroke-width: 1; }
+.roll-barline { stroke: rgba(255, 255, 255, 0.22); stroke-width: 1; }
+.roll-barlabel {
+  fill: var(--muted);
+  font-size: 9px;
+  font-family: ui-monospace, Menlo, monospace;
+}
+.roll-gutter-bg { fill: #0B1512; }
+.roll-key.white { fill: #D8D2B8; }
+.roll-key.black { fill: #1B2320; }
+.roll-keylabel {
+  fill: #2A2A24;
+  font-size: 8px;
+  text-anchor: end;
+  font-family: ui-monospace, Menlo, monospace;
+}
+.roll-edge { stroke: var(--phthalo-border); stroke-width: 1; }
+.roll-block { stroke: rgba(0, 0, 0, 0.35); stroke-width: 0.5; cursor: default; }
+.roll-block.playing { stroke: var(--straw, #C9A86A); stroke-width: 1.5; }
+.roll-playhead {
+  stroke: var(--straw, #C9A86A);
+  stroke-width: 1.5;
+  pointer-events: none;
+}
+.roll-playhead.hidden { display: none; }
+
 .stave-wrap {
   padding: 10px 12px 12px;
   overflow-x: auto;

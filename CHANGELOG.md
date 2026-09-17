@@ -1136,3 +1136,29 @@ that file lean. History is chronological; most lines start with a version tag.
   plain slot click; click-built "DABCABC" -> 7 bars/22 notes; draft survives
   reload; load leaves the page alive (probe intact) and resyncs the stave;
   zero console errors. Committed agent:, pushed.
+
+- Ver 75: piano roll. A big new full-width card sits between the transform &
+  play row and the notation card, as a second consumer of the SAME
+  /api/notation events the stave renders — so it always shows whatever the
+  notation shows, under the same quantize/tempo/time-sig, with no new data
+  endpoint. renderNotationFromBuffer() now feeds both cards from its one fetch.
+  New self-contained monitor/static/roll.js (pure SVG, no deps): time fits the
+  card width (whole take visible), pitch auto-fits the notes present (+2
+  semitone pad, clamped A0-C8, min one octave), one row per semitone with black
+  rows shaded, a mini-piano gutter with C labels, a top ruler with bar numbers,
+  bar/beat/subdivision gridlines (subdivisions only when they won't turn to
+  mush), and note blocks sized by duration and shaded by velocity. REC clears
+  the roll with the stave; a live meta readout shows notes/seconds/bpm.
+  Replay: replay.py now includes the step's relative time (t, reset each loop)
+  in its "step" event, and the app sweeps a playhead across the roll while
+  lighting the currently sounding block — reset on start, hidden on
+  done/stopped/error. Built with editing in mind: render() is a pure function
+  of a `model` of hit-testable blocks (`data-idx`/`data-note`), so a later
+  add/delete/drag is a model mutation + re-render.
+  Verified live: roll sits in DOM order chain-row -> roll-wrap -> stave-wrap at
+  the same full width as notation; 9 injected notes -> 9 blocks matching
+  /api/notation; tempo 60 -> 1 bar, 3/4 -> 2 bars; playhead swept 491->1840px
+  with the sounding block lit, then hid on done; REC shows the empty state;
+  full A0-C8 take grows the card (66 rows, 488px) without error; zero console
+  errors. AGENTS.md gains a roll.js architecture bullet. Committed agent:,
+  pushed.

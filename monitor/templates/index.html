@@ -472,6 +472,17 @@
         </section>
       </div>
 
+      <section id="roll-wrap" class="roll-wrap card">
+        <div class="cartouche roll-head">
+          <span class="cartouche-title roll-title">piano roll</span>
+          <div class="cartouche-end">
+            <span id="roll-meta" class="roll-meta"></span>
+            <span class="corner" aria-hidden="true"><svg class="corner-ic"><use href="#ic-notes"/></svg></span>
+          </div>
+        </div>
+        <div id="roll" class="roll"></div>
+      </section>
+
       <section id="stave-wrap" class="stave-wrap card">
         <div class="cartouche stave-head">
           <span class="cartouche-title stave-title">notation</span>
@@ -620,6 +631,7 @@
 
   <script src="{{ url_for('static', filename='vendor/vexflow.js') }}"></script>
   <script src="{{ url_for('static', filename='stave.js') }}"></script>
+  <script src="{{ url_for('static', filename='roll.js') }}"></script>
   <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>
