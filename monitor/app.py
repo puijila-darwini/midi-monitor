@@ -835,6 +835,29 @@ def api_patterns_load(slug):
                     "note_count": (pat["meta"] or {}).get("note_count", 0)})
 
 
+@app.route("/api/patterns/<slug>/play", methods=["POST"])
+def api_patterns_play(slug):
+    """Play a stored pattern's OWN events straight out to the destinations via
+    the shared replayer (raw path — original timing kept). Does NOT touch the
+    buffer or chain settings, unlike load. Progress runs through the same SSE
+    'replay'/'step' events, so the roll playhead and key lights follow along."""
+    if replayer.active:
+        return jsonify({"ok": False, "error": "already replaying"}), 409
+    if not state.seq_outs and not state.raw_outs:
+        return jsonify({"ok": False, "error": "no output destinations"}), 400
+    try:
+        pat = patterns.load_pattern(slug)
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 404
+    events = pat.get("events") or []
+    if not events:
+        return jsonify({"ok": False, "error": "pattern is empty"}), 400
+    voice = _voice_to_bank_pc("auto")
+    replayer.play(events, speed=1.0, on_event=hub.publish, voice=voice, loop=False)
+    count = sum(1 for e in events if e.get("type") == "note_on")
+    return jsonify({"ok": True, "name": pat.get("name", slug), "notes": count})
+
+
 @app.route("/api/patterns/<slug>", methods=["DELETE"])
 def api_patterns_delete(slug):
     if not patterns.delete_pattern(slug):

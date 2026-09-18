@@ -1162,3 +1162,24 @@ that file lean. History is chronological; most lines start with a version tag.
   full A0-C8 take grows the card (66 rows, 488px) without error; zero console
   errors. AGENTS.md gains a roll.js architecture bullet. Committed agent:,
   pushed.
+
+- Ver 76: patterns get a one-click PLAY. The obvious gap — replaying a
+  pattern, or the current buffer, from where you are — is now closed in the
+  patterns card:
+  - Transport row gains a play button right after rec: [rec] [play] [clear].
+    It's a toggle like out-card play but press-again-to-stop: POST /api/replay
+    to start the current buffer, POST /api/replay/stop while sounding. Uses the
+    same global replay-voice selection, and its ▶/■ + green "playing" state
+    rides the shared replayActive flag (SSE replay events + stop/loop buttons
+    all toggle it), so it stays in sync with the out-card play button.
+  - Each pattern row now reads [play] [load] [del]. play does NOT load: new
+    POST /api/patterns/<slug>/play loads the stored events server-side and runs
+    them straight out through the shared replayer at original timing (raw
+    path), so the buffer and chain settings stay untouched and the roll
+    playhead + key lights / feed follow along via the normal replay events. The
+    status line reports name + note count, or the server error (409 if a
+    replay/arrangement is already running, 400 if no out destinations).
+  Verified live: transport play flipped to ▪ stop and replayed the 21-note
+  buffer (~4.5s) then reverted on toggle; pattern oii played back its 6 stored
+  notes (~2.5s) with feed entries and "playing "oii" (6 notes)" status; rows
+  show play before load/del; zero console errors. Committed agent:, pushed.

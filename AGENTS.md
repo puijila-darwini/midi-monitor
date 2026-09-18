@@ -55,7 +55,10 @@ folded into a single web app package in `monitor/`:
                           (IN) / out (OUT) buffers as JSON in patterns/
                           (gitignored). A pattern = events + transform-chain
                           settings; load restores both into the raw buffer.
-                          Endpoints /api/patterns list/save/load/delete.
+                          Endpoints /api/patterns list/save/load/delete. PLAY (/api/patterns/<slug>/play)
+  runs a stored pattern's own events straight out via the shared replayer
+  (no buffer load), and the patterns transport row's play button replays the
+  current buffer (same as out-card play, press-again-to-stop).
                           Patterns carry a letter tag + bar length (auto/override)
                           for the arranger.
 - `monitor/arrange.py` - arrangement tracker: 64 fixed slots (base64

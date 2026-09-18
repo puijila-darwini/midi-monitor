@@ -704,6 +704,7 @@ case "replay":
         if (ev.phase === "start") {
           replayActive = true;
           if (setReplayBtn) setReplayBtn();
+          if (setBufferPlayBtn) setBufferPlayBtn();
           replayRawCursor = 0;
           clearRawPlaying();
           if (window.StavePanel) StavePanel.resetPlayback();
@@ -728,6 +729,7 @@ case "replay":
         } else if (ev.phase === "done") {
           replayActive = false;
           if (setReplayBtn) setReplayBtn();
+          if (setBufferPlayBtn) setBufferPlayBtn();
           clearRawPlaying();
           if (window.PianoRoll) PianoRoll.resetPlayback();
           addFeed('<span class="time">' + fmtTime(ev.time || 0) +
@@ -744,6 +746,7 @@ case "replay":
           replayActive = false;
           loopActive = false;
           if (setReplayBtn) setReplayBtn();
+          if (setBufferPlayBtn) setBufferPlayBtn();
           if (setLoopBtn) setLoopBtn();
           clearRawPlaying();
           if (window.PianoRoll) PianoRoll.resetPlayback();
@@ -1029,6 +1032,54 @@ case "replay":
     render();
   })();
 
+  // BUFFER play (patterns transport row): same playback as the out-card play
+  // button, but toggles — press again (=stop) while the take is sounding.
+  var setBufferPlayBtn = null;
+  (function () {
+    var btn = document.getElementById("buffer-play");
+    var lab = document.getElementById("buffer-play-label");
+    var glyph = document.getElementById("buffer-play-glyph");
+    if (!btn) return;
+
+    function render() {
+      btn.classList.toggle("playing", replayActive);
+      if (glyph) glyph.textContent = replayActive ? "\u25aa" : "\u25b6";
+      if (lab) lab.textContent = replayActive ? "stop" : "play";
+    }
+    setBufferPlayBtn = render;
+
+    btn.addEventListener("click", function () {
+      if (replayActive) {
+        fetch("/api/replay/stop", { method: "POST" })
+          .then(function (r) { return r.json(); })
+          .then(function (res) {
+            if (res && !res.active) {
+              replayActive = false;
+              loopActive = false;
+              setReplayBtn && setReplayBtn();
+              setLoopBtn && setLoopBtn();
+              setBufferPlayBtn && setBufferPlayBtn();
+            }
+          })
+          .catch(function () { /* transient */ });
+        return;
+      }
+      var voiceSel = document.getElementById("replay-voice");
+      var voiceVal = voiceSel ? voiceSel.value : "auto";
+      fetch("/api/replay", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ speed: 1.0, voice: voiceVal })
+      }).then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (!res.ok) addFeed("REPLAY  " + (res.error || "failed"), "replay");
+        })
+        .catch(function () { /* transient */ });
+    });
+
+    render();
+  })();
+
 // STOP button: halt playback immediately (all notes off).
   (function () {
     var btn = document.getElementById("replay-stop-btn");
@@ -1042,6 +1093,7 @@ case "replay":
             loopActive = false;
             setReplayBtn && setReplayBtn();
             setLoopBtn && setLoopBtn();
+            setBufferPlayBtn && setBufferPlayBtn();
           }
         })
         .catch(function () { /* transient */ });
@@ -1070,6 +1122,7 @@ case "replay":
             if (res && !res.active) {
               replayActive = false;
               setReplayBtn && setReplayBtn();
+              setBufferPlayBtn && setBufferPlayBtn();
             }
           })
           .catch(function () { /* transient */ });
@@ -1087,6 +1140,8 @@ case "replay":
             loopActive = true;
             replayActive = true;
             renderLoop();
+            setReplayBtn && setReplayBtn();
+            setBufferPlayBtn && setBufferPlayBtn();
             setReplayBtn && setReplayBtn();
           } else {
             addFeed("LOOP  " + (res.error || "failed"), "replay");
@@ -2387,6 +2442,17 @@ if (rawTakeClearBtn) {
         });
         row.appendChild(chips);
 
+        var playB = document.createElement("button");
+        playB.type = "button";
+        playB.className = "mini-btn";
+        playB.textContent = "play";
+        playB.title = "Play this pattern straight out through the destinations (no buffer load)";
+        playB.addEventListener("click", function (e) {
+          e.stopPropagation();
+          playPattern(p.filename, p.name);
+        });
+        row.appendChild(playB);
+
         var loadB = document.createElement("button");
         loadB.type = "button";
         loadB.className = "mini-btn";
@@ -2521,6 +2587,21 @@ if (rawTakeClearBtn) {
           }
         })
         .catch(function () { status("load failed", "err"); });
+    }
+
+    function playPattern(slug, name) {
+      status("playing \u201C" + name + "\u201D\u2026", "ok");
+      fetch("/api/patterns/" + encodeURIComponent(slug) + "/play", { method: "POST" })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (res && res.ok) {
+            status("playing \u201C" + res.name + "\u201D (" + res.notes +
+                   " notes) \u2014 stop anytime", "ok");
+          } else {
+            status((res && res.error) || "play failed", "err");
+          }
+        })
+        .catch(function () { status("play failed", "err"); });
     }
 
     function del(p) {
