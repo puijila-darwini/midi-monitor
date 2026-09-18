@@ -667,23 +667,55 @@ def api_replay():
     on-screen keys light up as notes sound. Replays the whole buffer at a
     user-selectable speed multiplier (default 1.0 = original timing).
     """
-    if replayer.active:
-        return jsonify({"ok": False, "error": "already replaying"}), 409
-    if not state.seq_outs and not state.raw_outs:
-        return jsonify({"ok": False, "error": "no output destinations"}), 400
     body = request.get_json(silent=True) or {}
-    try:
-        speed = float(body.get("speed", 1.0))
-    except (TypeError, ValueError):
-        return jsonify({"ok": False, "error": "speed must be a number"}), 400
-    if speed <= 0:
-        return jsonify({"ok": False, "error": "speed must be > 0"}), 400
+    err = _replay_start_guard()
+    if err:
+        return err
     # OUT side of the transform chain: re-derive the quantized take from the
     # raw buffer under current settings, then play the transformed MIDI.
     state.requantize()
     played = state.transformed_events[-500:]  # limit to last 500 events
     if not played:
         return jsonify({"ok": False, "error": "take is empty"}), 400
+    return _play_events(played, body, loop=bool(body.get("loop", False)))
+
+
+@app.route("/api/replay/loop", methods=["POST"])
+def api_replay_loop():
+    """Loop the current take until stopped. Equivalent to /api/replay with loop=True."""
+    body = request.get_json(silent=True) or {}
+    err = _replay_start_guard()
+    if err:
+        return err
+    state.requantize()
+    played = state.transformed_events[-500:]
+    if not played:
+        return jsonify({"ok": False, "error": "take is empty"}), 400
+    return _play_events(played, body, loop=True)
+
+
+def _replay_start_guard():
+    """Shared gate for anything that plays through the shared replayer. Returns
+    an error (jsonify, status) tuple when a replay is already running or there
+    are no output destinations, else None."""
+    if replayer.active:
+        return jsonify({"ok": False, "error": "already replaying"}), 409
+    if not state.seq_outs and not state.raw_outs:
+        return jsonify({"ok": False, "error": "no output destinations"}), 400
+    return None
+
+
+def _play_events(events, body, loop, extra=None):
+    """Fire `events` through the shared replayer at the request's speed+voice.
+    Resolves the voice, updates the receive-voice state, publishes on SSE, and
+    returns the {ok, notes, speed, voice, loop} response (plus any extra keys)."""
+    body = body or {}
+    try:
+        speed = float(body.get("speed", 1.0))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "speed must be a number"}), 400
+    if speed <= 0:
+        return jsonify({"ok": False, "error": "speed must be > 0"}), 400
     # Optional voice selection: send a program change before playback so the
     # keyboard uses the chosen voice instead of whatever it was last on.
     voice = _voice_to_bank_pc(body.get("voice", "auto"))
@@ -691,38 +723,13 @@ def api_replay():
     if voice is not None:
         state.receive_program = voice[1]
         state.receive_bank = voice[0]
-    # Play the transformed MIDI through the keyboard's internal voices.
-    loop = bool(body.get("loop", False))
-    replayer.play(played, speed=speed, on_event=hub.publish, voice=voice, loop=loop)
-    count = sum(1 for e in played if e["type"] == "note_on")
-    return jsonify({"ok": True, "notes": count, "speed": speed, "voice": body.get("voice", "auto"), "loop": loop})
-
-
-@app.route("/api/replay/loop", methods=["POST"])
-def api_replay_loop():
-    """Loop the current take until stopped. Equivalent to /api/replay with loop=True."""
-    body = request.get_json(silent=True) or {}
-    try:
-        speed = float(body.get("speed", 1.0))
-    except (TypeError, ValueError):
-        return jsonify({"ok": False, "error": "speed must be a number"}), 400
-    if speed <= 0:
-        return jsonify({"ok": False, "error": "speed must be > 0"}), 400
-    if replayer.active:
-        return jsonify({"ok": False, "error": "already replaying"}), 409
-    if not state.seq_outs and not state.raw_outs:
-        return jsonify({"ok": False, "error": "no output destinations"}), 400
-    state.requantize()
-    played = state.transformed_events[-500:]
-    if not played:
-        return jsonify({"ok": False, "error": "take is empty"}), 400
-    voice = _voice_to_bank_pc(body.get("voice", "auto"))
-    if voice is not None:
-        state.receive_program = voice[1]
-        state.receive_bank = voice[0]
-    replayer.play(played, speed=speed, on_event=hub.publish, voice=voice, loop=True)
-    count = sum(1 for e in played if e["type"] == "note_on")
-    return jsonify({"ok": True, "notes": count, "speed": speed, "voice": body.get("voice", "auto"), "loop": True})
+    replayer.play(events, speed=speed, on_event=hub.publish, voice=voice, loop=loop)
+    count = sum(1 for e in events if e.get("type") == "note_on")
+    resp = {"ok": True, "notes": count, "speed": speed,
+            "voice": body.get("voice", "auto"), "loop": loop}
+    if extra:
+        resp.update(extra)
+    return jsonify(resp)
 
 
 @app.route("/api/replay/stop", methods=["POST"])
@@ -841,10 +848,9 @@ def api_patterns_play(slug):
     the shared replayer (raw path — original timing kept). Does NOT touch the
     buffer or chain settings, unlike load. Progress runs through the same SSE
     'replay'/'step' events, so the roll playhead and key lights follow along."""
-    if replayer.active:
-        return jsonify({"ok": False, "error": "already replaying"}), 409
-    if not state.seq_outs and not state.raw_outs:
-        return jsonify({"ok": False, "error": "no output destinations"}), 400
+    err = _replay_start_guard()
+    if err:
+        return err
     try:
         pat = patterns.load_pattern(slug)
     except ValueError as e:
@@ -852,10 +858,8 @@ def api_patterns_play(slug):
     events = pat.get("events") or []
     if not events:
         return jsonify({"ok": False, "error": "pattern is empty"}), 400
-    voice = _voice_to_bank_pc("auto")
-    replayer.play(events, speed=1.0, on_event=hub.publish, voice=voice, loop=False)
-    count = sum(1 for e in events if e.get("type") == "note_on")
-    return jsonify({"ok": True, "name": pat.get("name", slug), "notes": count})
+    return _play_events(events, {"voice": "auto", "speed": 1.0, "loop": False},
+                        loop=False, extra={"name": pat.get("name", slug)})
 
 
 @app.route("/api/patterns/<slug>", methods=["DELETE"])

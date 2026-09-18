@@ -46,6 +46,9 @@ folded into a single web app package in `monitor/`:
                           detection (scalar add9no5 suppressed), dedupe
 - `monitor/app.py`      - Flask on :5050. Routes: `/`, `/events` (SSE),
                           `/api/state`. Background capture thread -> hub pub/sub.
+                          Replay entry points (/api/replay, /api/replay/loop,
+                          /api/patterns/<slug>/play) share the
+                          _replay_start_guard()/_play_events() helpers.
 - `monitor/sinks.py`    - DATA-DRIVEN registry of launchable MIDI destinations
                           (VCV Rack, DAWs). Each entry declares cmd/detect/
                           auto_route (see ../Musica/Rack pattern); the out box
@@ -80,6 +83,8 @@ folded into a single web app package in `monitor/`:
                           pure function of a `model` of hit-testable blocks).
 - `monitor/templates/index.html` + `static/` - full 88-key piano (A0-C8,
                           transpose-safe), scrolling note feed, chord/arp flash.
+                          app.js keeps replay/loop state in a Transport store
+                          (mini pub/sub; buttons subscribe, SSE events feed it).
 
 Start/stop (for dummies): use the helper script, no chmod needed:
     bash ~/ai/midi/monitor.sh start|stop|restart|status|log

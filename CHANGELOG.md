@@ -1183,3 +1183,27 @@ that file lean. History is chronological; most lines start with a version tag.
   buffer (~4.5s) then reverted on toggle; pattern oii played back its 6 stored
   notes (~2.5s) with feed entries and "playing "oii" (6 notes)" status; rows
   show play before load/del; zero console errors. Committed agent:, pushed.
+
+- Ver 77: refactor — one transport store client-side, one replay path server-side.
+  Backend: /api/replay and /api/replay/loop were near-duplicates (same guard,
+  requantize, voice handling, parse). Both now funnel through a shared
+  _replay_start_guard() (already-replaying / no-outputs gate) + _play_events()
+  (speed parse, voice resolution + receive-voice state update, replayer.play
+  with SSE, and the {ok, notes, speed, voice, loop} response, with optional
+  extra keys). /api/patterns/<slug>/play drops its copies of the guards/voice
+  handling and routes through the same pair — same behavior, name carried via
+  extra={"name": ...}.
+  Client: replay state is no longer scattered writable globals + a growing set
+  of hand-wired setter callbacks (the thing that made Ver 76 touch 8 spots to
+  add one button). New Transport store — an IIFE-local mini pub/sub
+  (set/subscribe/playing/looping) — is the single source of truth for
+  replay/loop state. Every lifecycle change routes through Transport.set():
+  SSE replay start/done/stopped/error, the out-card stop button, the loop
+  button, and the buffer-play button. The three buttons (out-card play, loop,
+  buffer play) and the fetchRawTake poll guard subscribe to / read the
+  accessor; setReplayBtn/setLoopBtn/setBufferPlayBtn plumbing is gone.
+  Verified live: buffer play flips out-card + loop-aware states together;
+  loop arm then stop reverts all three; SSE stopped reverts after an external
+  halt; pattern oii play still reports "playing "oii" (6 notes)" and finishes
+  clean; replay of a 29s multi-take buffer played to completion; zero console
+  errors. Committed agent:, pushed.

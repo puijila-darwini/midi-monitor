@@ -21,8 +21,35 @@
 
   var keyEls = {};
   var held = new Set();
-  var replayActive = false;  // a take is currently playing back out the keyboard
-var loopActive = false;    // a take is currently looping
+  // ---- Transport store: single source of truth for replay/loop state. ----
+  // Every replay/lifecycle change funnels through set(); buttons and the raw
+  // take poll subscribe. Read-only: playing()/looping() accessors.
+  var Transport = {
+    _state: { playing: false, looping: false },
+    _subs: [],
+    set: function (patch) {
+      var changed = false;
+      for (var k in patch) {
+        if (!Object.prototype.hasOwnProperty.call(patch, k)) continue;
+        if (this._state[k] !== patch[k]) {
+          this._state[k] = patch[k];
+          changed = true;
+        }
+      }
+      if (changed) {
+        for (var i = 0; i < this._subs.length; i++) this._subs[i](this._state);
+      }
+    },
+    subscribe: function (fn) {
+      this._subs.push(fn);
+      var self = this;
+      return function () {
+        self._subs = self._subs.filter(function (f) { return f !== fn; });
+      };
+    },
+    playing: function () { return this._state.playing; },
+    looping: function () { return this._state.looping; }
+  };
   var tempoBpm = 0;  // global tempo for quantization
 window.tempoBpm = 0;  // expose on window for durationToVexFlow
   // Time signature (beats per measure). Exposed on window for stave (measure
@@ -702,9 +729,7 @@ function buildCatchTooltip() {
         break;
 case "replay":
         if (ev.phase === "start") {
-          replayActive = true;
-          if (setReplayBtn) setReplayBtn();
-          if (setBufferPlayBtn) setBufferPlayBtn();
+          Transport.set({ playing: true });
           replayRawCursor = 0;
           clearRawPlaying();
           if (window.StavePanel) StavePanel.resetPlayback();
@@ -727,9 +752,7 @@ case "replay":
             PianoRoll.markPlaying(ev.notes);
           }
         } else if (ev.phase === "done") {
-          replayActive = false;
-          if (setReplayBtn) setReplayBtn();
-          if (setBufferPlayBtn) setBufferPlayBtn();
+          Transport.set({ playing: false });
           clearRawPlaying();
           if (window.PianoRoll) PianoRoll.resetPlayback();
           addFeed('<span class="time">' + fmtTime(ev.time || 0) +
@@ -743,11 +766,7 @@ case "replay":
           addFeed('<span class="time">' + fmtTime(ev.time || 0) +
             "</span>  REPLAY  voice \u2192 " + vn, "replay");
         } else if (ev.phase === "stopped" || ev.phase === "error") {
-          replayActive = false;
-          loopActive = false;
-          if (setReplayBtn) setReplayBtn();
-          if (setBufferPlayBtn) setBufferPlayBtn();
-          if (setLoopBtn) setLoopBtn();
+          Transport.set({ playing: false, looping: false });
           clearRawPlaying();
           if (window.PianoRoll) PianoRoll.resetPlayback();
           if (ev.phase === "stopped") {
@@ -981,7 +1000,6 @@ case "replay":
   // quantized buffer back to the keyboard's internal voices on a background
   // thread). The button always says "play": pressing it again while a take is
   // sounding restarts from the beginning. STOP is the separate halt control.
-  var setReplayBtn = null;
   (function () {
     var btn = document.getElementById("replay-btn");
     var lab = document.getElementById("replay-btn-label");
@@ -1003,14 +1021,14 @@ case "replay":
     }
 
     function render() {
-      btn.classList.toggle("playing", replayActive);
+      btn.classList.toggle("playing", Transport.playing());
       if (glyph) glyph.textContent = "\u25b6";
       if (lab) lab.textContent = "play";
     }
-    setReplayBtn = render;
+    Transport.subscribe(render);
 
     btn.addEventListener("click", function () {
-      if (replayActive) {
+      if (Transport.playing()) {
         // Already playing: restart from the beginning.
         fetch("/api/replay/stop", { method: "POST" })
           .then(function () { startReplay(); })
@@ -1034,7 +1052,6 @@ case "replay":
 
   // BUFFER play (patterns transport row): same playback as the out-card play
   // button, but toggles — press again (=stop) while the take is sounding.
-  var setBufferPlayBtn = null;
   (function () {
     var btn = document.getElementById("buffer-play");
     var lab = document.getElementById("buffer-play-label");
@@ -1042,24 +1059,19 @@ case "replay":
     if (!btn) return;
 
     function render() {
-      btn.classList.toggle("playing", replayActive);
-      if (glyph) glyph.textContent = replayActive ? "\u25aa" : "\u25b6";
-      if (lab) lab.textContent = replayActive ? "stop" : "play";
+      var playing = Transport.playing();
+      btn.classList.toggle("playing", playing);
+      if (glyph) glyph.textContent = playing ? "\u25aa" : "\u25b6";
+      if (lab) lab.textContent = playing ? "stop" : "play";
     }
-    setBufferPlayBtn = render;
+    Transport.subscribe(render);
 
     btn.addEventListener("click", function () {
-      if (replayActive) {
+      if (Transport.playing()) {
         fetch("/api/replay/stop", { method: "POST" })
           .then(function (r) { return r.json(); })
           .then(function (res) {
-            if (res && !res.active) {
-              replayActive = false;
-              loopActive = false;
-              setReplayBtn && setReplayBtn();
-              setLoopBtn && setLoopBtn();
-              setBufferPlayBtn && setBufferPlayBtn();
-            }
+            if (res && !res.active) Transport.set({ playing: false, looping: false });
           })
           .catch(function () { /* transient */ });
         return;
@@ -1088,42 +1100,33 @@ case "replay":
       fetch("/api/replay/stop", { method: "POST" })
         .then(function (r) { return r.json(); })
         .then(function (res) {
-          if (res && !res.active) {
-            replayActive = false;
-            loopActive = false;
-            setReplayBtn && setReplayBtn();
-            setLoopBtn && setLoopBtn();
-            setBufferPlayBtn && setBufferPlayBtn();
-          }
+          if (res && !res.active) Transport.set({ playing: false, looping: false });
         })
         .catch(function () { /* transient */ });
     });
   })();
 
   // LOOP button: start replay looping until STOP is clicked.
-  var setLoopBtn = null;
   (function () {
     var btn = document.getElementById("replay-loop-btn");
     if (!btn) return;
 
     function renderLoop() {
-      btn.classList.toggle("active", loopActive);
-      btn.classList.toggle("recording", loopActive);
+      var looping = Transport.looping();
+      btn.classList.toggle("active", looping);
+      btn.classList.toggle("recording", looping);
     }
-    setLoopBtn = renderLoop;
+    Transport.subscribe(renderLoop);
 
     btn.addEventListener("click", function () {
-      if (loopActive) {
+      if (Transport.looping()) {
         fetch("/api/replay/stop", { method: "POST" })
           .then(function (r) { return r.json(); })
           .then(function (res) {
-            loopActive = false;
-            renderLoop();
-            if (res && !res.active) {
-              replayActive = false;
-              setReplayBtn && setReplayBtn();
-              setBufferPlayBtn && setBufferPlayBtn();
-            }
+            // Arm off is immediate even if playback keeps going this pass;
+            // if the replayer actually halted, playing clears too.
+            Transport.set({ looping: false });
+            if (res && !res.active) Transport.set({ playing: false });
           })
           .catch(function () { /* transient */ });
         return;
@@ -1137,18 +1140,15 @@ case "replay":
       }).then(function (r) { return r.json(); })
         .then(function (res) {
           if (res && res.ok) {
-            loopActive = true;
-            replayActive = true;
-            renderLoop();
-            setReplayBtn && setReplayBtn();
-            setBufferPlayBtn && setBufferPlayBtn();
-            setReplayBtn && setReplayBtn();
+            Transport.set({ looping: true, playing: true });
           } else {
             addFeed("LOOP  " + (res.error || "failed"), "replay");
           }
         })
         .catch(function () { /* transient */ });
     });
+
+    renderLoop();
   })();
 
   // Output routing ("midi spaghetti zone"): checkboxes for every available
@@ -2141,7 +2141,7 @@ if (typeof s.time_signature === "string" && s.time_signature.indexOf("/") > 0) {
 function fetchRawTake() {
   // While a replay is running the buffer is frozen so the playback
   // highlighting isn't wiped by the 1s re-render; resume polling after.
-  if (typeof replayActive !== "undefined" && replayActive) return;
+  if (Transport.playing()) return;
   fetch("/api/take")
     .then(function (r) { return r.json(); })
     .then(function (data) {
