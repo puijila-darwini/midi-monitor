@@ -34,7 +34,7 @@ _KEYWORDS = ("pss", "psr", "yamaha", "digital keyboard")
 # ~40ms, so the cache keeps steady-state sends to one subprocess each).
 _TTL = 2.0
 
-_cache = {"seq": (None, 0.0), "raw": (None, 0.0)}
+_cache = {"seq": (None, 0.0), "raw": (None, 0.0), "seq_name": (None, 0.0)}
 
 _CLIENT_RE = re.compile(r"client (\d+): '([^']+)' \[type=kernel,card=(\d+)\]")
 _PORT_RE = re.compile(r"^\s+(\d+) '([^']+)'")
@@ -67,6 +67,7 @@ def find_seq_port():
     if fresh:
         return cached
     port = FALLBACK_SEQ
+    name = None
     client_id = None
     client_ok = False
     for line in _out(["aconnect", "-l"]).splitlines():
@@ -74,6 +75,8 @@ def find_seq_port():
         if m:
             client_id = m.group(1)
             client_ok = _matches(m.group(2))
+            if client_ok and name is None:
+                name = m.group(2)
             continue
         if client_id is not None:
             m = _PORT_RE.match(line)
@@ -85,6 +88,7 @@ def find_seq_port():
                 continue
             client_id = None  # non-port line ends the current client block
     _cache["seq"] = (port, time.time())
+    _cache["seq_name"] = (name, time.time())
     return port
 
 
@@ -101,3 +105,15 @@ def find_raw_device():
             break
     _cache["raw"] = (dev, time.time())
     return dev
+
+
+def device_info():
+    """Describe the keyboard endpoints for the UI: {name, seq, raw}.
+
+    seq/raw fall back to the legacy ids when the board is absent; name is
+    None then (the only reliable "is the board actually there" signal).
+    """
+    seq_port = find_seq_port()
+    raw = find_raw_device()
+    name, _ = _cache.get("seq_name", (None, 0.0))
+    return {"name": name, "seq": seq_port, "raw": raw}

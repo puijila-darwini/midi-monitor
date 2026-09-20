@@ -11,6 +11,7 @@ import traceback
 from flask import Flask, jsonify, render_template, request, Response
 
 from .capture import Capture
+from .mididev import device_info
 from .state import State
 from .analysis import Analyser
 from .replay import (Replay, plan_from_raw, VOICES, control_change, pitch_bend,
@@ -264,6 +265,9 @@ def _spawn_reset():
 def api_state():
     snap = state.snapshot()
     snap["capture"] = _capture_health_snapshot()
+    # Resolved MIDI endpoints (dynamic - ALSA ids shift with boot order),
+    # surfaced in the header status line. {"name", "seq", "raw"}.
+    snap["device"] = device_info()
     return jsonify(snap)
 
 

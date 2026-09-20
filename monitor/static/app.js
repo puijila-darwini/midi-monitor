@@ -800,9 +800,30 @@ case "replay":
     notes.forEach(function (n) { activate(n); held.add(n); });
   }
 
-  function setStatus(online) {
+  var _statusDevice = null;
+  function devText(d) {
+    var bits = [];
+    if (d.seq) bits.push("seq " + d.seq);
+    if (d.raw) bits.push("raw " + d.raw);
+    if (!bits.length) return "";
+    return (d.name ? d.name : "keyboard") + " \u00b7 " + bits.join(" \u00b7 ");
+  }
+  function setStatus(online, device) {
+    if (device) _statusDevice = device;
+    var d = _statusDevice;
     var el = document.getElementById("status");
-    el.textContent = online ? "keyboard online" : "keyboard offline";
+    if (!el) return;
+    var present = !!(d && d.name);
+    if (online) {
+      el.textContent = "keyboard online"
+        + (present && devText(d) ? " \u00b7 " + devText(d) : "");
+    } else if (present) {
+      // Board IS enumerated (capture/send path down or stale) - the
+      // 2026-09-20 reboot case: keyboard plugged in but monitor said offline.
+      el.textContent = "keyboard offline \u00b7 board present (" + devText(d) + ")";
+    } else {
+      el.textContent = "keyboard offline";
+    }
     el.className = "status " + (online ? "online" : "offline");
   }
 
@@ -2205,7 +2226,7 @@ case "replay":
     fetch("/api/state")
     .then(function (r) { return r.json(); })
     .then(function (s) {
-      setStatus(s.online);
+      setStatus(s.online, s.device);
       orderReplayVoices(s.receive_voice);
       if (typeof s.program !== "undefined") {
         var pname = PSSA50_VOICES[(s.bank || 0) + ":" + s.program] || "Unknown";

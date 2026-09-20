@@ -50,7 +50,7 @@
         title="Close ALL monitor/aseqdump instances and restart the server (use when the site is frozen or shows stale online status)">reset server</button>
       <span class="badge">walled garden &middot; 127.0.0.1:5050</span>
     </div>
-    <div id="status" class="status offline">keyboard offline</div>
+    <div id="status" class="status offline" title="Keyboard connectivity + the RESOLVED MIDI endpoints. seq = capture port (aseqdump), raw = send device (amidi). The ALSA ids shift with boot/plug enumeration order, so they are resolved dynamically each connect (monitor/mididev.py). 'board present' means it is enumerated but capture/send is not connected yet.">keyboard offline</div>
     <div id="instrument" class="instrument">instrument: &mdash;</div>
   </header>
 

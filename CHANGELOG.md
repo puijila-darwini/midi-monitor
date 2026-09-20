@@ -1384,3 +1384,16 @@ that file lean. History is chronological; most lines start with a version tag.
   returns 20:0 / hw:1,0,0, server restart -> /api/state online:true,
   capture alive 0 restarts, raw amidi send OK. AGENTS.md hardware section
   updated to note the unstable client/card numbers. Committed agent:, pushed.
+
+- Ver 91: surfaced the resolved endpoints in the header. /api/state now
+  carries a "device" object ({name, seq, raw}) from mididev.device_info()
+  (the matched client name is recorded during seq resolution; name is None
+  when the board is absent - the only reliable presence signal). The
+  header status line uses it: online -> "keyboard online · Digital Keyboard
+  · seq 20:0 · raw hw:1,0,0"; offline with the board enumerated ->
+  "keyboard offline · board present (…)" (exactly the 2026-09-20 reboot
+  confusion: board plugged in, monitor said offline); offline with nothing
+  -> plain "keyboard offline". setStatus keeps the last-known device so
+  SSE status events don't wipe the detail. Tooltip on the status chip
+  explains seq/raw + why they shift. Verified: device in /api/state, header
+  renders the line, template tooltip present. Committed agent:, pushed.
