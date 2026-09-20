@@ -429,14 +429,10 @@
               </div>
             </div>
             <div class="ctrl-grid">
-              <label class="ctrl-check"><input type="checkbox" id="ctrl-sustain"
-                     title="CC64 sustain pedal (127 on / 0 off)"><span>sustain</span></label>
-              <label class="ctrl-check"><input type="checkbox" id="ctrl-porta"
-                     title="CC65 portamento switch"><span>portamento</span></label>
-              <label class="ctrl-slider"><span>porta time</span>
-                <input type="range" id="ctrl-porta-time" class="ctrl-range" min="0" max="127" value="8"
-                       title="CC5 portamento time (0-127)">
-                <output class="ctrl-out" id="ctrl-porta-time-out">8</output>
+              <label class="ctrl-slider"><span>portamento</span>
+                <input type="range" id="ctrl-porta" class="ctrl-range" min="0" max="127" value="0"
+                       title="Glide time (0 = off). 0 sends CC65 portamento switch OFF; above 0 the switch is ON (CC65) with this glide time (CC5).">
+                <output class="ctrl-out" id="ctrl-porta-out">0</output>
               </label>
             </div>
             <div class="ctrl-grid">

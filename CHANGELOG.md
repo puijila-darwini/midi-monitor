@@ -1305,3 +1305,14 @@ that file lean. History is chronological; most lines start with a version tag.
   scheduling fix sketched. Server restarted for the Python change (take
   buffer reset). Verified: py_compile + node --check clean, :5050 root 200,
   /api/state healthy. Committed agent:, pushed.
+
+- Ver 85: out·ctrl tidying. Removed the sustain checkbox (CC64 - the board's
+  own panel handles sustain; a pedal would arrive as RX anyway, shown in the
+  received readout). Portamento collapsed from checkbox + porta-time slider
+  into ONE slider: 0 = off (CC65 switch 0), >0 = glide time (CC5) with the
+  switch (CC65 127) flipped on at the 0 boundary. Custom input handler sends
+  the boundary switch change only when crossing on/off, then CC5 as it slides.
+  Boot-sync updated: the unified slider restores to the CC5 time when the
+  stored CC65 is on, else 0. Verified: node --check clean, served page has
+  one ctrl-porta slider, no sustain wiring left (prose tooltips only).
+  Committed agent:, pushed.

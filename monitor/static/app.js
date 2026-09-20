@@ -1525,7 +1525,6 @@ case "replay":
         postCtrl(label + " " + el.value, bodyFn(el));
       });
     }
-    wireRange("ctrl-porta-time", function (el) { return { cc: 5, value: parseInt(el.value, 10) }; }, "porta time");
     wireRange("ctrl-volume", function (el) { return { cc: 7, value: parseInt(el.value, 10) }; }, "volume");
     wireRange("ctrl-expression", function (el) { return { cc: 11, value: parseInt(el.value, 10) }; }, "expression");
     wireRange("ctrl-mod", function (el) { return { cc: 1, value: parseInt(el.value, 10) }; }, "mod");
@@ -1748,8 +1747,24 @@ case "replay":
         else postCtrl(label + " " + (el.checked ? "on" : "off"), { action: "local", value: v });
       });
     }
-    wireCheck("ctrl-sustain", 64, "sustain");
     wireCheck("ctrl-porta", 65, "portamento");
+    // Portamento collapsed into one slider: 0 = off (CC65 switch 0), >0 =
+    // glide time (CC5) with the switch (CC65 127) flipped on at the boundary.
+    (function () {
+      var el = document.getElementById("ctrl-porta");
+      if (!el) return;
+      var out = document.getElementById("ctrl-porta-out");
+      var wasOn = parseInt(el.value, 10) > 0;
+      el.addEventListener("input", function () {
+        var v = parseInt(el.value, 10);
+        if (out) out.textContent = el.value;
+        var on = v > 0;
+        if (on && !wasOn) postCtrl("portamento on", { cc: 65, value: 127 });
+        if (!on && wasOn) postCtrl("portamento off", { cc: 65, value: 0 });
+        wasOn = on;
+        postCtrl("porta time " + v, { cc: 5, value: v });
+      });
+    })();
     function wireBtn(id, bodyFn, label) {
       var el = document.getElementById(id);
       if (el) el.addEventListener("click", function () { postCtrl(label, bodyFn()); });
@@ -2225,12 +2240,11 @@ if (typeof s.time_signature === "string" && s.time_signature.indexOf("/") > 0) {
           var out = document.getElementById(id + "-out");
           if (out) out.textContent = arguments[1];
         }
-        chk("ctrl-sustain", cv[64]);
-        chk("ctrl-porta", cv[65]);
         if (window.syncKeysMode) {
           window.syncKeysMode(s.local_control !== 0, !!s.echo_enabled);
         }
-        setRange("ctrl-porta-time", typeof cv[5] === "number" ? cv[5] : 8);
+        // Unified porta slider: switch on (CC65) -> show its CC5 time; else 0 (off).
+        setRange("ctrl-porta", cv[65] ? (typeof cv[5] === "number" ? cv[5] : 8) : 0);
         setRange("ctrl-volume", typeof cv[7] === "number" ? cv[7] : 100);
         setRange("ctrl-expression", typeof cv[11] === "number" ? cv[11] : 127);
         setRange("ctrl-mod", typeof cv[1] === "number" ? cv[1] : 0);
