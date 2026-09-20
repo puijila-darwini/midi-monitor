@@ -382,6 +382,7 @@ function buildCatchTooltip() {
     addFeed('<span class="time">' + fmtTime(catchLastAt) +
       '</span>  TONIC set to ' + nm + (scaleId ? " &middot; " + scaleId + " scale" : ""), "tonic");
     pushScaleContext();
+    syncPivotFromKey();
   }
 
   // Ver 92: keep the server's key context (scale-snap stage + echo snap) in
@@ -397,6 +398,46 @@ function buildCatchTooltip() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ tonic: parseInt(ton.value, 10), scale: sc.value })
     }).catch(function () { /* ignore transient */ });
+  }
+
+  // Ver 93: the invert pivot is two dropdowns (note + octave) instead of a
+  // raw MIDI number. The note default FOLLOWS the key tonic (octave 3) until
+  // the user picks a pivot of their own — the note select's data-custom flag
+  // records that choice so key changes stop retargeting it.
+  function postTransformOp(body) {
+    return fetch("/api/transform", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    }).then(function (r) { return r.json(); })
+      .then(function (res) {
+        if (res && res.ok) renderNotationFromBuffer();
+        return res;
+      })
+      .catch(function () { /* ignore transient */ });
+  }
+  function pivotSelectors() {
+    var n = document.getElementById("invert-pivot-note");
+    var o = document.getElementById("invert-pivot-oct");
+    if (!n || !o) return null;
+    return { note: n, oct: o,
+             pc: parseInt(n.value, 10), oc: parseInt(o.value, 10) };
+  }
+  function pushPivot() {
+    var s = pivotSelectors();
+    if (!s || isNaN(s.pc) || isNaN(s.oc)) return;
+    // MIDI = (octave + 1) * 12 + pitch class  (C3 = 48)
+    postTransformOp({ op: "invert", pivot: (s.oc + 1) * 12 + s.pc });
+  }
+  function syncPivotFromKey() {
+    var ton = document.getElementById("key-tonic");
+    var s = pivotSelectors();
+    if (!ton || !s || s.note.dataset.custom === "1") return;
+    var t = parseInt(ton.value, 10);
+    if (isNaN(t) || t < 0) return;
+    if (s.note.value === String(t)) return;
+    s.note.value = String(t);
+    pushPivot();
   }
 
   // Fallback path: no chord flash arrived, so resolve from whatever notes were
@@ -1424,6 +1465,7 @@ case "replay":
       function current() {
         applyScaleGuide(tonicSel.value, scaleSel.value);
         pushScaleContext();
+        syncPivotFromKey();
       }
       tonicSel.addEventListener("change", current);
       scaleSel.addEventListener("change", current);
@@ -1552,23 +1594,16 @@ case "replay":
         postTransform({ op: "snap", bias: biasSel.value });
       });
     }
-    // melodic inversion: on + pivot (clamped 0-127) + echo opt-in
+    // melodic inversion: on + pivot (note + octave selects; the note follows
+    // the key tonic until customized — see syncPivotFromKey) + echo opt-in
     onToggle("invert-enabled", "invert", "enabled");
     onEchoToggle("invert-echo", "invert");
-    var pivotInput = document.getElementById("invert-pivot");
-    if (pivotInput) {
-      function applyPivot() {
-        var raw = pivotInput.value.trim();
-        var pv = raw === "" ? 60 : parseInt(raw, 10);
-        if (isNaN(pv)) return;
-        pv = Math.max(0, Math.min(127, pv));
-        pivotInput.value = String(pv);
-        postTransform({ op: "invert", pivot: pv });
-      }
-      pivotInput.addEventListener("change", applyPivot);
-      pivotInput.addEventListener("keydown", function (e) {
-        if (e.key === "Enter") { pivotInput.blur(); applyPivot(); }
-      });
+    var pvNote = document.getElementById("invert-pivot-note");
+    var pvOct = document.getElementById("invert-pivot-oct");
+    if (pvNote && pvOct) {
+      function markCustom() { pvNote.dataset.custom = "1"; }
+      pvNote.addEventListener("change", function () { markCustom(); pushPivot(); });
+      pvOct.addEventListener("change", function () { markCustom(); pushPivot(); });
     }
     // reverse: on
     onToggle("reverse-enabled", "reverse", "enabled");
@@ -2397,9 +2432,15 @@ if (typeof s.time_signature === "string" && s.time_signature.indexOf("/") > 0) {
         chk("transpose-echo", tr.echo_transpose);
         var biasSel = document.getElementById("snap-bias");
         if (biasSel && tr.snap_bias && document.activeElement !== biasSel) biasSel.value = tr.snap_bias;
-        var pvIn = document.getElementById("invert-pivot");
-        if (pvIn && typeof tr.invert_pivot === "number" && document.activeElement !== pvIn) {
-          pvIn.value = String(tr.invert_pivot);
+        var pvNote = document.getElementById("invert-pivot-note");
+        var pvOct = document.getElementById("invert-pivot-oct");
+        if (pvNote && pvOct && typeof tr.invert_pivot === "number"
+              && document.activeElement !== pvNote && document.activeElement !== pvOct) {
+          pvNote.value = String(tr.invert_pivot % 12);
+          pvOct.value = String(Math.floor(tr.invert_pivot / 12) - 1);
+          // The stock default C3 (48) means "follow the key tone"; anything
+          // else was a deliberate pick and stops key-following until reset.
+          pvNote.dataset.custom = tr.invert_pivot === 48 ? "0" : "1";
         }
         // Key context (scale-snap resolves onto the tonic·scale card).
         if (s.scale) {
@@ -2418,6 +2459,9 @@ if (typeof s.time_signature === "string" && s.time_signature.indexOf("/") > 0) {
           if (tonicChanged && typeof applyScaleGuide === "function" && tonSel && scSel) {
             applyScaleGuide(tonSel.value, scSel.value);
           }
+          // Ver 93: on boot the pivot note follows the key tonic (octave 3)
+          // unless a custom pivot was restored.
+          syncPivotFromKey();
         }
         // Sync the OUT control surface (last values we sent) + the received
         // watch (signals arriving from the keyboard).

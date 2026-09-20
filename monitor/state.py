@@ -170,7 +170,10 @@ class State:
         self.snap_enabled = False
         self.snap_bias = "nearest"        # "nearest" | "up" | "down"
         self.invert_enabled = False
-        self.invert_pivot = 60            # MIDI note to reflect around (C4)
+        self.invert_pivot = 48            # MIDI note to reflect around (C3 =
+                                          # octave 3 default; the UI selects
+                                          # note + octave, key-tonic follows
+                                          # until the user picks a pivot)
         self.reverse_enabled = False
         # Echo-stream application (Ver 92): which of the above ALSO run LIVE on
         # the echoed keybed notes (app.py note_on/note_off path). Only the
@@ -1493,7 +1496,7 @@ class State:
             self.snap_bias = bias
         self.invert_enabled = bool(settings.get("invert_enabled", False))
         try:
-            pv = int(settings.get("invert_pivot", 60))
+            pv = int(settings.get("invert_pivot", 48))
             if 0 <= pv <= 127:
                 self.invert_pivot = pv
         except (TypeError, ValueError):

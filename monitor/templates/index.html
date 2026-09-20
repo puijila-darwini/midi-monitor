@@ -341,8 +341,33 @@
                 <label class="op-toggle"><input type="checkbox" id="invert-enabled"
                        title="Mirror each pitch around the pivot note (melodic inversion — a rising phrase falls, the contour flips about the pivot). Pivot defaults to C4."><span>on</span></label>
                 <label class="op-pivot"><span>pivot</span>
-                  <input type="number" id="invert-pivot" class="vel-input" min="0" max="127" step="1"
-                         value="60" title="MIDI note the melody reflects around (60 = C4). The inversion is n' = 2&middot;pivot &minus; n.">
+                  <select id="invert-pivot-note" data-custom="0"
+                          title="Pivot note name — defaults to the key tonic (tonic&amp;middot;scale card) at octave 3 until you pick one yourself">
+                    <option value="0" selected>C</option>
+                    <option value="1">C# / Db</option>
+                    <option value="2">D</option>
+                    <option value="3">D# / Eb</option>
+                    <option value="4">E</option>
+                    <option value="5">F</option>
+                    <option value="6">F# / Gb</option>
+                    <option value="7">G</option>
+                    <option value="8">G# / Ab</option>
+                    <option value="9">A</option>
+                    <option value="10">A# / Bb</option>
+                    <option value="11">B</option>
+                  </select>
+                  <select id="invert-pivot-oct"
+                          title="Pivot octave (defaults to 3). The inversion is n' = 2&middot;pivot &minus; n">
+                    <option value="0">0</option>
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="3" selected>3</option>
+                    <option value="4">4</option>
+                    <option value="5">5</option>
+                    <option value="6">6</option>
+                    <option value="7">7</option>
+                    <option value="8">8</option>
+                  </select>
                 </label>
                 <label class="op-echo"><input type="checkbox" id="invert-echo"
                        title="Also invert LIVE echoed keybed notes"><span>echo</span></label>

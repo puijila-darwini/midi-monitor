@@ -868,6 +868,8 @@ select option {
 }
 .op-body .unit { color: var(--muted); }
 .op-body select { width: 100%; }
+.op-pivot select#invert-pivot-note { width: auto; flex: 1 1 0; }
+.op-pivot select#invert-pivot-oct { width: 36px; flex: 0 0 auto; }
 .op-quant     { border-left-color: var(--royal); }
 .op-transpose { border-left-color: var(--straw-gold); }
 .op-transpose .op-head::before {

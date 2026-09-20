@@ -1425,3 +1425,17 @@ that file lean. History is chronological; most lines start with a version tag.
   down), invert echo map, transpose echo, and a full C4-E4-G4 take through
   invert+reverse (G inverted to 53 plays first, durations exact). Committed
   agent:, pushed. Dashboard work stays out of git per standing rule.
+
+- Ver 93: invert pivot as note+octave dropdowns. The raw MIDI number input
+  is gone — the pivot op now has two selects (12 note names + octaves 0-8,
+  default octave 3). The note DEFAULTS to the key tonic from the tonic·scale
+  card and auto-follows it (manual selector changes + catch resolution) at
+  octave 3, until the user picks a pivot of their own: the note select's
+  data-custom flag records the choice and stops the key-following. Backend
+  invert_pivot default moved 60 (C4) -> 48 (C3) to match; refreshState
+  treats 48 as "un-custom" (key-follow eligible) and anything else as a
+  deliberate pick that is restored verbatim. New helpers in app.js main
+  scope: pivotSelectors()/pushPivot()/syncPivotFromKey() (MIDI =
+  (octave+1)*12 + pc); keysec current() + resolveCatch call syncPivotFromKey.
+  Verified: /api/transform stores A3 = 57, resets to 48; node --check +
+  py_compile clean; server restarted for the default change.

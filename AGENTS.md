@@ -58,8 +58,13 @@ folded into a single web app package in `monitor/`:
   articulation -> invert -> scale-snap -> reverse -> OUT): the ops grid which
   is also the whole point of the card. scale-snap maps pitches onto the
   tonic·scale card's selection (SCALE_SEMIS in state.py mirrors the JS guide
-  table); invert reflects around a pivot (n' = 2·pivot − n); reverse replays
-  the take tail-first (mirrored timeline, durations kept). The LIVE-CAPABLE
+  table); invert reflects around a pivot (n' = 2·pivot − n) whose UI is a
+  note + octave pair of dropdowns — the note DEFAULTS to the key tonic at
+  octave 3 (C3 = 48 backend default) and auto-follows tonic·scale changes /
+  catch until the user picks a pivot of their own (data-custom flag;
+  refreshState treats backend pivot 48 as "un-custom", anything else as
+  deliberate); reverse replays the take tail-first (mirrored timeline,
+  durations kept). The LIVE-CAPABLE
   ops (transpose/snap/invert) each have an "echo" opt-in that applies them to
   the live echo stream too (state.echo_transform, a pure per-note map so
   note_off mirrors exactly); quantize/velocity/humanize/reverse are buffer
