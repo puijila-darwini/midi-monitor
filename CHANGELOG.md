@@ -1341,3 +1341,18 @@ that file lean. History is chronological; most lines start with a version tag.
   has its own dblclick -> 0/off (CC65 switch off, CC5 0, _lastVal synced).
   Verified: 11 ctrl-range inputs in the card, all covered; node --check
   clean. Live on refresh (CSS+JS only, no restart). Committed agent:, pushed.
+
+- Ver 88: out·ctrl card compressed into a fader rack. The six horizontal
+  slider rows (volume/mod, pitch, porta/expr, filter/reso, attack/release,
+  reverb/chorus) collapsed into ONE "controllers" header row + a single
+  ctrl-rack: 11 short vertical faders (writing-mode: vertical-lr, 64px tall,
+  min at bottom) side by side with short labels (vol/mod/pitch/porta/expr/
+  filter/reso/atk/rel/rvb/cho; full tooltips live on the fader labels).
+  Values are now EDITABLE on the page: each fader got a small number input
+  (ctrl-* -val) - type a number, Enter/blur clamps to the range, rounds to
+  step, and sends. setFader() keeps fader + value box in sync everywhere
+  (wireRange, motion mirror, pitch snap-back, porta boundary IIFE, boot
+  sync setRange, defaults reset). Pitch snap checkbox rides in the rack.
+  Old .ctrl-slider/.ctrl-range/.ctrl-out CSS + markup removed; dead '-out'
+  id references all gone (grep-verified). Live on refresh (template + CSS +
+  JS, no restart). Committed agent:, pushed.

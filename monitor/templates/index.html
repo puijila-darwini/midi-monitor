@@ -428,79 +428,68 @@
                         title="local off, echo off - MIDI only: keys emit MIDI but make no sound (feed an external synth/DAW)">midi</button>
               </div>
             </div>
-            <div class="ctrl-grid">
-              <label class="ctrl-slider"><span>volume</span>
-                <input type="range" id="ctrl-volume" class="ctrl-range" min="0" max="127" value="100"
-                       title="CC7 channel volume">
-                <output class="ctrl-out" id="ctrl-volume-out">100</output>
-              </label>
-              <label class="ctrl-slider"><span>mod wheel</span>
-                <input type="range" id="ctrl-mod" class="ctrl-range" min="0" max="127" value="0"
-                       title="CC1 modulation wheel">
-                <output class="ctrl-out" id="ctrl-mod-out">0</output>
-              </label>
-            </div>
-            <div class="ctrl-grid">
-              <label class="ctrl-slider ctrl-pitch"><span>pitch bend</span>
-                <input type="range" id="ctrl-pitch" class="ctrl-range" min="-24" max="24" value="0" step="1"
-                       title="Pitch bend in semitones (-24..+24, 0 = center)">
-                <output class="ctrl-out" id="ctrl-pitch-out">0</output>
-              </label>
-              <label class="ctrl-check ctrl-pitch-snap"><input type="checkbox" id="ctrl-pitch-snap" checked
-                     title="Snap-back: release the pitch slider and it springs to 0 (like a real wheel). Uncheck for sticky - the bend stays where you leave it."><span>snap</span></label>
-            </div>
-            <div class="ctrl-grid">
-              <span class="ctrl-seg-label" title="Colour controls the board's chip supports but the panel can't reach directly - sent raw to the keyboard. Portamento (CC65/5, 0 = off) and expression (CC11 swell) are here too; filter/resonance/attack/release are the motion-effect 'filter' family (sound controllers 71-74); reverb/chorus are the effect depths (91/93).">sound &amp; fx</span>
+            <div class="ctrl-grid ctrl-rack-head">
+              <span class="ctrl-seg-label" title="All controllers the board receives - one compact fader bank. Volume/mod/pitch are the performance controls up front; behind them the sound&fx family: portamento (CC65/5, 0 = off) and expression (CC11), the filter/resonance/attack/release motion-effect family (sound controllers 71-74) and the reverb/chorus depths (91/93). Grab a fader, double-click it to snap to default, or click the value and type a number.">controllers</span>
               <button id="ctrl-sfx-defaults" class="mini-btn" type="button"
-                      title="Reset: snap every slider in this section (plus mod wheel) back to its default/off value and send them to the keyboard in one go">defaults</button>
+                      title="Reset: snap mod + all sound &amp; fx faders back to their default/off value and send them to the keyboard in one go">defaults</button>
             </div>
-            <div class="ctrl-grid">
-              <label class="ctrl-slider"><span>portamento</span>
-                <input type="range" id="ctrl-porta" class="ctrl-range" min="0" max="127" value="0"
-                       title="Glide time (0 = off). 0 sends CC65 portamento switch OFF; above 0 the switch is ON (CC65) with this glide time (CC5).">
-                <output class="ctrl-out" id="ctrl-porta-out">0</output>
+            <div class="ctrl-rack">
+              <label class="ctrl-fader" title="CC7 channel volume">
+                <span class="ctrl-fader-label">vol</span>
+                <input type="range" id="ctrl-volume" class="ctrl-vrange" min="0" max="127" value="100">
+                <input type="number" id="ctrl-volume-val" class="ctrl-fval" min="0" max="127" step="1" value="100">
               </label>
-              <label class="ctrl-slider"><span>expression</span>
-                <input type="range" id="ctrl-expression" class="ctrl-range" min="0" max="127" value="127"
-                       title="CC11 expression - performance swell layered over channel volume (the slices pattern gates this)">
-                <output class="ctrl-out" id="ctrl-expression-out">127</output>
+              <label class="ctrl-fader" title="CC1 modulation wheel">
+                <span class="ctrl-fader-label">mod</span>
+                <input type="range" id="ctrl-mod" class="ctrl-vrange" min="0" max="127" value="0">
+                <input type="number" id="ctrl-mod-val" class="ctrl-fval" min="0" max="127" step="1" value="0">
               </label>
-            </div>
-            <div class="ctrl-grid">
-              <label class="ctrl-slider"><span>filter</span>
-                <input type="range" id="ctrl-filter" class="ctrl-range" min="0" max="127" value="64"
-                       title="CC74 brightness / filter cutoff (GM default 64 = neutral)">
-                <output class="ctrl-out" id="ctrl-filter-out">64</output>
+              <label class="ctrl-fader" title="Pitch bend in semitones (-24..+24, 0 = center)">
+                <span class="ctrl-fader-label">pitch</span>
+                <input type="range" id="ctrl-pitch" class="ctrl-vrange" min="-24" max="24" value="0" step="1">
+                <input type="number" id="ctrl-pitch-val" class="ctrl-fval" min="-24" max="24" step="1" value="0">
               </label>
-              <label class="ctrl-slider"><span>resonance</span>
-                <input type="range" id="ctrl-reso" class="ctrl-range" min="0" max="127" value="64"
-                       title="CC71 harmonic content / resonance (GM default 64 = neutral)">
-                <output class="ctrl-out" id="ctrl-reso-out">64</output>
+              <label class="ctrl-fader" title="Glide time (0 = off). 0 sends CC65 portamento switch OFF; above 0 the switch is ON (CC65) with this glide time (CC5).">
+                <span class="ctrl-fader-label">porta</span>
+                <input type="range" id="ctrl-porta" class="ctrl-vrange" min="0" max="127" value="0">
+                <input type="number" id="ctrl-porta-val" class="ctrl-fval" min="0" max="127" step="1" value="0">
               </label>
-            </div>
-            <div class="ctrl-grid">
-              <label class="ctrl-slider"><span>attack</span>
-                <input type="range" id="ctrl-attack" class="ctrl-range" min="0" max="127" value="64"
-                       title="CC73 attack time (GM default 64 = neutral)">
-                <output class="ctrl-out" id="ctrl-attack-out">64</output>
+              <label class="ctrl-fader" title="CC11 expression - performance swell layered over channel volume (the slices pattern gates this)">
+                <span class="ctrl-fader-label">expr</span>
+                <input type="range" id="ctrl-expression" class="ctrl-vrange" min="0" max="127" value="127">
+                <input type="number" id="ctrl-expression-val" class="ctrl-fval" min="0" max="127" step="1" value="127">
               </label>
-              <label class="ctrl-slider"><span>release</span>
-                <input type="range" id="ctrl-release" class="ctrl-range" min="0" max="127" value="64"
-                       title="CC72 release time (GM default 64 = neutral - 0 chops the tail)">
-                <output class="ctrl-out" id="ctrl-release-out">64</output>
+              <label class="ctrl-fader" title="CC74 brightness / filter cutoff (GM default 64 = neutral)">
+                <span class="ctrl-fader-label">filter</span>
+                <input type="range" id="ctrl-filter" class="ctrl-vrange" min="0" max="127" value="64">
+                <input type="number" id="ctrl-filter-val" class="ctrl-fval" min="0" max="127" step="1" value="64">
               </label>
-            </div>
-            <div class="ctrl-grid">
-              <label class="ctrl-slider"><span>reverb</span>
-                <input type="range" id="ctrl-reverb" class="ctrl-range" min="0" max="127" value="0"
-                       title="CC91 effect 1 depth (reverb) - default OFF">
-                <output class="ctrl-out" id="ctrl-reverb-out">0</output>
+              <label class="ctrl-fader" title="CC71 harmonic content / resonance (GM default 64 = neutral)">
+                <span class="ctrl-fader-label">reso</span>
+                <input type="range" id="ctrl-reso" class="ctrl-vrange" min="0" max="127" value="64">
+                <input type="number" id="ctrl-reso-val" class="ctrl-fval" min="0" max="127" step="1" value="64">
               </label>
-              <label class="ctrl-slider"><span>chorus</span>
-                <input type="range" id="ctrl-chorus" class="ctrl-range" min="0" max="127" value="0"
-                       title="CC93 effect 3 depth (chorus) - default OFF">
-                <output class="ctrl-out" id="ctrl-chorus-out">0</output>
+              <label class="ctrl-fader" title="CC73 attack time (GM default 64 = neutral)">
+                <span class="ctrl-fader-label">atk</span>
+                <input type="range" id="ctrl-attack" class="ctrl-vrange" min="0" max="127" value="64">
+                <input type="number" id="ctrl-attack-val" class="ctrl-fval" min="0" max="127" step="1" value="64">
               </label>
+              <label class="ctrl-fader" title="CC72 release time (GM default 64 = neutral - 0 chops the tail)">
+                <span class="ctrl-fader-label">rel</span>
+                <input type="range" id="ctrl-release" class="ctrl-vrange" min="0" max="127" value="64">
+                <input type="number" id="ctrl-release-val" class="ctrl-fval" min="0" max="127" step="1" value="64">
+              </label>
+              <label class="ctrl-fader" title="CC91 effect 1 depth (reverb) - default OFF">
+                <span class="ctrl-fader-label">rvb</span>
+                <input type="range" id="ctrl-reverb" class="ctrl-vrange" min="0" max="127" value="0">
+                <input type="number" id="ctrl-reverb-val" class="ctrl-fval" min="0" max="127" step="1" value="0">
+              </label>
+              <label class="ctrl-fader" title="CC93 effect 3 depth (chorus) - default OFF">
+                <span class="ctrl-fader-label">cho</span>
+                <input type="range" id="ctrl-chorus" class="ctrl-vrange" min="0" max="127" value="0">
+                <input type="number" id="ctrl-chorus-val" class="ctrl-fval" min="0" max="127" step="1" value="0">
+              </label>
+              <label class="ctrl-check ctrl-pitch-snap" title="Snap-back: release the pitch fader and it springs to 0 (like a real wheel). Uncheck for sticky - the bend stays where you leave it."><input type="checkbox" id="ctrl-pitch-snap" checked><span>snap</span></label>
             </div>
             <div class="ctrl-grid">
               <span class="ctrl-seg-label" title="Scripted CC / pitch-bend ramps mirroring the board's Motion Effect families (A filter, B pitch, C modulation). Click to ARM (button lights); each note you play re-runs the movement from the start and the sliders show it - like holding the real MOTION EFFECT button. Only affects echoed (RX) notes: use echo/layer keys routing. Click the lit button to disarm; defaults and panic disarm too.">motion patterns</span>

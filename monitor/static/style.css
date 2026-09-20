@@ -724,11 +724,52 @@ select option {
 .ctrl-grid { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; }
 .ctrl-check { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; }
 .ctrl-check input { accent-color: var(--royal, #3b6ea5); }
-.ctrl-slider { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
-.ctrl-slider > span { min-width: 76px; }
-.ctrl-slider .ctrl-range { width: 150px; accent-color: var(--royal, #3b6ea5); }
-.ctrl-slider.ctrl-pitch .ctrl-range { width: 190px; }
-.ctrl-out { min-width: 28px; text-align: right; font-variant-numeric: tabular-nums; color: var(--straw-soft, #e8d5a3); }
+.ctrl-rack-head { justify-content: space-between; }
+.ctrl-rack {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px 12px;
+  flex-wrap: wrap;
+  padding: 7px 8px 8px;
+  border: 1px solid var(--royal, #3b6ea5);
+  border-radius: 3px;
+  background: rgba(8, 17, 14, 0.45);
+}
+.ctrl-rack .ctrl-fader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  color: var(--straw-soft, #e8d5a3);
+}
+.ctrl-fader-label { line-height: 1; }
+.ctrl-rack .ctrl-vrange {
+  writing-mode: vertical-lr;
+  direction: rtl;
+  height: 64px;
+  width: 20px;
+  accent-color: var(--royal, #3b6ea5);
+  cursor: ns-resize;
+}
+.ctrl-fval {
+  width: 34px;
+  box-sizing: border-box;
+  background: rgba(10, 20, 18, 0.6);
+  border: 1px solid var(--royal, #3b6ea5);
+  border-radius: 2px;
+  color: var(--straw-soft, #e8d5a3);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  padding: 1px 0;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.ctrl-fval::-webkit-inner-spin-button,
+.ctrl-fval::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.ctrl-fval:focus { outline: none; border-color: var(--straw, #F2E6A6); }
 .ctrl-keys-grid { gap: 8px; }
 .ctrl-seg-label { font-size: 12px; color: var(--muted); }
 .ctrl-seg { display: inline-flex; border: 1px solid var(--royal, #3b6ea5); border-radius: 3px; overflow: hidden; }

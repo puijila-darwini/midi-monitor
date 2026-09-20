@@ -1516,21 +1516,44 @@ case "replay":
           return null;
         });
     }
+    // Keep a fader and its editable value box in step with each other.
+    function setFader(id, v) {
+      var el = document.getElementById(id);
+      if (el && String(el.value) !== String(v)) el.value = String(v);
+      var val = document.getElementById(id + "-val");
+      if (val && String(val.value) !== String(v)) val.value = String(v);
+    }
     function wireRange(id, bodyFn, label) {
       var el = document.getElementById(id);
       if (!el) return;
-      var out = document.getElementById(id + "-out");
-      el.addEventListener("input", function () {
-        if (out) out.textContent = el.value;
+      var val = document.getElementById(id + "-val");
+      function send() {
         postCtrl(label + " " + el.value, bodyFn(el));
+      }
+      el.addEventListener("input", function () {
+        if (val) val.value = el.value;
+        send();
       });
-      // Double-click snaps the bar back to its default value and sends it.
+      // Double-click snaps the fader back to its default value and sends it.
       el.addEventListener("dblclick", function () {
         var def = parseInt(el.defaultValue, 10);
-        el.value = String(def);
-        if (out) out.textContent = String(def);
+        setFader(id, def);
         postCtrl(label + " " + def + " (default)", bodyFn(el));
       });
+      // Editable value box: clamp to the fader's range, round to step, send.
+      if (val) {
+        val.addEventListener("change", function () {
+          var min = parseFloat(el.min), max = parseFloat(el.max);
+          var step = parseFloat(el.step) || 1;
+          var v = parseFloat(val.value);
+          if (isNaN(v)) v = parseFloat(el.value);
+          if (isNaN(v)) v = 0;
+          v = Math.max(min, Math.min(max, v));
+          v = Math.round(v / step) * step;
+          setFader(id, v);
+          send();
+        });
+      }
     }
     wireRange("ctrl-volume", function (el) { return { cc: 7, value: parseInt(el.value, 10) }; }, "volume");
     wireRange("ctrl-expression", function (el) { return { cc: 11, value: parseInt(el.value, 10) }; }, "expression");
@@ -1566,10 +1589,8 @@ case "replay":
         var el = document.getElementById(f.id);
         if (!el) return;
         var def = parseInt(el.defaultValue, 10);
-        el.value = def;
+        setFader(f.id, def);
         if (f.id === "ctrl-porta") el._lastVal = def;
-        var out = document.getElementById(f.id + "-out");
-        if (out) out.textContent = def;
         parts.push(f.label + " " + def);
         posts.push(postCtrl(f.label + " " + def, { cc: f.cc, value: def }, true));
       });
@@ -1657,17 +1678,9 @@ case "replay":
       function mirror(body) {
         if (body.cc !== undefined) {
           var sid = SLIDER_IDS[body.cc];
-          if (sid) {
-            var el = document.getElementById(sid);
-            if (el) el.value = String(body.value);
-            var out = document.getElementById(sid + "-out");
-            if (out) out.textContent = String(body.value);
-          }
+          if (sid) setFader(sid, body.value);
         } else if (body.pitch !== undefined) {
-          var pel = document.getElementById("ctrl-pitch");
-          if (pel) pel.value = String(body.pitch);
-          var pout = document.getElementById("ctrl-pitch-out");
-          if (pout) pout.textContent = String(body.pitch);
+          setFader("ctrl-pitch", body.pitch);
         }
       }
       function stopTicker() {
@@ -1742,9 +1755,7 @@ case "replay":
       if (!pel) return;
       pel.addEventListener("change", function () {
         if (psnap && !psnap.checked) return;
-        pel.value = "0";
-        var pout = document.getElementById("ctrl-pitch-out");
-        if (pout) pout.textContent = "0";
+        setFader("ctrl-pitch", 0);
         postCtrl("pitch 0", { pitch: 0 });
       });
     })();
@@ -1763,26 +1774,36 @@ case "replay":
     (function () {
       var el = document.getElementById("ctrl-porta");
       if (!el) return;
-      var out = document.getElementById("ctrl-porta-out");
+      var val = document.getElementById("ctrl-porta-val");
       el._lastVal = parseInt(el.value, 10) > 0 ? 1 : 0;
-      el.addEventListener("input", function () {
-        var v = parseInt(el.value, 10);
-        if (out) out.textContent = el.value;
+      function apply(v) {
+        v = Math.max(0, Math.min(127, Math.round(v)));
+        el.value = String(v);
+        if (val) val.value = String(v);
         var prev = el._lastVal;
         el._lastVal = v;
         if (v > 0 && prev <= 0) postCtrl("portamento on", { cc: 65, value: 127 });
         if (v <= 0 && prev > 0) postCtrl("portamento off", { cc: 65, value: 0 });
         postCtrl("porta time " + v, { cc: 5, value: v });
-      });
+      }
+      el.addEventListener("input", function () { apply(parseInt(el.value, 10)); });
       // Double-click: back to 0 (off) - switch CC65 off and reset the glide.
       el.addEventListener("dblclick", function () {
         var prev = el._lastVal;
         el.value = "0";
-        if (out) out.textContent = "0";
+        if (val) val.value = "0";
         el._lastVal = 0;
         if (prev > 0) postCtrl("portamento off", { cc: 65, value: 0 });
         postCtrl("porta time 0", { cc: 5, value: 0 });
       });
+      // Editable value box drives the same apply() path.
+      if (val) {
+        val.addEventListener("change", function () {
+          var v = parseInt(val.value, 10);
+          if (isNaN(v)) v = 0;
+          apply(v);
+        });
+      }
     })();
     function wireBtn(id, bodyFn, label) {
       var el = document.getElementById(id);
@@ -2254,10 +2275,11 @@ if (typeof s.time_signature === "string" && s.time_signature.indexOf("/") > 0) {
           if (el && document.activeElement !== el) el.checked = !!on;
         }
         function setRange(id) {
+          var v = arguments[1];
           var el = document.getElementById(id);
-          if (el && document.activeElement !== el) el.value = String(arguments[1]);
-          var out = document.getElementById(id + "-out");
-          if (out) out.textContent = arguments[1];
+          if (el && document.activeElement !== el) el.value = String(v);
+          var val = document.getElementById(id + "-val");
+          if (val && document.activeElement !== val) val.value = String(v);
         }
         if (window.syncKeysMode) {
           window.syncKeysMode(s.local_control !== 0, !!s.echo_enabled);
