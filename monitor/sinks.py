@@ -12,8 +12,11 @@ import subprocess
 import threading
 
 from .midiout import list_outs
+from .mididev import find_raw_device
 
-# The keyboard's internal voices always go out over this raw device.
+# Legacy fallback: the keyboard's raw amidi node used to be a stable hw:2,0,0.
+# The real node is resolved dynamically by name (find_raw_device) because the
+# ALSA card number depends on boot enumeration order.
 RAW_DEVICE = "hw:2,0,0"
 
 # One entry per launchable app. Fields:
@@ -133,4 +136,4 @@ def default_routing(outs=None):
     for e in LAUNCHABLE:
         if e.get("auto_route"):
             seq.extend(_matches(e, outs))
-    return seq, [RAW_DEVICE]
+    return seq, [find_raw_device()]

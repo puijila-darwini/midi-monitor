@@ -4,10 +4,18 @@ Workspace for iterating on live MIDI capture/interpretation from the
 PSS-A50 USB keyed into this machine.
 
 ## Hardware
-- Device: PSS-A50 USB-MIDI (driver reports PSR-E353), client 24 / card 2 / port `24:0`
-- Capture: `aseqdump -p 24:0`
+- Device: PSS-A50 USB-MIDI (driver reports PSR-E353, ALSA names it "Digital
+  Keyboard"). The ALSA card + seq client numbers are NOT stable — they follow
+  boot/plug enumeration order (was client 24 / card 2 for months; the
+  2026-09-20 reboot put it at client 20 / card 1). `monitor/mididev.py`
+  re-resolves BOTH endpoints by name on every (re)connect (seq via
+  `aconnect -l`, raw via `amidi -l`; TTL-cached ~2s; legacy `24:0` /
+  `hw:2,0,0` as fallback). capture/replay/sinks all go through it now.
+- Capture: `aseqdump -p <found seq port>` (monitor/capture.py re-resolves on
+  each reconnect attempt, so a reboot that shifts the client number heals).
 - Keyboard is frequently powered OFF / detached. Absence from aconnect
-  (or client 24 gone) is NORMAL — just tell the user, don't deep-investigate.
+  (regardless of client number) is NORMAL — just tell the user, don't
+  deep-investigate.
 - The keyboard emits constant `Clock` and `Active Sensing` chatter -
   ALWAYS filter these out. Played notes arrive as `Note on` / `Note off`;
   the board also TRANSMITS pitch bend + CC1 (mod wheel) and, on a panel/voice
@@ -17,9 +25,11 @@ PSS-A50 USB keyed into this machine.
   the out · ctrl card's "received" readout).
 - The PSS-A50 ALSO RECEIVES over the same USB (bidirectional). It plays its
   INTERNAL voices (no softsynth needed): note on/off and full chords sound via
-  its own speakers. Send path is the raw device `hw:2,0,0` (amidi) because ALSA
-  seq exposes ONLY the capture port `24:0` — there is no seq output port to
-  route to. `amidi -p hw:2,0,0 -S '90 3C 7F ...'` sends note-ons (ch1 works).
+  its own speakers. Send path is the raw device (amidi) because ALSA
+  seq exposes ONLY the capture port — there is no seq output port to
+  route to; the raw node is resolved dynamically (mididev.find_raw_device,
+  e.g. `hw:1,0,0` post-2026-09-20 reboot). `amidi -p <found> -S '90 3C 7F ...'`
+  sends note-ons (ch1 works).
   This opens up "output" features on the cheap: replay a recorded take back
   through the keyboard.
 - The board has a LOCAL CONTROL setting (local ON = keys sound their own

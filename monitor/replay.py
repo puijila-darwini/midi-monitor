@@ -18,7 +18,10 @@ import threading
 import time
 
 from .midiout import SeqOut, list_outs, CC_ALL_NOTES_OFF, CC_ALL_SOUND_OFF
+from .mididev import find_raw_device
 
+# Legacy fallback raw device: the real node is resolved dynamically per send
+# (find_raw_device) because the card number depends on boot enumeration order.
 DEVICE = "hw:2,0,0"
 
 # PSS-A50 voice list, keyed by (bank select MSB, program) -> name.
@@ -73,12 +76,15 @@ VOICES = {
 def _send(hexstr):
     """Send a raw MIDI hex string to the keyboard (raw path).
 
+    The raw device node (hw:N,0,0) is re-resolved by name on each send
+    (TTL-cached in mididev) because the ALSA card number depends on boot
+    enumeration order — it was 2 before the 2026-09-20 reboot, 1 after.
     Returns True if amidi accepted it. amidi failing (returncode != 0) means
     the board is simply absent/detached — NORMAL per AGENTS.md — so this never
     raises; callers decide how to surface it.
     """
     try:
-        r = subprocess.run(["amidi", "-p", DEVICE, "-S", hexstr],
+        r = subprocess.run(["amidi", "-p", find_raw_device(), "-S", hexstr],
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         return r.returncode == 0
     except Exception:

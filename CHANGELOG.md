@@ -1368,3 +1368,19 @@ that file lean. History is chronological; most lines start with a version tag.
   -> 100) and pitch (-> 0, sent as a pitch-bend body not a CC). Dead
   .ctrl-check CSS removed (no usages left). Live on refresh (template +
   CSS + JS). Committed agent:, pushed.
+
+- Ver 90: dynamic MIDI endpoint discovery - fixes "keyboard online?" after a
+  reboot. The 2026-09-20 reboot re-enumerated USB: the PSS-A50 moved from
+  seq client 24 / card 2 to client 20 / card 1, so the hardcoded aseqdump
+  port "24:0" + amidi raw "hw:2,0,0" both went stale -> monitor reported
+  keyboard offline while the board was actually plugged in and powered.
+  New monitor/mididev.py resolves both endpoints by NAME on a TTL cache:
+  seq port from `aconnect -l` (kernel "Digital Keyboard" client, first
+  port), raw node from `amidi -l` (name match pss/psr/yamaha/digital), each
+  with the legacy fixed id as fallback. Wired into capture.py (re-resolves
+  the port on every reconnect attempt), replay.py (_send resolves per
+  send - covers /api/ctrl, echo, panic, gm reset, motion patterns), and
+  sinks.py (boot-time raw routing). Verified on the live box: discovery
+  returns 20:0 / hw:1,0,0, server restart -> /api/state online:true,
+  capture alive 0 restarts, raw amidi send OK. AGENTS.md hardware section
+  updated to note the unstable client/card numbers. Committed agent:, pushed.

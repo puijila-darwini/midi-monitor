@@ -9,6 +9,12 @@ import subprocess
 import threading
 import time
 
+from .mididev import find_seq_port
+
+# Legacy fallback: the keyboard's seq client used to be a stable 24:0. Its
+# client/card number now depends on boot enumeration order, so capture
+# re-resolves it dynamically on every (re)connect (find_seq_port), keeping
+# this simply as the last-resort default.
 PORT = "24:0"
 
 _NOTE_ON = re.compile(r"Note on\s+(\d+),\s*note (\d+),\s*velocity (\d+)")
@@ -212,6 +218,9 @@ class Capture:
                 self._online = False
                 self.on_state_change(False)
         try:
+            # Re-resolve the seq port each reconnect: the board's client
+            # number depends on boot/plug enumeration order.
+            self.port = find_seq_port() or self.port
             self._proc = _spawn(self.port)
             # give it a moment to error out on a missing port
             time.sleep(0.2)
