@@ -604,10 +604,11 @@ function buildCatchTooltip() {
   }
 
   // Ver 94: on snap-liable keys (out-of-scale, snap armed) show what the key
-  // will SOUND after snapping — the landing note name ABOVE the struck-through
-  // played name. Mirrors state._snap_pitch exactly (nearest tie-lower / up /
-  // down; candidates +-1 octave; clamped). Rebuilds on guide changes, snap /
-  // bias toggles and boot-sync.
+  // will SOUND after snapping — the landing INTERVAL relative to the key tonic
+  // ABOVE the struck-through played interval (the same per-PC language all the
+  // other keys print, e.g. 1 above a struck m2). Mirrors state._snap_pitch
+  // exactly (nearest tie-lower / up / down; candidates +-1 octave; clamped).
+  // Rebuilds on guide changes, snap/bias toggles and boot-sync.
   function applySnapLabels() {
     for (var m = LOW; m <= HIGH; m++) {
       var k0 = keyEls[m];
@@ -636,10 +637,10 @@ function buildCatchTooltip() {
       lab.className = "snap-lab";
       var to = document.createElement("span");
       to.className = "snap-to";
-      to.textContent = PC_MAJOR[target % 12] + octLabel(target).slice(1);
+      to.textContent = INTERVAL_NAMES[(target % 12 - tonicPc + 12) % 12];
       var from = document.createElement("span");
       from.className = "snap-from";
-      from.textContent = PC_MAJOR[n % 12] + octLabel(n).slice(1);
+      from.textContent = INTERVAL_NAMES[(n % 12 - tonicPc + 12) % 12];
       lab.appendChild(to);
       lab.appendChild(from);
       k.appendChild(lab);

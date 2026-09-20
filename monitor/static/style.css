@@ -1143,8 +1143,8 @@ select option {
 }
 /* The interval label on a snap-liable key yields to the played/sounded pair. */
 #piano.snap-armed .key.outscale .ivl-label { display: none; }
-/* Snap-liable readout: the landing (sounded) note ABOVE the struck-through
-   played name — e.g. C above Db with Db struck. */
+/* Snap-liable readout: the landing (sounded) interval ABOVE the struck-through
+   played interval, relative to the tonic — e.g. 1 above a struck m2. */
 #piano.snap-armed .key .snap-lab {
   position: absolute;
   bottom: 2px; left: 0; right: 0;
@@ -1161,12 +1161,11 @@ select option {
 
 /* ---- Ver 94: ghost + pivot readouts ----
    Ghost: where a held key will actually SOUND through the echo chain
-   (transpose/invert/snap). A hollow straw ring over the resting body, plus a
-   small straw pennant; the physical key stays solid. Works in both the normal
-   and echo-inverted worlds (straw reads on cream and dark bodies alike). */
-#piano .key.ghost {
-  box-shadow: inset 0 0 0 2px rgba(242, 230, 166, 0.9), inset 0 0 12px rgba(242, 230, 166, 0.28);
-}
+   (transpose/invert/snap). A hollow ring over the resting body plus a small
+   pennant; the physical key stays solid. The ring colour matches the BODY:
+   light bodies (cream / straw / pale green — including the echo-inverted
+   world, where black keys render as white) get a DARK phthalo ring so the
+   target reads; dark bodies keep the straw ring. */
 #piano .key.ghost::after {
   content: "";
   position: absolute;
@@ -1178,6 +1177,27 @@ select option {
   border: 4px solid transparent;
   border-top: 5px solid var(--straw);
   pointer-events: none;
+}
+/* dark / mid bodies -> straw ring */
+#piano .key.black.ghost,
+#piano .key.inscale.black.ghost,
+#piano.echo-invert .key.white.ghost,
+#piano.echo-invert .key.inscale.white.ghost,
+#piano.echo-invert .key.inscale.black.ghost {
+  box-shadow: inset 0 0 0 2px rgba(242, 230, 166, 0.9), inset 0 0 12px rgba(242, 230, 166, 0.28);
+}
+/* light bodies -> dark phthalo ring + pennant */
+#piano .key.white.ghost,
+#piano .key.inscale.white.ghost,
+#piano .key.tonic.ghost,
+#piano.echo-invert .key.black.ghost {
+  box-shadow: inset 0 0 0 2px rgba(11, 31, 26, 0.92), inset 0 0 10px rgba(11, 31, 26, 0.3);
+}
+#piano .key.white.ghost::after,
+#piano .key.inscale.white.ghost::after,
+#piano .key.tonic.ghost::after,
+#piano.echo-invert .key.black.ghost::after {
+  border-top-color: #0B1F1A;
 }
 /* Pivot: the inversion axis (echoed notes reflect around this key). Dashed
    straw frame so it reads over any fill (tonic crown, in-scale, pressed). */
