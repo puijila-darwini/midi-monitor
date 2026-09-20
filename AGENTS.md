@@ -85,6 +85,10 @@ folded into a single web app package in `monitor/`:
                           transpose-safe), scrolling note feed, chord/arp flash.
                           app.js keeps replay/loop state in a Transport store
                           (mini pub/sub; buttons subscribe, SSE events feed it).
+                          Take recording is OFF by default (idle noodling never
+                          accumulates; REC arms a fresh take); the Abora mark
+                          monitor/static/abora-logo.png is the favicon and the
+                          circular header emblem top-left.
 
 Start/stop (for dummies): use the helper script, no chmod needed:
     bash ~/ai/midi/monitor.sh start|stop|restart|status|log

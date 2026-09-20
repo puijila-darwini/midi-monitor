@@ -1207,3 +1207,17 @@ that file lean. History is chronological; most lines start with a version tag.
   halt; pattern oii play still reports "playing "oii" (6 notes)" and finishes
   clean; replay of a 29s multi-take buffer played to completion; zero console
   errors. Committed agent:, pushed.
+
+- Ver 78: take-recording defaults OFF + Abora logo. REC no longer auto-arms on
+  page load: state.py recording starts False and app.js mirrors it, so idle
+  noodling and background board chatter (clock/active-sensing, sustained
+  pad-washing while thinking) never accumulate into a take, stave or roll —
+  you have to press REC to start a take, STOP to freeze it. The live key
+  lighting, feed and chord/arp flash were already separate from the take path
+  and stay live either way. New monitor/static/abora-logo.png (800x800 PNG,
+  local copy of the Deity/Abora mark from the graphics box) replaces the
+  inline-SVG data-URI favicon via <link rel="icon">, and sits as a circular
+  emblem in the header top-left (44px, straw ring + royal glow, clipped
+  round). Verified: fresh server reports recording:false; logo + favicon serve
+  at /static/abora-logo.png (200); header shows the emblem next to "Abora".
+  Committed agent:, pushed.

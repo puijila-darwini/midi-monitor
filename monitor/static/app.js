@@ -60,9 +60,9 @@ window.tempoBpm = 0;  // expose on window for durationToVexFlow
   // REC/STOP take state. REC resets the backend take and clears the stave;
   // STOP freezes the take and renders the notation from the raw buffer.
   // The stave is never pushed live — only the mini stave, feed, piano and
-  // flash banner stay live either way. Default True = the take accumulates
-  // in the background from page load; the user uses STOP to freeze/render.
-  var recording = true;
+  // flash banner stay live either way. Default False = the take stays empty
+  // until the user arms REC, so idle noodling never lands in a saved take.
+  var recording = false;
   // Catch-tonic (the &#9834; catch button). When armed, the next note(s) from
   // the keyboard set the tonic. If those notes form a major or minor triad, an
   // appropriate scale (major / natural minor) is set too. Notes are buffered

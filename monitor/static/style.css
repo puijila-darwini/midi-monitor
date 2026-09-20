@@ -72,6 +72,16 @@ header {
   flex-wrap: wrap;
 }
 
+#app-logo {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid rgba(242,230,166,0.4);
+  box-shadow: 0 0 0 3px rgba(11,31,26,0.8), 0 0 12px rgba(107,63,160,0.55);
+  clip-path: inset(0 round 50%);
+}
+
 header h1 {
   font-size: 22px;
   margin: 0;

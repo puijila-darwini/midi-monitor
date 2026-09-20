@@ -173,12 +173,11 @@ class State:
         self._flush_stop = threading.Event()
 
         # Recording take: when True the frontend accumulates a fresh take on the
-        # stave. Default True = continuous behavior (notes flow onto the stave as
-        # they always did); STOP switches it off once the user wants to freeze a
-        # take. Starting a take clears the quantized buffer (fresh piece); stopping
-        # flushes the trailing pending note immediately so the last played note is
-        # captured.
-        self.recording = True
+        # stave/roll. Default False = idle noodling and background board chatter
+        # never accumulate into a take; REC arms a fresh take (clearing the
+        # quantized buffer), STOP freezes it. Stopping flushes the trailing
+        # pending note immediately so the last played note is captured.
+        self.recording = False
 
     def set_humanizer(self, enabled=None, timing_ms=None, velocity=None):
         """Set the humanizer stage (called by /api/humanizer)."""

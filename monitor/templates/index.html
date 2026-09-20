@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Abora</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='14' fill='%23101418'/><rect x='20' y='30' width='60' height='40' rx='4' fill='%23f4f4f2'/><rect x='42' y='30' width='16' height='22' rx='2' fill='%2316181b'/><rect x='20' y='48' width='60' height='3' fill='%234c9aff'/></svg>">
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='abora-logo.png') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
@@ -43,6 +43,8 @@
 
   <header>
     <div class="head-title">
+      <img id="app-logo" src="{{ url_for('static', filename='abora-logo.png') }}"
+           alt="Abora logo" title="Abora">
       <h1>Abora</h1>
       <button id="reset-btn" class="reset-btn" type="button"
         title="Close ALL monitor/aseqdump instances and restart the server (use when the site is frozen or shows stale online status)">reset server</button>
