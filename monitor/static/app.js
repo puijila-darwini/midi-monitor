@@ -620,6 +620,7 @@ function buildCatchTooltip() {
       case "note":
         activate(ev.note);
         held.add(ev.note);
+        if (window.motion) window.motion.note();
         addFeed('<span class="time">' + fmtTime(ev.time) +
           '</span>  <span class="nmark">' + ev.name + "</span>  on (v" +
           ev.velocity + ")", "on");
@@ -1574,13 +1575,26 @@ case "replay":
     var sfxBtn = document.getElementById("ctrl-sfx-defaults");
     if (sfxBtn) sfxBtn.addEventListener("click", resetSoundFx);
     // Motion patterns: scripted CC / pitch-bend ramps mirroring the board's
-    // Motion Effect families (A filter / B pitch / C modulation). Each
-    // pattern is a list of absolute-time steps built from linear ramp tracks;
-    // a 25ms ticker scans the sorted queue and posts each due step quietly
-    // through /api/ctrl. Starting another pattern, defaults, or panic cancels
-    // the one running; clicking the lit button stops it early.
+    // Motion Effect families (A filter / B pitch / C modulation), armed and
+    // note-triggered the way the real [MOTION EFFECT] button behaves: click a
+    // pattern to ARM it (button lights); every note-on you play re-runs the
+    // ramp from the start so it stays glued to what you play (a short debounce
+    // keeps a chord from thrash-restarting). Each step is posted quietly
+    // through /api/ctrl and mirrored onto the out·ctrl sliders so the motion
+    // is VISIBLE. Every pattern starts and ends at neutral, so the sound
+    // returns to normal when the movement finishes. Click the lit button
+    // again to disarm; defaults and panic also disarm.
     var MOTION = (function () {
-      var timer = null, queue = [], btnActive = null;
+      var timer = null, queue = [], btnActive = null, armed = null;
+      var lastRunAt = -9999, lastOffline = false;
+      var SLIDER_IDS = { 1: "ctrl-mod", 74: "ctrl-filter", 71: "ctrl-reso",
+                         73: "ctrl-attack", 72: "ctrl-release",
+                         91: "ctrl-reverb", 93: "ctrl-chorus" };
+      var PATTERN_NAMES = {
+        sweep: "filter sweep", wah: "filter wah", filmod: "filter+mod",
+        rise: "whole-note rise", choke: "pitch choke", riseslice: "rise+slice",
+        swell: "mod swell", slices: "expr slices", modrise: "mod+rise"
+      };
       function track(what, from, to, tStart, dur) {
         var n = Math.max(2, Math.round(dur / 40));
         var isPitch = what === "pitch";
@@ -1607,67 +1621,97 @@ case "replay":
         wah:      (function () { var o = [];
                     for (var i = 0; i < 6; i++) o = o.concat(track(74, 127, 60, i * 250, 125), track(74, 60, 127, i * 250 + 125, 125));
                     return o; })(),
-        filmod:   track(74, 127, 30, 0, 1800).concat(track(1, 0, 127, 0, 900), track(1, 127, 0, 900, 900)),
+        filmod:   track(74, 127, 30, 0, 900).concat(track(74, 30, 127, 900, 900),
+                    track(1, 0, 127, 0, 900), track(1, 127, 0, 900, 900)),
         rise:     track("pitch", 0, 2, 0, 400).concat(track("pitch", 2, 0, 900, 400)),
         choke:    track("pitch", 0, 2, 0, 140).concat(track("pitch", 2, 0, 140, 220)),
-        riseslice: track("pitch", 0, 1.5, 0, 1500).concat(gates(11, 127, 0, 187, 8)),
+        riseslice: track("pitch", 0, 1.5, 0, 400).concat(track("pitch", 1.5, 0, 1100, 400),
+                    gates(11, 127, 0, 187, 8)),
         swell:    track(1, 0, 127, 0, 1200).concat(track(1, 127, 0, 1200, 1200)),
         slices:   gates(11, 127, 0, 187, 8),
         modrise:  track(1, 0, 127, 0, 1200).concat(track(1, 127, 0, 1200, 1200),
                     track("pitch", 0, 1.5, 0, 1200), track("pitch", 1.5, 0, 1200, 1200))
       };
-      function stop() {
+      function mirror(body) {
+        if (body.cc !== undefined) {
+          var sid = SLIDER_IDS[body.cc];
+          if (sid) {
+            var el = document.getElementById(sid);
+            if (el) el.value = String(body.value);
+            var out = document.getElementById(sid + "-out");
+            if (out) out.textContent = String(body.value);
+          }
+        } else if (body.pitch !== undefined) {
+          var pel = document.getElementById("ctrl-pitch");
+          if (pel) pel.value = String(body.pitch);
+          var pout = document.getElementById("ctrl-pitch-out");
+          if (pout) pout.textContent = String(body.pitch);
+        }
+      }
+      function stopTicker() {
         if (timer) { clearInterval(timer); timer = null; }
         queue = [];
-        setBtn(null);
       }
-      function setBtn(b) {
-        if (btnActive) btnActive.classList.remove("active");
-        btnActive = b;
-        if (btnActive) btnActive.classList.add("active");
+      function halt() {
+        stopTicker();
+        if (btnActive) { btnActive.classList.remove("active"); btnActive = null; }
+        armed = null;
       }
-      function run(name, btn) {
-        stop();
-        var steps = (PATTERNS[name] || []).slice().sort(function (a, b) { return a.t - b.t; });
+      function run() {
+        stopTicker();
+        var steps = (PATTERNS[armed] || []).slice().sort(function (a, b) { return a.t - b.t; });
         if (!steps.length) return;
         queue = steps;
-        setBtn(btn);
-        var offline = false;
+        lastOffline = false;
         var tStart = performance.now();
-        addFeed("SENT \u2192 pattern " + name + " running", "ctrl_out");
-        flashCtrlStatus("pattern: " + name, false);
         timer = setInterval(function () {
           var elapsed = performance.now() - tStart;
           while (queue.length && queue[0].t <= elapsed) {
             var s = queue.shift();
-            postCtrl("motion " + name, s.body, true).then(function (res) {
-              if (res && res.device === false) offline = true;
-            });
+            mirror(s.body);
+            postCtrl("motion " + PATTERN_NAMES[armed] + " @" + s.t + "ms", s.body, true)
+              .then(function (res) {
+                if (res && res.device === false) lastOffline = true;
+              });
           }
-          if (!queue.length) {
-            clearInterval(timer); timer = null;
-            addFeed("SENT \u2192 pattern " + name + " done" + (offline ? " (board offline)" : ""), "ctrl_out");
-            flashCtrlStatus(offline ? "keyboard offline \u2014 pattern dropped" : "pattern " + name + " done", offline);
-            setBtn(null);
-          }
+          if (!queue.length) stopTicker();
         }, 25);
+      }
+      function note() {
+        if (!armed) return;
+        var now = performance.now();
+        if (now - lastRunAt < 120) return; // chord: don't thrash-restart
+        lastRunAt = now;
+        run();
+      }
+      function arm(name, btn) {
+        halt();
+        armed = name;
+        btnActive = btn; if (btn) btn.classList.add("active");
+        addFeed("MOTION \u2192 armed: " + PATTERN_NAMES[name] + " \u2014 play a note", "ctrl_out");
+        flashCtrlStatus("motion: " + PATTERN_NAMES[name] + " armed", false);
       }
       var patBtns = document.querySelectorAll(".pat-btn");
       for (var i = 0; i < patBtns.length; i++) {
         (function (b) {
           b.addEventListener("click", function () {
-            if (b.classList.contains("active")) { stop(); return; }
-            run(b.getAttribute("data-pat"), b);
+            if (b.classList.contains("active")) {
+              halt();
+              flashCtrlStatus("motion off", false);
+              return;
+            }
+            arm(b.getAttribute("data-pat"), b);
           });
         })(patBtns[i]);
       }
-      // defaults + panic cancel whatever pattern is running
+      // defaults + panic disarm whatever pattern is armed
       var sfd = document.getElementById("ctrl-sfx-defaults");
-      if (sfd) sfd.addEventListener("click", stop);
+      if (sfd) sfd.addEventListener("click", halt);
       var pan = document.getElementById("ctrl-panic");
-      if (pan) pan.addEventListener("click", stop);
-      return { stop: stop };
+      if (pan) pan.addEventListener("click", halt);
+      return { note: note, halt: halt };
     })();
+    window.motion = MOTION;
     // Pitch snap-back: on release the slider springs to 0 like a real wheel,
     // unless "snap" is unchecked (sticky bend stays where you leave it).
     (function () {

@@ -1269,3 +1269,21 @@ that file lean. History is chronological; most lines start with a version tag.
   lit button stops the run, and defaults/panic cancel it too. CSS: .pat-btn
   active gets a straw ring. Verified: page serves all nine data-pat buttons,
   app.js syntax clean. Committed agent:, pushed.
+
+- Ver 83: motion patterns reworked - armed + note-triggered like the board's
+  real [MOTION EFFECT] button, and now visible. Ver 82's patterns were a
+  fixed wall-clock window, which was confusing: they swept whatever note
+  happened to be sounding when they fired, returned to neutral, and did not
+  re-trigger on later notes ("applies to the first note, falls off"); also
+  filter+mod ended with the filter closed, and nothing in the UI moved.
+  Now: clicking a pattern ARMS it (button lights, feed "MOTION -> armed:
+  <name> - play a note"); every note-on (hooked in handleEvent via
+  window.motion.note()) re-runs the ramp from the start, with a 120ms
+  debounce so chords don't thrash-restart. Every step is mirrored onto the
+  out·ctrl sliders (cc->slider map 1/71-74/91/93 + pitch->bend wheel) so the
+  motion is VISIBLE while it runs. All patterns now start AND end at
+  neutral (filmod returns the filter 30->127; riseslice returns pitch
+  1.5->0), so the sound snaps back to normal when the movement finishes -
+  no more muffled follow-up notes. Click the lit button again to disarm;
+  defaults + panic also disarm. Verified: app.js syntax clean, served
+  tooltip explains arming. Committed agent:, pushed.
