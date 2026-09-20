@@ -484,6 +484,11 @@ select option {
   opacity: 0.45;
   cursor: default;
 }
+.ctrl-motion .pat-btn.active {
+  border-color: var(--straw, #C9A86A);
+  color: var(--straw, #C9A86A);
+  box-shadow: 0 0 6px rgba(201, 168, 106, 0.45);
+}
 .patterns-status {
   min-height: 12px;
   font-size: 10px;

@@ -506,6 +506,29 @@
                 <output class="ctrl-out" id="ctrl-chorus-out">0</output>
               </label>
             </div>
+            <div class="ctrl-grid">
+              <span class="ctrl-seg-label" title="Scripted CC / pitch-bend ramps mirroring the board's Motion Effect families (A filter, B pitch, C modulation). Timed moves sent to the keyboard - they only affect echoed (RX) notes, so run them with echo or layer keys routing. Click a lit button to stop early.">motion patterns</span>
+            </div>
+            <div class="ctrl-grid ctrl-motion">
+              <button class="mini-btn pat-btn" type="button" data-pat="sweep"
+                      title="A: filter open-close-open sweep (CC74 127-&gt;20-&gt;127)">filter sweep</button>
+              <button class="mini-btn pat-btn" type="button" data-pat="wah"
+                      title="A: fast filter wah - CC74 oscillates 60/127 at 4 Hz">filter wah</button>
+              <button class="mini-btn pat-btn" type="button" data-pat="filmod"
+                      title="A: filter close sweep with a modulation swell on top (CC74 + CC1)">filter+mod</button>
+              <button class="mini-btn pat-btn" type="button" data-pat="rise"
+                      title="B: whole-note pitch bend up, hold, back down (+2 semitones)">whole-note rise</button>
+              <button class="mini-btn pat-btn" type="button" data-pat="choke"
+                      title="B: quick pitch grab up then snap back (vocal choke)">pitch choke</button>
+              <button class="mini-btn pat-btn" type="button" data-pat="riseslice"
+                      title="B: pitch rise with rhythmic expression slices (CC11 gates)">rise+slice</button>
+              <button class="mini-btn pat-btn" type="button" data-pat="swell"
+                      title="C: modulation swell in and out (CC1 0-&gt;127-&gt;0)">mod swell</button>
+              <button class="mini-btn pat-btn" type="button" data-pat="slices"
+                      title="C: expression slices - CC11 gates on a grid">expr slices</button>
+              <button class="mini-btn pat-btn" type="button" data-pat="modrise"
+                      title="C: modulation swell with a gentle pitch lift together">mod+rise</button>
+            </div>
             <div class="ctrl-grid ctrl-received">
               <span class="ctrl-rx-title">from keyboard &rarr;</span>
               <span id="ctrl-received" class="ctrl-rx" title="Last signals seen arriving from the keyboard">

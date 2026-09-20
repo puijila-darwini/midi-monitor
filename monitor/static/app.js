@@ -1573,6 +1573,101 @@ case "replay":
     }
     var sfxBtn = document.getElementById("ctrl-sfx-defaults");
     if (sfxBtn) sfxBtn.addEventListener("click", resetSoundFx);
+    // Motion patterns: scripted CC / pitch-bend ramps mirroring the board's
+    // Motion Effect families (A filter / B pitch / C modulation). Each
+    // pattern is a list of absolute-time steps built from linear ramp tracks;
+    // a 25ms ticker scans the sorted queue and posts each due step quietly
+    // through /api/ctrl. Starting another pattern, defaults, or panic cancels
+    // the one running; clicking the lit button stops it early.
+    var MOTION = (function () {
+      var timer = null, queue = [], btnActive = null;
+      function track(what, from, to, tStart, dur) {
+        var n = Math.max(2, Math.round(dur / 40));
+        var isPitch = what === "pitch";
+        var out = [];
+        for (var i = 0; i < n; i++) {
+          var f = i / (n - 1);
+          var t = tStart + Math.round(dur * f);
+          var v = from + (to - from) * f;
+          out.push(isPitch
+            ? { t: t, body: { pitch: Math.round(v * 100) / 100 } }
+            : { t: t, body: { cc: what, value: Math.round(v) } });
+        }
+        return out;
+      }
+      function gates(cc, hi, lo, gateMs, count) {
+        var out = [];
+        for (var i = 0; i < count; i++) {
+          out.push({ t: i * gateMs, body: { cc: cc, value: (i % 2 ? lo : hi) } });
+        }
+        return out;
+      }
+      var PATTERNS = {
+        sweep:    track(74, 127, 20, 0, 1100).concat(track(74, 20, 127, 1100, 1100)),
+        wah:      (function () { var o = [];
+                    for (var i = 0; i < 6; i++) o = o.concat(track(74, 127, 60, i * 250, 125), track(74, 60, 127, i * 250 + 125, 125));
+                    return o; })(),
+        filmod:   track(74, 127, 30, 0, 1800).concat(track(1, 0, 127, 0, 900), track(1, 127, 0, 900, 900)),
+        rise:     track("pitch", 0, 2, 0, 400).concat(track("pitch", 2, 0, 900, 400)),
+        choke:    track("pitch", 0, 2, 0, 140).concat(track("pitch", 2, 0, 140, 220)),
+        riseslice: track("pitch", 0, 1.5, 0, 1500).concat(gates(11, 127, 0, 187, 8)),
+        swell:    track(1, 0, 127, 0, 1200).concat(track(1, 127, 0, 1200, 1200)),
+        slices:   gates(11, 127, 0, 187, 8),
+        modrise:  track(1, 0, 127, 0, 1200).concat(track(1, 127, 0, 1200, 1200),
+                    track("pitch", 0, 1.5, 0, 1200), track("pitch", 1.5, 0, 1200, 1200))
+      };
+      function stop() {
+        if (timer) { clearInterval(timer); timer = null; }
+        queue = [];
+        setBtn(null);
+      }
+      function setBtn(b) {
+        if (btnActive) btnActive.classList.remove("active");
+        btnActive = b;
+        if (btnActive) btnActive.classList.add("active");
+      }
+      function run(name, btn) {
+        stop();
+        var steps = (PATTERNS[name] || []).slice().sort(function (a, b) { return a.t - b.t; });
+        if (!steps.length) return;
+        queue = steps;
+        setBtn(btn);
+        var offline = false;
+        var tStart = performance.now();
+        addFeed("SENT \u2192 pattern " + name + " running", "ctrl_out");
+        flashCtrlStatus("pattern: " + name, false);
+        timer = setInterval(function () {
+          var elapsed = performance.now() - tStart;
+          while (queue.length && queue[0].t <= elapsed) {
+            var s = queue.shift();
+            postCtrl("motion " + name, s.body, true).then(function (res) {
+              if (res && res.device === false) offline = true;
+            });
+          }
+          if (!queue.length) {
+            clearInterval(timer); timer = null;
+            addFeed("SENT \u2192 pattern " + name + " done" + (offline ? " (board offline)" : ""), "ctrl_out");
+            flashCtrlStatus(offline ? "keyboard offline \u2014 pattern dropped" : "pattern " + name + " done", offline);
+            setBtn(null);
+          }
+        }, 25);
+      }
+      var patBtns = document.querySelectorAll(".pat-btn");
+      for (var i = 0; i < patBtns.length; i++) {
+        (function (b) {
+          b.addEventListener("click", function () {
+            if (b.classList.contains("active")) { stop(); return; }
+            run(b.getAttribute("data-pat"), b);
+          });
+        })(patBtns[i]);
+      }
+      // defaults + panic cancel whatever pattern is running
+      var sfd = document.getElementById("ctrl-sfx-defaults");
+      if (sfd) sfd.addEventListener("click", stop);
+      var pan = document.getElementById("ctrl-panic");
+      if (pan) pan.addEventListener("click", stop);
+      return { stop: stop };
+    })();
     // Pitch snap-back: on release the slider springs to 0 like a real wheel,
     // unless "snap" is unchecked (sticky bend stays where you leave it).
     (function () {

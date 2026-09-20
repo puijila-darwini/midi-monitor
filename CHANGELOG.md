@@ -1255,3 +1255,17 @@ that file lean. History is chronological; most lines start with a version tag.
   to 0 (off); mod CC1 stays 0. The defaults button reads el.defaultValue so
   it inherits the correction automatically. Verified live on :5050: all six
   sliders serve value=64/64/64/64/0/0. Committed agent:, pushed.
+
+- Ver 82: motion pattern buttons - the Motion Effect families as scripted CC
+  ramps. New "motion patterns" group in the out·ctrl card (below sound & fx):
+  nine one-click patterns mirroring the board's A/B/C families, built as
+  absolute-time step queues from linear ramp tracks and fired client-side
+  through the existing /api/ctrl path (quiet posts, single running/done feed
+  line). A - filter: sweep (CC74 127->20->127), wah (4 Hz 60/127 osc), filter
+  +mod (CC74 squeeze + CC1 swell). B - pitch: whole-note rise (+2 st, hold,
+  back), choke (fast grab + snap), rise+slice (+1.5 st with CC11 gates). C -
+  modulation: swell (CC1 0->127->0), slices (CC11 gates on a 187ms grid),
+  mod+rise (CC1 + pitch lift together). A 25ms ticker scans the queue; the
+  lit button stops the run, and defaults/panic cancel it too. CSS: .pat-btn
+  active gets a straw ring. Verified: page serves all nine data-pat buttons,
+  app.js syntax clean. Committed agent:, pushed.
