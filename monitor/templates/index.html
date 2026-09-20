@@ -428,12 +428,12 @@
                         title="local off, echo off - MIDI only: keys emit MIDI but make no sound (feed an external synth/DAW)">midi</button>
               </div>
             </div>
-            <div class="ctrl-grid ctrl-rack-head">
-              <span class="ctrl-seg-label" title="All controllers the board receives - one compact fader bank. Volume/mod/pitch are the performance controls up front; behind them the sound&fx family: portamento (CC65/5, 0 = off) and expression (CC11), the filter/resonance/attack/release motion-effect family (sound controllers 71-74) and the reverb/chorus depths (91/93). Grab a fader, double-click it to snap to default, or click the value and type a number.">controllers</span>
-              <button id="ctrl-sfx-defaults" class="mini-btn" type="button"
-                      title="Reset: snap mod + all sound &amp; fx faders back to their default/off value and send them to the keyboard in one go">defaults</button>
-            </div>
             <div class="ctrl-rack">
+              <div class="ctrl-rack-strip">
+                <span class="ctrl-seg-label" title="All controllers the board receives - one fader bank. Volume/mod/pitch are the performance controls; behind them the sound&fx family: portamento (CC65/5, 0 = off), expression (CC11), the filter/resonance/attack/release motion-effect family (71-74) and the reverb/chorus depths (91/93). Grab a fader, double-click to snap it to default, or click the value and type a number.">controllers</span>
+                <button id="ctrl-sfx-defaults" class="mini-btn" type="button"
+                        title="Restore every fader to its default/off value (incl. volume 100, pitch center) and send them to the keyboard in one go">defaults</button>
+              </div>
               <label class="ctrl-fader" title="CC7 channel volume">
                 <span class="ctrl-fader-label">vol</span>
                 <input type="range" id="ctrl-volume" class="ctrl-vrange" min="0" max="127" value="100">
@@ -489,7 +489,12 @@
                 <input type="range" id="ctrl-chorus" class="ctrl-vrange" min="0" max="127" value="0">
                 <input type="number" id="ctrl-chorus-val" class="ctrl-fval" min="0" max="127" step="1" value="0">
               </label>
-              <label class="ctrl-check ctrl-pitch-snap" title="Snap-back: release the pitch fader and it springs to 0 (like a real wheel). Uncheck for sticky - the bend stays where you leave it."><input type="checkbox" id="ctrl-pitch-snap" checked><span>snap</span></label>
+              <div class="ctrl-seg ctrl-bend-seg" id="ctrl-bend-mode" role="group" aria-label="pitch bend return behavior">
+                <button type="button" data-mode="spring" class="active"
+                        title="spring-loaded like a real pitch wheel: release the fader and it returns to center (0)">spring</button>
+                <button type="button" data-mode="hold"
+                        title="hold: the bend stays where you leave it until you move it again">hold</button>
+              </div>
             </div>
             <div class="ctrl-grid">
               <span class="ctrl-seg-label" title="Scripted CC / pitch-bend ramps mirroring the board's Motion Effect families (A filter, B pitch, C modulation). Click to ARM (button lights); each note you play re-runs the movement from the start and the sliders show it - like holding the real MOTION EFFECT button. Only affects echoed (RX) notes: use echo/layer keys routing. Click the lit button to disarm; defaults and panic disarm too.">motion patterns</span>

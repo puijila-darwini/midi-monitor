@@ -1568,11 +1568,13 @@ case "replay":
     wireRange("ctrl-release", function (el) { return { cc: 72, value: parseInt(el.value, 10) }; }, "release");
     wireRange("ctrl-reverb", function (el) { return { cc: 91, value: parseInt(el.value, 10) }; }, "reverb");
     wireRange("ctrl-chorus", function (el) { return { cc: 93, value: parseInt(el.value, 10) }; }, "chorus");
-    // Defaults: snap mod + every sound & fx slider back to its markup default
-    // and send those values to the keyboard in one quiet burst (single feed
-    // line, offline flagged if any send dropped).
+    // Defaults: restore every fader (performance + sound & fx) to its markup
+    // default and send those values to the keyboard in one quiet burst
+    // (single feed line, offline flagged if any send dropped).
     var SFX_DEFAULTS = [
       { id: "ctrl-mod", cc: 1, label: "mod" },
+      { id: "ctrl-volume", cc: 7, label: "volume" },
+      { id: "ctrl-pitch", pitch: 0, label: "pitch" },
       { id: "ctrl-filter", cc: 74, label: "filter" },
       { id: "ctrl-reso", cc: 71, label: "resonance" },
       { id: "ctrl-attack", cc: 73, label: "attack" },
@@ -1592,7 +1594,8 @@ case "replay":
         setFader(f.id, def);
         if (f.id === "ctrl-porta") el._lastVal = def;
         parts.push(f.label + " " + def);
-        posts.push(postCtrl(f.label + " " + def, { cc: f.cc, value: def }, true));
+        var body = f.pitch !== undefined ? { pitch: def } : { cc: f.cc, value: def };
+        posts.push(postCtrl(f.label + " " + def, body, true));
       });
       if (!posts.length) return;
       Promise.all(posts).then(function (results) {
@@ -1747,14 +1750,27 @@ case "replay":
       return { note: note, halt: halt };
     })();
     window.motion = MOTION;
-    // Pitch snap-back: on release the slider springs to 0 like a real wheel,
-    // unless "snap" is unchecked (sticky bend stays where you leave it).
+    // Pitch bend return behavior: spring-loaded (like a real pitch wheel, the
+    // fader returns to center on release) vs hold (sticky - the bend stays
+    // where you leave it). A two-mode segmented toggle, same grammar as keys.
     (function () {
       var pel = document.getElementById("ctrl-pitch");
-      var psnap = document.getElementById("ctrl-pitch-snap");
+      var seg = document.getElementById("ctrl-bend-mode");
       if (!pel) return;
+      var mode = "spring";
+      if (seg) {
+        seg.addEventListener("click", function (e) {
+          var b = e.target.closest("button");
+          if (!b || !seg.contains(b)) return;
+          mode = b.getAttribute("data-mode") || "spring";
+          var btns = seg.querySelectorAll("button");
+          for (var i = 0; i < btns.length; i++) {
+            btns[i].classList.toggle("active", btns[i] === b);
+          }
+        });
+      }
       pel.addEventListener("change", function () {
-        if (psnap && !psnap.checked) return;
+        if (mode !== "spring") return;
         setFader("ctrl-pitch", 0);
         postCtrl("pitch 0", { pitch: 0 });
       });

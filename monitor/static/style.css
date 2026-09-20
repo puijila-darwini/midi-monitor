@@ -722,9 +722,22 @@ select option {
 .ctrl-status.bad { background: rgba(180,40,40,0.22); color: #ffcccc; }
 .ctrl-btn-group { display: flex; align-items: center; gap: 6px; }
 .ctrl-grid { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; }
-.ctrl-check { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; }
-.ctrl-check input { accent-color: var(--royal, #3b6ea5); }
-.ctrl-rack-head { justify-content: space-between; }
+.ctrl-rack-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-basis: 100%;
+  gap: 8px;
+}
+.ctrl-rack-strip .mini-btn {
+  font-size: 9px;
+  padding: 1px 6px;
+  line-height: 1.5;
+}
+.ctrl-rack .ctrl-seg button {
+  font-size: 9px;
+  padding: 1px 6px;
+}
 .ctrl-rack {
   display: flex;
   align-items: flex-end;

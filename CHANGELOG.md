@@ -1356,3 +1356,15 @@ that file lean. History is chronological; most lines start with a version tag.
   Old .ctrl-slider/.ctrl-range/.ctrl-out CSS + markup removed; dead '-out'
   id references all gone (grep-verified). Live on refresh (template + CSS +
   JS, no restart). Committed agent:, pushed.
+
+- Ver 89: pitch-bend return grammar + defaults in the rack. The "snap"
+  checkbox (out of context in a fader bank) became a two-mode segmented
+  toggle using the standard pitch-wheel vocabulary - spring (spring-loaded,
+  returns to center on release, the default, like a real wheel) vs hold
+  (sticky, bend stays put) - same seg grammar as the keys router. The
+  defaults button moved INSIDE the ctrl-rack as a smaller in-strip control
+  (9px, sits top-right of the bank, replacing the old ctrl-rack-head row)
+  and now genuinely restores ALL faders: SFX_DEFAULTS gained volume (CC7
+  -> 100) and pitch (-> 0, sent as a pitch-bend body not a CC). Dead
+  .ctrl-check CSS removed (no usages left). Live on refresh (template +
+  CSS + JS). Committed agent:, pushed.
