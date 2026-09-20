@@ -429,30 +429,18 @@
               </div>
             </div>
             <div class="ctrl-grid">
-              <label class="ctrl-slider"><span>portamento</span>
-                <input type="range" id="ctrl-porta" class="ctrl-range" min="0" max="127" value="0"
-                       title="Glide time (0 = off). 0 sends CC65 portamento switch OFF; above 0 the switch is ON (CC65) with this glide time (CC5).">
-                <output class="ctrl-out" id="ctrl-porta-out">0</output>
-              </label>
-            </div>
-            <div class="ctrl-grid">
               <label class="ctrl-slider"><span>volume</span>
                 <input type="range" id="ctrl-volume" class="ctrl-range" min="0" max="127" value="100"
                        title="CC7 channel volume">
                 <output class="ctrl-out" id="ctrl-volume-out">100</output>
               </label>
-              <label class="ctrl-slider"><span>expression</span>
-                <input type="range" id="ctrl-expression" class="ctrl-range" min="0" max="127" value="127"
-                       title="CC11 expression (swell)">
-                <output class="ctrl-out" id="ctrl-expression-out">127</output>
-              </label>
-            </div>
-            <div class="ctrl-grid">
               <label class="ctrl-slider"><span>mod wheel</span>
                 <input type="range" id="ctrl-mod" class="ctrl-range" min="0" max="127" value="0"
                        title="CC1 modulation wheel">
                 <output class="ctrl-out" id="ctrl-mod-out">0</output>
               </label>
+            </div>
+            <div class="ctrl-grid">
               <label class="ctrl-slider ctrl-pitch"><span>pitch bend</span>
                 <input type="range" id="ctrl-pitch" class="ctrl-range" min="-24" max="24" value="0" step="1"
                        title="Pitch bend in semitones (-24..+24, 0 = center)">
@@ -462,9 +450,21 @@
                      title="Snap-back: release the pitch slider and it springs to 0 (like a real wheel). Uncheck for sticky - the bend stays where you leave it."><span>snap</span></label>
             </div>
             <div class="ctrl-grid">
-              <span class="ctrl-seg-label" title="Timbre + effect controllers the board's chip supports but the panel can't reach - sent raw to the keyboard. Filter/resonance/attack/release are the motion-effect 'filter' family (sound controllers 71-74); reverb/chorus are the effect depths (91/93).">sound &amp; fx</span>
+              <span class="ctrl-seg-label" title="Colour controls the board's chip supports but the panel can't reach directly - sent raw to the keyboard. Portamento (CC65/5, 0 = off) and expression (CC11 swell) are here too; filter/resonance/attack/release are the motion-effect 'filter' family (sound controllers 71-74); reverb/chorus are the effect depths (91/93).">sound &amp; fx</span>
               <button id="ctrl-sfx-defaults" class="mini-btn" type="button"
-                      title="Reset: snap mod + all sound &amp; fx sliders back to their default/off values and send them to the keyboard in one go">defaults</button>
+                      title="Reset: snap every slider in this section (plus mod wheel) back to its default/off value and send them to the keyboard in one go">defaults</button>
+            </div>
+            <div class="ctrl-grid">
+              <label class="ctrl-slider"><span>portamento</span>
+                <input type="range" id="ctrl-porta" class="ctrl-range" min="0" max="127" value="0"
+                       title="Glide time (0 = off). 0 sends CC65 portamento switch OFF; above 0 the switch is ON (CC65) with this glide time (CC5).">
+                <output class="ctrl-out" id="ctrl-porta-out">0</output>
+              </label>
+              <label class="ctrl-slider"><span>expression</span>
+                <input type="range" id="ctrl-expression" class="ctrl-range" min="0" max="127" value="127"
+                       title="CC11 expression - performance swell layered over channel volume (the slices pattern gates this)">
+                <output class="ctrl-out" id="ctrl-expression-out">127</output>
+              </label>
             </div>
             <div class="ctrl-grid">
               <label class="ctrl-slider"><span>filter</span>

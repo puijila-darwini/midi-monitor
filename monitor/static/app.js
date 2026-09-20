@@ -1548,7 +1548,9 @@ case "replay":
       { id: "ctrl-attack", cc: 73, label: "attack" },
       { id: "ctrl-release", cc: 72, label: "release" },
       { id: "ctrl-reverb", cc: 91, label: "reverb" },
-      { id: "ctrl-chorus", cc: 93, label: "chorus" }
+      { id: "ctrl-chorus", cc: 93, label: "chorus" },
+      { id: "ctrl-expression", cc: 11, label: "expression" },
+      { id: "ctrl-porta", cc: 65, label: "portamento" }
     ];
     function resetSoundFx() {
       var parts = [];
@@ -1558,6 +1560,7 @@ case "replay":
         if (!el) return;
         var def = parseInt(el.defaultValue, 10);
         el.value = def;
+        if (f.id === "ctrl-porta") el._lastVal = def;
         var out = document.getElementById(f.id + "-out");
         if (out) out.textContent = def;
         parts.push(f.label + " " + def);
@@ -1754,14 +1757,14 @@ case "replay":
       var el = document.getElementById("ctrl-porta");
       if (!el) return;
       var out = document.getElementById("ctrl-porta-out");
-      var wasOn = parseInt(el.value, 10) > 0;
+      el._lastVal = parseInt(el.value, 10) > 0 ? 1 : 0;
       el.addEventListener("input", function () {
         var v = parseInt(el.value, 10);
         if (out) out.textContent = el.value;
-        var on = v > 0;
-        if (on && !wasOn) postCtrl("portamento on", { cc: 65, value: 127 });
-        if (!on && wasOn) postCtrl("portamento off", { cc: 65, value: 0 });
-        wasOn = on;
+        var prev = el._lastVal;
+        el._lastVal = v;
+        if (v > 0 && prev <= 0) postCtrl("portamento on", { cc: 65, value: 127 });
+        if (v <= 0 && prev > 0) postCtrl("portamento off", { cc: 65, value: 0 });
         postCtrl("porta time " + v, { cc: 5, value: v });
       });
     })();

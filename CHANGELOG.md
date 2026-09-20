@@ -1316,3 +1316,16 @@ that file lean. History is chronological; most lines start with a version tag.
   stored CC65 is on, else 0. Verified: node --check clean, served page has
   one ctrl-porta slider, no sustain wiring left (prose tooltips only).
   Committed agent:, pushed.
+
+- Ver 86: out·ctrl regroup. Top of the card is now just the performance
+  controls: volume (CC7) + mod wheel (CC1) on one row, pitch bend (+ snap)
+  on the next. Expression (CC11) and portamento (CC65/5) moved into the
+  sound & fx section as their own row before filter/resonance, since they're
+  colour controls, not performance ones. The defaults button now covers the
+  whole section: SFX_DEFAULTS gained expression (11, back to 127) and
+  portamento (65, 0 = off). Portamento boundary tracking switched from a
+  closure var to el._lastVal so a defaults reset keeps the CC65 on/off edge
+  correct (reset sets _lastVal too - next drag above 0 re-engages the
+  switch). Verified: one ctrl-mod/ctrl-pitch/ctrl-porta/ctrl-expression
+  each, DOM order volume->mod->pitch->portamento->expression->filter...,
+  node --check clean. Committed agent:, pushed.
