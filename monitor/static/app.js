@@ -1491,8 +1491,8 @@ case "replay":
       if (body.action) return body.action;
       return "send";
     }
-    function postCtrl(label, body) {
-      fetch("/api/ctrl", {
+    function postCtrl(label, body, quiet) {
+      return fetch("/api/ctrl", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body)
@@ -1500,14 +1500,20 @@ case "replay":
         .then(function (r) { return r.json(); })
         .then(function (res) {
           if (res && res.ok) {
-            addFeed('SENT \u2192 ' + label + (res.device === false ? " (board offline)" : ""), "ctrl_out");
-            if (res.warning) flashCtrlStatus("keyboard offline \u2014 " + label + " dropped", true);
-            else flashCtrlStatus(label + " sent", false);
+            if (!quiet) {
+              addFeed('SENT \u2192 ' + label + (res.device === false ? " (board offline)" : ""), "ctrl_out");
+              if (res.warning) flashCtrlStatus("keyboard offline \u2014 " + label + " dropped", true);
+              else flashCtrlStatus(label + " sent", false);
+            }
           } else if (res && res.error) {
-            flashCtrlStatus(res.error, true);
+            if (!quiet) flashCtrlStatus(res.error, true);
           }
+          return res;
         })
-        .catch(function () { flashCtrlStatus("send failed", true); });
+        .catch(function () {
+          if (!quiet) flashCtrlStatus("send failed", true);
+          return null;
+        });
     }
     function wireRange(id, bodyFn, label) {
       var el = document.getElementById(id);
@@ -1532,6 +1538,41 @@ case "replay":
     wireRange("ctrl-release", function (el) { return { cc: 72, value: parseInt(el.value, 10) }; }, "release");
     wireRange("ctrl-reverb", function (el) { return { cc: 91, value: parseInt(el.value, 10) }; }, "reverb");
     wireRange("ctrl-chorus", function (el) { return { cc: 93, value: parseInt(el.value, 10) }; }, "chorus");
+    // Defaults: snap mod + every sound & fx slider back to its markup default
+    // and send those values to the keyboard in one quiet burst (single feed
+    // line, offline flagged if any send dropped).
+    var SFX_DEFAULTS = [
+      { id: "ctrl-mod", cc: 1, label: "mod" },
+      { id: "ctrl-filter", cc: 74, label: "filter" },
+      { id: "ctrl-reso", cc: 71, label: "resonance" },
+      { id: "ctrl-attack", cc: 73, label: "attack" },
+      { id: "ctrl-release", cc: 72, label: "release" },
+      { id: "ctrl-reverb", cc: 91, label: "reverb" },
+      { id: "ctrl-chorus", cc: 93, label: "chorus" }
+    ];
+    function resetSoundFx() {
+      var parts = [];
+      var posts = [];
+      SFX_DEFAULTS.forEach(function (f) {
+        var el = document.getElementById(f.id);
+        if (!el) return;
+        var def = parseInt(el.defaultValue, 10);
+        el.value = def;
+        var out = document.getElementById(f.id + "-out");
+        if (out) out.textContent = def;
+        parts.push(f.label + " " + def);
+        posts.push(postCtrl(f.label + " " + def, { cc: f.cc, value: def }, true));
+      });
+      if (!posts.length) return;
+      Promise.all(posts).then(function (results) {
+        var offline = results.some(function (r) { return r && r.device === false; });
+        addFeed('SENT \u2192 defaults: ' + parts.join(" \u00b7 ") +
+                (offline ? " (board offline)" : ""), "ctrl_out");
+        flashCtrlStatus(offline ? "keyboard offline \u2014 defaults dropped" : "defaults sent", offline);
+      });
+    }
+    var sfxBtn = document.getElementById("ctrl-sfx-defaults");
+    if (sfxBtn) sfxBtn.addEventListener("click", resetSoundFx);
     // Pitch snap-back: on release the slider springs to 0 like a real wheel,
     // unless "snap" is unchecked (sticky bend stays where you leave it).
     (function () {

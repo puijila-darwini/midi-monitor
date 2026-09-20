@@ -1235,3 +1235,14 @@ that file lean. History is chronological; most lines start with a version tag.
   TEMPLATES_AUTO_RELOAD picks it up on refresh, no server restart, no take
   loss. Verified: page serves all six controls + label, app.js syntax clean.
   Committed agent:, pushed.
+
+- Ver 80: "defaults" button in the sound & fx group. One click snaps mod +
+  all six timbre/fx sliders back to their markup defaults and fires the whole
+  set at the keyboard in a single quiet burst: postCtrl gained an optional
+  `quiet` arg (skips per-item feed/flash) and now returns its promise;
+  resetSoundFx() collects one post per control (values read from
+  el.defaultValue, so the HTML markup stays the single source of truth) and
+  emits one aggregated SENT line ("defaults: mod 0 · filter 100 · ..."),
+  flagging "(board offline)" if any send dropped. Button lives in the sound &
+  fx seg-label row, wired to resetSoundFx. Verified: page serves the button,
+  app.js syntax clean. Committed agent:, pushed.
