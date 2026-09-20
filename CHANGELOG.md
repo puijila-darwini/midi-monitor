@@ -1221,3 +1221,17 @@ that file lean. History is chronological; most lines start with a version tag.
   round). Verified: fresh server reports recording:false; logo + favicon serve
   at /static/abora-logo.png (200); header shows the emblem next to "Abora".
   Committed agent:, pushed.
+
+- Ver 79: sound & fx controls in the out·ctrl card. The board is not a simple
+  "mod wheel": its chip takes a richer controller set the panel can't reach
+  (the MOTION EFFECT holder drives filter/pitch/modulation patterns over time,
+  but there's no direct filter/effect surface). New "sound & fx" group next
+  to the mod wheel — six sliders sent raw to the keyboard via the existing
+  /api/ctrl path (it already accepted any CC 0-127): filter CC74 (brightness/
+  cutoff), resonance CC71 (harmonic content), attack CC73, release CC72 (the
+  motion-effect "filter" family), reverb CC91 and chorus CC93 (effect 1/3
+  depths). All six are marked receive-capable "o" in the PSS-A50 MIDI
+  Implementation Chart. Front-end only (template + app.js wireRange wiring);
+  TEMPLATES_AUTO_RELOAD picks it up on refresh, no server restart, no take
+  loss. Verified: page serves all six controls + label, app.js syntax clean.
+  Committed agent:, pushed.

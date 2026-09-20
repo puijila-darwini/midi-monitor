@@ -1523,6 +1523,15 @@ case "replay":
     wireRange("ctrl-expression", function (el) { return { cc: 11, value: parseInt(el.value, 10) }; }, "expression");
     wireRange("ctrl-mod", function (el) { return { cc: 1, value: parseInt(el.value, 10) }; }, "mod");
     wireRange("ctrl-pitch", function (el) { return { pitch: parseFloat(el.value) }; }, "pitch");
+    // Sound & fx: controller values the board applies to received notes (its
+    // chip handles them but the panel has no direct access - motion-effect
+    // family). Timbre = sound controllers 71-74, fx depths = 91/93.
+    wireRange("ctrl-filter", function (el) { return { cc: 74, value: parseInt(el.value, 10) }; }, "filter");
+    wireRange("ctrl-reso", function (el) { return { cc: 71, value: parseInt(el.value, 10) }; }, "resonance");
+    wireRange("ctrl-attack", function (el) { return { cc: 73, value: parseInt(el.value, 10) }; }, "attack");
+    wireRange("ctrl-release", function (el) { return { cc: 72, value: parseInt(el.value, 10) }; }, "release");
+    wireRange("ctrl-reverb", function (el) { return { cc: 91, value: parseInt(el.value, 10) }; }, "reverb");
+    wireRange("ctrl-chorus", function (el) { return { cc: 93, value: parseInt(el.value, 10) }; }, "chorus");
     // Pitch snap-back: on release the slider springs to 0 like a real wheel,
     // unless "snap" is unchecked (sticky bend stays where you leave it).
     (function () {

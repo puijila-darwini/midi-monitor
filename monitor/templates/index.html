@@ -465,6 +465,45 @@
               <label class="ctrl-check ctrl-pitch-snap"><input type="checkbox" id="ctrl-pitch-snap" checked
                      title="Snap-back: release the pitch slider and it springs to 0 (like a real wheel). Uncheck for sticky - the bend stays where you leave it."><span>snap</span></label>
             </div>
+            <div class="ctrl-grid">
+              <span class="ctrl-seg-label" title="Timbre + effect controllers the board's chip supports but the panel can't reach - sent raw to the keyboard. Filter/resonance/attack/release are the motion-effect 'filter' family (sound controllers 71-74); reverb/chorus are the effect depths (91/93).">sound &amp; fx</span>
+            </div>
+            <div class="ctrl-grid">
+              <label class="ctrl-slider"><span>filter</span>
+                <input type="range" id="ctrl-filter" class="ctrl-range" min="0" max="127" value="100"
+                       title="CC74 brightness / filter cutoff (0-127)">
+                <output class="ctrl-out" id="ctrl-filter-out">100</output>
+              </label>
+              <label class="ctrl-slider"><span>resonance</span>
+                <input type="range" id="ctrl-reso" class="ctrl-range" min="0" max="127" value="0"
+                       title="CC71 harmonic content / resonance (0-127)">
+                <output class="ctrl-out" id="ctrl-reso-out">0</output>
+              </label>
+            </div>
+            <div class="ctrl-grid">
+              <label class="ctrl-slider"><span>attack</span>
+                <input type="range" id="ctrl-attack" class="ctrl-range" min="0" max="127" value="0"
+                       title="CC73 attack time (0-127)">
+                <output class="ctrl-out" id="ctrl-attack-out">0</output>
+              </label>
+              <label class="ctrl-slider"><span>release</span>
+                <input type="range" id="ctrl-release" class="ctrl-range" min="0" max="127" value="0"
+                       title="CC72 release time (0-127)">
+                <output class="ctrl-out" id="ctrl-release-out">0</output>
+              </label>
+            </div>
+            <div class="ctrl-grid">
+              <label class="ctrl-slider"><span>reverb</span>
+                <input type="range" id="ctrl-reverb" class="ctrl-range" min="0" max="127" value="40"
+                       title="CC91 effect 1 depth (reverb)">
+                <output class="ctrl-out" id="ctrl-reverb-out">40</output>
+              </label>
+              <label class="ctrl-slider"><span>chorus</span>
+                <input type="range" id="ctrl-chorus" class="ctrl-range" min="0" max="127" value="0"
+                       title="CC93 effect 3 depth (chorus)">
+                <output class="ctrl-out" id="ctrl-chorus-out">0</output>
+              </label>
+            </div>
             <div class="ctrl-grid ctrl-received">
               <span class="ctrl-rx-title">from keyboard &rarr;</span>
               <span id="ctrl-received" class="ctrl-rx" title="Last signals seen arriving from the keyboard">
