@@ -1524,6 +1524,13 @@ case "replay":
         if (out) out.textContent = el.value;
         postCtrl(label + " " + el.value, bodyFn(el));
       });
+      // Double-click snaps the bar back to its default value and sends it.
+      el.addEventListener("dblclick", function () {
+        var def = parseInt(el.defaultValue, 10);
+        el.value = String(def);
+        if (out) out.textContent = String(def);
+        postCtrl(label + " " + def + " (default)", bodyFn(el));
+      });
     }
     wireRange("ctrl-volume", function (el) { return { cc: 7, value: parseInt(el.value, 10) }; }, "volume");
     wireRange("ctrl-expression", function (el) { return { cc: 11, value: parseInt(el.value, 10) }; }, "expression");
@@ -1766,6 +1773,15 @@ case "replay":
         if (v > 0 && prev <= 0) postCtrl("portamento on", { cc: 65, value: 127 });
         if (v <= 0 && prev > 0) postCtrl("portamento off", { cc: 65, value: 0 });
         postCtrl("porta time " + v, { cc: 5, value: v });
+      });
+      // Double-click: back to 0 (off) - switch CC65 off and reset the glide.
+      el.addEventListener("dblclick", function () {
+        var prev = el._lastVal;
+        el.value = "0";
+        if (out) out.textContent = "0";
+        el._lastVal = 0;
+        if (prev > 0) postCtrl("portamento off", { cc: 65, value: 0 });
+        postCtrl("porta time 0", { cc: 5, value: 0 });
       });
     })();
     function wireBtn(id, bodyFn, label) {

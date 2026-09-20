@@ -725,6 +725,7 @@ select option {
 .ctrl-check { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; }
 .ctrl-check input { accent-color: var(--royal, #3b6ea5); }
 .ctrl-slider { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
+.ctrl-slider > span { min-width: 76px; }
 .ctrl-slider .ctrl-range { width: 150px; accent-color: var(--royal, #3b6ea5); }
 .ctrl-slider.ctrl-pitch .ctrl-range { width: 190px; }
 .ctrl-out { min-width: 28px; text-align: right; font-variant-numeric: tabular-nums; color: var(--straw-soft, #e8d5a3); }

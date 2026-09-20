@@ -1329,3 +1329,15 @@ that file lean. History is chronological; most lines start with a version tag.
   switch). Verified: one ctrl-mod/ctrl-pitch/ctrl-porta/ctrl-expression
   each, DOM order volume->mod->pitch->portamento->expression->filter...,
   node --check clean. Committed agent:, pushed.
+
+- Ver 87: card alignment + double-click-to-default. The portamento/expression
+  bars didn't line up with the six sound&fx bars because label widths vary
+  (10-char labels push their bar + readout right). CSS: .ctrl-slider > span
+  now has min-width:76px, so every bar starts on the same two column lines
+  and the readouts stack in clean columns across all rows (volume/mod/pitch
+  top rows align too). Double-click on any control bar snaps it to its
+  default value and sends it: wireRange gained a dblclick listener (reads
+  el.defaultValue, posts "label N (default)"); the unified portamento bar
+  has its own dblclick -> 0/off (CC65 switch off, CC5 0, _lastVal synced).
+  Verified: 11 ctrl-range inputs in the card, all covered; node --check
+  clean. Live on refresh (CSS+JS only, no restart). Committed agent:, pushed.
