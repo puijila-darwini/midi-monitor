@@ -174,6 +174,10 @@ class State:
                                           # octave 3 default; the UI selects
                                           # note + octave, key-tonic follows
                                           # until the user picks a pivot)
+        self.invert_pivot_auto = False    # auto: pivot = the pattern's FIRST
+                                          # note (earliest attack), so the
+                                          # inverted phrase keeps its register
+        self.invert_pivot_live = None     # resolved auto pivot (take -> echo)
         self.reverse_enabled = False
         # Echo-stream application (Ver 92): which of the above ALSO run LIVE on
         # the echoed keybed notes (app.py note_on/note_off path). Only the
@@ -183,6 +187,13 @@ class State:
         self.echo_transpose = False
         self.echo_snap = False
         self.echo_invert = False
+        # Press-time echo mapping (Ver 94 de-jank): note_on freezes the mapped
+        # pitch SENT to the board so note_off releases exactly that pitch even
+        # when the transforms change mid-hold. echo_holders refcounts per
+        # MAPPED note (snap/invert collapse different raw keys onto one tone),
+        # so a release only rings off when the last holder lets go.
+        self.echo_held = {}       # raw note -> {"mapped": int, "channel": int}
+        self.echo_holders = {}    # mapped note -> count of raw keys on it
         # Key context from the tonic·scale card (server copy so the scale
         # stage + echo snap share it). tonic -1 = guide off; scale "" = none.
         self.key_tonic = -1
@@ -295,11 +306,16 @@ class State:
             self.snap_bias = bias
         self.requantize()
 
-    def set_invert(self, enabled=None, pivot=None):
+    def set_invert(self, enabled=None, pivot=None, auto=None):
         """Set the melodic-inversion stage. pivot = MIDI note to reflect
-        around; the inversion is n' = 2*pivot - n."""
+        around (when auto is off); auto = pivot follows the pattern's FIRST
+        note so the inverted phrase keeps its register. n' = 2*pivot - n."""
         if enabled is not None:
             self.invert_enabled = bool(enabled)
+        if auto is not None:
+            self.invert_pivot_auto = bool(auto)
+            if not self.invert_pivot_auto:
+                self.invert_pivot_live = None
         if pivot is not None:
             try:
                 pivot = int(pivot)
@@ -324,13 +340,58 @@ class State:
                 "invert": "echo_invert"}[which]
         setattr(self, attr, bool(enabled))
 
+    # -- press-time echo map (Ver 94): keyed notes map ONCE at press; note_off
+    # releases the SAME pitch even if the transforms changed mid-hold.
+    def echo_hold(self, raw, channel=0):
+        """Remember a press: map the raw keyed note through the live
+        transforms and return the pitch to send. Also records the send channel
+        so the release can match it."""
+        try:
+            r = int(raw)
+        except (TypeError, ValueError):
+            r = raw
+        mapped = self.echo_transform(r)
+        self.echo_held[r] = {"mapped": mapped, "channel": int(channel)}
+        self.echo_holders[mapped] = self.echo_holders.get(mapped, 0) + 1
+        return mapped
+
+    def echo_release(self, raw):
+        """Release a press. Returns None while OTHER raw keys still hold the
+        same mapped pitch (refcounted) — None also when the press was never
+        echoed at all — else {"mapped", "channel"} to send the note_off."""
+        try:
+            r = int(raw)
+        except (TypeError, ValueError):
+            r = raw
+        held = self.echo_held.pop(r, None)
+        if not held:
+            return None
+        mapped = held["mapped"]
+        n = self.echo_holders.get(mapped, 0) - 1
+        if n > 0:
+            self.echo_holders[mapped] = n
+            return None
+        self.echo_holders.pop(mapped, None)
+        return held
+
+    def echo_release_all(self):
+        """Every held press (for ringing off when echo is disabled), clearing
+        the press-time map."""
+        out = list(self.echo_held.values())
+        self.echo_held.clear()
+        self.echo_holders.clear()
+        return out
+
     def _snap_pitch(self, note):
         """Snap a single pitch onto the tonic·scale selection's scale, per
         snap_bias (nearest/up/down). Returns the note when no scale is set."""
         semis = SCALE_SEMIS.get(self.key_scale)
         if semis is None or self.key_tonic < 0:
             return note
-        pcs = sorted((s - self.key_tonic) % 12 for s in semis)
+        # Absolute pitch classes of the scale under this tonic = (s + tonic),
+        # exactly what the JS guide shades. (Was (s - tonic), which snapped
+        # non-zero tonics onto a DIFFERENT scale than the one displayed.)
+        pcs = sorted((s + self.key_tonic) % 12 for s in semis)
         base = note - (note % 12)
         # Candidates around the note: same octave region +/- one octave.
         cands = [base + pc - 12 for pc in pcs] + [base + pc for pc in pcs] \
@@ -358,11 +419,39 @@ class State:
             except (TypeError, ValueError):
                 continue
 
+    def _first_note_pitch(self, notes):
+        """Pitch of the take's earliest attack — the auto-invert pivot.
+        None for an empty / all-rest take."""
+        best = None
+        for qn in notes:
+            if qn.get("rest") or qn.get("note") is None:
+                continue
+            try:
+                t = float(qn.get("on_time", 0.0))
+            except (TypeError, ValueError):
+                continue
+            if best is None or t < best[0]:
+                try:
+                    best = (t, int(qn["note"]))
+                except (TypeError, ValueError):
+                    continue
+        return best[1] if best else None
+
     def _apply_invert(self, notes):
-        """Melodic-inversion stage: mirror every pitch around the pivot."""
+        """Melodic-inversion stage: mirror every pitch around the pivot. Auto
+        mode pivots on the pattern's FIRST note (the inverted phrase keeps its
+        register); the resolved pitch is cached for the live echo path."""
         if not self.invert_enabled:
             return
-        pivot = self.invert_pivot
+        if self.invert_pivot_auto:
+            first = self._first_note_pitch(notes)
+            if first is not None:
+                self.invert_pivot_live = first
+                pivot = first
+            else:
+                pivot = self.invert_pivot
+        else:
+            pivot = self.invert_pivot
         for qn in notes:
             if qn.get("rest") or qn.get("note") is None:
                 continue
@@ -413,7 +502,10 @@ class State:
         if self.echo_transpose and self.transpose_semitones:
             n = max(0, min(127, n + self.transpose_semitones))
         if self.echo_invert and self.invert_enabled:
-            n = max(0, min(127, 2 * self.invert_pivot - n))
+            pivot = self.invert_pivot_live \
+                if (self.invert_pivot_auto and self.invert_pivot_live is not None) \
+                else self.invert_pivot
+            n = max(0, min(127, 2 * pivot - n))
         if self.echo_snap and self.snap_enabled:
             n = self._snap_pitch(n)
         return n
@@ -1412,6 +1504,7 @@ class State:
             "snap_bias": self.snap_bias,
             "invert_enabled": self.invert_enabled,
             "invert_pivot": self.invert_pivot,
+            "invert_pivot_auto": self.invert_pivot_auto,
             "reverse_enabled": self.reverse_enabled,
             "echo_transpose": self.echo_transpose,
             "echo_snap": self.echo_snap,
@@ -1501,6 +1594,10 @@ class State:
                 self.invert_pivot = pv
         except (TypeError, ValueError):
             pass
+        auto = bool(settings.get("invert_pivot_auto", False))
+        self.invert_pivot_auto = auto
+        if not auto:
+            self.invert_pivot_live = None
         self.reverse_enabled = bool(settings.get("reverse_enabled", False))
         self.echo_transpose = bool(settings.get("echo_transpose", False))
         self.echo_snap = bool(settings.get("echo_snap", False))
@@ -1635,7 +1732,13 @@ class State:
                 "snap_enabled": self.snap_enabled,
                 "snap_bias": self.snap_bias,
                 "invert_enabled": self.invert_enabled,
+                "invert_pivot_auto": self.invert_pivot_auto,
                 "invert_pivot": self.invert_pivot,
+                # Ver 94: the pivot actually in force — the auto-resolved one
+                # (first note of the take) when auto is on, else the manual one.
+                "invert_pivot_effective": self.invert_pivot_live
+                    if (self.invert_pivot_auto and self.invert_pivot_live is not None)
+                    else self.invert_pivot,
                 "reverse_enabled": self.reverse_enabled,
                 "echo_transpose": self.echo_transpose,
                 "echo_snap": self.echo_snap,

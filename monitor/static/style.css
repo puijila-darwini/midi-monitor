@@ -6,6 +6,9 @@
   --phthalo-border: #2A4F44;
   --straw: #F2E6A6;
   --straw-soft: #E8D9A0;
+  /* Quaternary red (Ver 94): snap-liable keys + danger actions. */
+  --quat-red: #E06C5D;
+  --quat-red-deep: #B0443A;
   --straw-gold: #D4C47A;
   --royal: #6B3FA0;
   --royal-bright: #8A5BC7;
@@ -918,6 +921,8 @@ select option {
 .humanizer-enable input,
 .op-toggle input,
 .op-echo input { accent-color: var(--royal); }
+.op-auto input { accent-color: var(--straw); }
+.op-pivot select:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .feed-list {
   list-style: none;
@@ -1078,6 +1083,111 @@ select option {
 }
 .key.outscale.white .ivl-label { color: #6e837b; }
 .key.outscale.black .ivl-label { color: #5d746b; }
+
+/* ---- Ver 94: live-transform visual language ----
+   echo-invert (live-stream invert on): the piano reads as the inversion —
+   cream <-> dark green key bodies, the in-scale green shading becomes purple
+   and the pressed purple becomes green. The tonic keeps its straw crown. */
+#piano.echo-invert .key.white {
+  background: linear-gradient(180deg, #1C2E26, #071310);
+  border: 1px solid #000;
+}
+#piano.echo-invert .key.black {
+  background: linear-gradient(180deg, #ffffff, #EFE7C8);
+  border: 1px solid #B7A87E;
+  z-index: 3;
+}
+#piano.echo-invert .key.inscale.white {
+  background: linear-gradient(180deg, var(--royal-soft), var(--royal));
+}
+#piano.echo-invert .key.inscale.black {
+  background: linear-gradient(180deg, var(--royal-bright), var(--royal));
+}
+#piano.echo-invert .key.tonic.white,
+#piano.echo-invert .key.tonic.black {
+  background: linear-gradient(180deg, #F2E6A6, #D4C47A);
+}
+#piano.echo-invert .key.white.active {
+  background: linear-gradient(180deg, #b7d4c2, #7fa88f);
+  box-shadow: inset 0 0 10px rgba(183, 212, 194, 0.5);
+}
+#piano.echo-invert .key.black.active {
+  background: linear-gradient(180deg, #4f7a68, #2c4a3c);
+  box-shadow: inset 0 0 8px rgba(79, 122, 104, 0.85);
+}
+#piano.echo-invert .key.inscale.white.active {
+  background: linear-gradient(180deg, #b7d4c2 0%, #b7d4c2 72%,
+              var(--royal-soft) 96%, var(--royal) 100%);
+}
+#piano.echo-invert .key.inscale.black.active {
+  background: linear-gradient(180deg, #4f7a68 0%, #4f7a68 72%,
+              var(--royal) 94%, var(--royal-bright) 100%);
+}
+#piano.echo-invert .key.tonic.white.active {
+  background: linear-gradient(180deg, #b7d4c2 0%, #b7d4c2 72%,
+              #E8D9A0 94%, #D4C47A 100%);
+}
+#piano.echo-invert .key.tonic.black.active {
+  background: linear-gradient(180deg, #4f7a68 0%, #4f7a68 72%,
+              #E8D9A0 90%, #9a8748 100%);
+}
+#piano.echo-invert .key.white .ivl-label { color: var(--straw); }
+#piano.echo-invert .key.black .ivl-label { color: #123c2c; }
+#piano.echo-invert .key.white .oct-label { color: var(--straw); }
+
+/* snap-armed (scale-snap on): every key LIABLE to be snapped (out-of-scale)
+   carries the quaternary red marker — a top strip + a red-tinted interval
+   label — so you can see what the snap would move before you play it. */
+#piano.snap-armed .key.outscale {
+  box-shadow: inset 0 3px 0 var(--quat-red);
+}
+/* The interval label on a snap-liable key yields to the played/sounded pair. */
+#piano.snap-armed .key.outscale .ivl-label { display: none; }
+/* Snap-liable readout: the landing (sounded) note ABOVE the struck-through
+   played name — e.g. C above Db with Db struck. */
+#piano.snap-armed .key .snap-lab {
+  position: absolute;
+  bottom: 2px; left: 0; right: 0;
+  display: flex; flex-direction: column;
+  text-align: center;
+  font-size: 9px; font-weight: 700;
+  line-height: 1.25;
+  pointer-events: none; user-select: none;
+  z-index: 4;
+}
+#piano.snap-armed .key .snap-to { color: var(--quat-red); }
+#piano.snap-armed .key.outscale.white .snap-from { color: #6e837b; text-decoration: line-through; }
+#piano.snap-armed .key.outscale.black .snap-from { color: #5d746b; text-decoration: line-through; }
+
+/* ---- Ver 94: ghost + pivot readouts ----
+   Ghost: where a held key will actually SOUND through the echo chain
+   (transpose/invert/snap). A hollow straw ring over the resting body, plus a
+   small straw pennant; the physical key stays solid. Works in both the normal
+   and echo-inverted worlds (straw reads on cream and dark bodies alike). */
+#piano .key.ghost {
+  box-shadow: inset 0 0 0 2px rgba(242, 230, 166, 0.9), inset 0 0 12px rgba(242, 230, 166, 0.28);
+}
+#piano .key.ghost::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 50%;
+  margin-left: -4px;
+  width: 0;
+  height: 0;
+  border: 4px solid transparent;
+  border-top: 5px solid var(--straw);
+  pointer-events: none;
+}
+/* Pivot: the inversion axis (echoed notes reflect around this key). Dashed
+   straw frame so it reads over any fill (tonic crown, in-scale, pressed). */
+#piano .key.pivot {
+  outline: 2px dashed rgba(242, 230, 166, 0.9);
+  outline-offset: -4px;
+  box-shadow: inset 0 0 0 1px rgba(242, 230, 166, 0.55);
+}
+#piano .key.pivot .oct-label,
+#piano .key.pivot .ivl-label { color: var(--straw); }
 
 /* ---- flash ---- */
 #flash {

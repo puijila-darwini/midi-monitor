@@ -339,7 +339,7 @@
               <div class="op-head"><span class="op-title">invert</span></div>
               <div class="op-body">
                 <label class="op-toggle"><input type="checkbox" id="invert-enabled"
-                       title="Mirror each pitch around the pivot note (melodic inversion — a rising phrase falls, the contour flips about the pivot). Pivot defaults to C4."><span>on</span></label>
+                       title="Mirror each pitch around the pivot note (melodic inversion — a rising phrase falls, the contour flips about the pivot). Pivot defaults to the key tonic at octave 3, or auto = the pattern's first note."><span>on</span></label>
                 <label class="op-pivot"><span>pivot</span>
                   <select id="invert-pivot-note" data-custom="0"
                           title="Pivot note name — defaults to the key tonic (tonic&amp;middot;scale card) at octave 3 until you pick one yourself">
@@ -369,6 +369,8 @@
                     <option value="8">8</option>
                   </select>
                 </label>
+                <label class="op-auto"><input type="checkbox" id="invert-auto"
+                       title="Pivot = the pattern's FIRST note (its earliest attack), so the inverted phrase stays in the same register. The note+octave pickers are ignored while this is on and key-following pauses."><span>auto</span></label>
                 <label class="op-echo"><input type="checkbox" id="invert-echo"
                        title="Also invert LIVE echoed keybed notes"><span>echo</span></label>
               </div>

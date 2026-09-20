@@ -135,10 +135,12 @@ def _run_capture(cap):
                 # controls that only bind to received notes (program, sustain,
                 # CC, pitch) apply to live playing. With local on this layers
                 # against the panel voice; local off leaves the echo alone.
-                # Ver 92: the live-capable transform ops (transpose/snap/
-                # invert opt-ins) run here too — echo_transform is a pure
-                # per-note map, so note_off mirrors exactly.
-                note_on(state.echo_transform(event["note"]), event["velocity"],
+                # Ver 94: the press-time mapping is FROZEN (echo_hold) — a
+                # mid-hold transform change can no longer make note_off
+                # release a different pitch (stuck-note jank). Refcounted per
+                # mapped pitch so snap-collapsed keys each hold the tone.
+                mapped = state.echo_hold(event["note"], event.get("channel", 0))
+                note_on(mapped, event["velocity"],
                         channel=event.get("channel", 0))
             analyser.on_note(t, event["note"])
             hub.publish({"type": "note", "note": event["note"],
@@ -161,9 +163,12 @@ def _run_capture(cap):
                 hub.publish({"type": "key", **kann, "time": t})
         elif etype == "note_off":
             state.handle(event)
-            if state.echo_enabled:
-                note_off(state.echo_transform(event["note"]),
-                         channel=event.get("channel", 0))
+            # Release the pitch mapped at PRESS time (echo_hold); None while
+            # another raw key still holds the same mapped tone (refcount) —
+            # also None when the press was never echoed at all.
+            released = state.echo_release(event["note"])
+            if released:
+                note_off(released["mapped"], channel=released["channel"])
             hub.publish({"type": "noteoff", "note": event["note"],
                          "name": _note_name(event["note"]),
                          "time": t, "held": sorted(state.held)})
@@ -445,13 +450,16 @@ def api_transform():
     if op == "invert":
         if "enabled" in body:
             state.set_invert(enabled=bool(body.get("enabled")))
+        if "auto" in body:
+            state.set_invert(auto=bool(body.get("auto")))
         if "pivot" in body:
             try:
                 state.set_invert(pivot=int(body.get("pivot")))
             except (TypeError, ValueError):
                 return jsonify({"ok": False, "error": "pivot must be 0-127"}), 400
         return jsonify({"ok": True, "op": "invert", "enabled": state.invert_enabled,
-                        "pivot": state.invert_pivot})
+                        "pivot": state.invert_pivot,
+                        "auto": state.invert_pivot_auto})
     if op == "reverse":
         state.set_reverse(enabled=bool(body.get("enabled")))
         return jsonify({"ok": True, "op": "reverse", "enabled": state.reverse_enabled})
@@ -577,6 +585,12 @@ def api_echo():
     body = request.get_json(silent=True) or {}
     enabled = bool(body.get("enabled", True))
     voice_name = body.get("voice", "auto")
+    if not enabled:
+        # Ring off every echoed note still sounding (pressed while echo was
+        # live) — otherwise flipping echo off mid-hold strands the board's
+        # RX voice until a panic.
+        for rel in state.echo_release_all():
+            note_off(rel["mapped"], channel=rel["channel"])
     state.echo_enabled = enabled
     state.echo_voice = voice_name
     device = True

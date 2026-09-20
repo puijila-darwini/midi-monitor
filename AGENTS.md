@@ -70,6 +70,19 @@ folded into a single web app package in `monitor/`:
   note_off mirrors exactly); quantize/velocity/humanize/reverse are buffer
   ops and cannot. /api/transform + /api/scale are the setters (requantize on
   change); both /api/state and settings_snapshot carry the new fields.
+  Ver 94: echo is STABLE under mid-hold changes — the press-time mapping is
+  frozen (state.echo_hold/release/release_all, per-mapped-note refcount for
+  snap-collapsed keys); the invert pivot can be AUTO (the take's first note,
+  state.invert_pivot_auto + invert_pivot_live; /api/state transform also
+  emits invert_pivot_effective, the pivot actually in force). The piano
+  visual language lives only in the echo world (keys routing layer/echo AND
+  invert+echo-checked): bodies/scale/pressed colours invert, the pivot key
+  wears a dashed straw frame, and each held key's echoed target lights as a
+  hollow ghost (app.js echoMap mirrors state.echo_transform exactly, JS
+  snapPitchAbs mirrors _snap_pitch — cross-validated 450/450). Snap-armed
+  red-strips out-of-scale keys and shows the landing note above the
+  struck-through played name. TONAL FIX: _snap_pitch builds pcs as
+  (s + tonic) % 12 (subtraction was wrong for every non-zero tonic).
 - `monitor/app.py`      - Flask on :5050. Routes: `/`, `/events` (SSE),
                           `/api/state`. Background capture thread -> hub pub/sub.
                           Replay entry points (/api/replay, /api/replay/loop,

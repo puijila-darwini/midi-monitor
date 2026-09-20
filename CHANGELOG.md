@@ -1439,3 +1439,46 @@ that file lean. History is chronological; most lines start with a version tag.
   (octave+1)*12 + pc); keysec current() + resolveCatch call syncPivotFromKey.
   Verified: /api/transform stores A3 = 57, resets to 48; node --check +
   py_compile clean; server restarted for the default change.
+
+- Ver 94: live-echo stability + invert/ghost visual language (echo on gates
+  the inverted piano; pivot marker; ghost targets; snap landing readouts).
+  ECHO STABILITY: the press-time mapping is FROZEN — state.echo_hold records
+  the mapped note for a keyed note_on and echo_release rings off using that
+  captured mapping, so mid-hold transform changes can no longer strand keys.
+  Snap-collapsed keys (two raw notes mapping to the same tone, e.g. raw
+  59+60 both -> 60) hold the tone via a per-mapped-note refcount
+  (echo_holders) and only ring off when the LAST holder releases; /api/echo
+  disable rings down every held echo note.
+  AUTO PIVOT: the invert pivot can resolve to the take's FIRST note (earliest
+  attack): state.invert_pivot_auto + invert_pivot_live cached on each
+  requantize; the frontend "auto" checkbox disables the note+octave pickers
+  and pauses key-following (syncPivotFromKey guard). refreshState + pattern
+  settings carry invert_pivot_auto; /api/state transform dict now ALSO emits
+  invert_pivot_auto + invert_pivot_effective (the pivot actually in force) —
+  fixes the reload-restore bug (auto checkbox was showing unchecked) and
+  powers the pivot marker.
+  KEY VISUALS on the piano: the inverted look only activates when the keys
+  routing is echo-on (layer/echo) AND invert + its echo opt-in are set —
+  otherwise the piano reads normal (user request). #piano.echo-invert swaps
+  cream<->dark-green key bodies and in-scale green<->pressed purple (tonic
+  keeps its straw crown). Snap-armed marks every out-of-scale key with the
+  quaternary red top strip, and each SNAP-LIABLE key now shows the landing
+  note ABOVE the struck-through played name (e.g. C above a struck Db) — the
+  JS snapPitchAbs mirrors state._snap_pitch exactly so the readout is
+  truthful. GHOST SYSTEM: echoMap() mirrors state.echo_transform
+  (transpose -> invert -> snap, per-note, clamped) so the frontend knows the
+  note the board will sound for each held key without asking the server —
+  the physical key stays solid and the echoed target lights as a hollow
+  straw-ring ghost (refreshed on any live-setting change, echoed held keys
+  re-derived from the held set). The pivot key gets a dashed straw frame
+  while the inverted world is live.
+  TONAL BUG FIX: state._snap_pitch built its scale pitch-class set as
+  (s - tonic) % 12 instead of (s + tonic) % 12 — every non-zero key tonic
+  snapped onto a DIFFERENT scale than the one the piano shades. Fixed;
+  cross-validated: 450-case JS/Py grid (5 scales x 3 tonics x 3 biases x 10
+  notes) now matches 100% (was 222/450 off on tonics 3/9).
+  Verified: unit tests (auto pivot A3 take -> 57, echo_transform(60)==54,
+  auto off clears live; press-time release preserves channels; real collapse
+  pairs 59/60 -> 60; echo_release_all; snapshot carries invert_pivot_auto);
+  API round-trip (auto true/false + effective pivot); node --check +
+  py_compile clean; server restarted.

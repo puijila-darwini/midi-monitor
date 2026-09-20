@@ -430,6 +430,8 @@ function buildCatchTooltip() {
     postTransformOp({ op: "invert", pivot: (s.oc + 1) * 12 + s.pc });
   }
   function syncPivotFromKey() {
+    var autoSel = document.getElementById("invert-auto");
+    if (autoSel && autoSel.checked) return;  // auto pivot ignores the key tone
     var ton = document.getElementById("key-tonic");
     var s = pivotSelectors();
     if (!ton || !s || s.note.dataset.custom === "1") return;
@@ -438,6 +440,37 @@ function buildCatchTooltip() {
     if (s.note.value === String(t)) return;
     s.note.value = String(t);
     pushPivot();
+  }
+
+  // Ver 94: live-transform visual language on the piano. When live-stream
+  // invert is on — and only then — the colours INVERT (cream <-> dark green
+  // key bodies; the in-scale green shading becomes purple, the pressed purple
+  // becomes green). The coloured inversion only makes sense in the echo world,
+  // so it needs the keys routing on echo (layer/echo) AND the invert + its
+  // echo opt-in checked; otherwise the piano reads normal. When snap is on,
+  // every key LIABLE to be snapped (out-of-scale) carries the quaternary red
+  // marker + its landing-note readout. Driven from the controls directly, so
+  // the class flips the instant you toggle; boot restores re-apply via
+  // refreshState / syncKeysMode.
+  function echoIsOn() {
+    var seg = document.getElementById("ctrl-keys-mode");
+    if (!seg) return false;
+    var b = seg.querySelector("button.active");
+    var m = b ? b.getAttribute("data-mode") : "keys";
+    return m === "layer" || m === "echo";
+  }
+  function applyLiveColorClasses() {
+    var p = document.getElementById("piano");
+    if (!p) return;
+    var invEn = document.getElementById("invert-enabled");
+    var invEc = document.getElementById("invert-echo");
+    var snEn = document.getElementById("snap-enabled");
+    var inv = echoIsOn() && !!(invEn && invEn.checked) && !!(invEc && invEc.checked);
+    p.classList.toggle("echo-invert", inv);
+    p.classList.toggle("snap-armed", !!(snEn && snEn.checked));
+    applySnapLabels();
+    refreshGhosts();      // echo targets shift with the live settings
+    applyPivotMarker();   // pivot marker tracks the inverted world
   }
 
   // Fallback path: no chord flash arrived, so resolve from whatever notes were
@@ -516,6 +549,8 @@ function buildCatchTooltip() {
       k.classList.remove("inscale", "tonic", "outscale");
       var lab = k.querySelector(".ivl-label");
       if (lab) lab.parentNode.removeChild(lab);
+      var sn = k.querySelector(".snap-lab");
+      if (sn) sn.parentNode.removeChild(sn);
     }
   }
 
@@ -563,6 +598,194 @@ function buildCatchTooltip() {
         var parent = (((tonicPc + def.sig) % 12) + 12) % 12;
         StavePanel.setKey(PC_MAJOR[parent]);
       }
+    }
+    // Ver 94: while snap is armed, snap-liable keys show their landing note.
+    applySnapLabels();
+  }
+
+  // Ver 94: on snap-liable keys (out-of-scale, snap armed) show what the key
+  // will SOUND after snapping — the landing note name ABOVE the struck-through
+  // played name. Mirrors state._snap_pitch exactly (nearest tie-lower / up /
+  // down; candidates +-1 octave; clamped). Rebuilds on guide changes, snap /
+  // bias toggles and boot-sync.
+  function applySnapLabels() {
+    for (var m = LOW; m <= HIGH; m++) {
+      var k0 = keyEls[m];
+      if (!k0) continue;
+      var old = k0.querySelector(".snap-lab");
+      if (old) old.parentNode.removeChild(old);
+    }
+    var snEn = document.getElementById("snap-enabled");
+    if (!(snEn && snEn.checked)) return;
+    var ton = document.getElementById("key-tonic");
+    var sc = document.getElementById("key-scale");
+    var bias = document.getElementById("snap-bias");
+    var tonicPc = parseInt(ton ? ton.value : "-1", 10);
+    var def = SCALES[sc ? sc.value : ""];
+    if (isNaN(tonicPc) || tonicPc < 0 || !def) return;
+    var semisAbs = [];
+    def.semis.forEach(function (s) { semisAbs.push((s + tonicPc) % 12); });
+    semisAbs.sort(function (a, b) { return a - b; });
+    var mode = bias ? bias.value : "nearest";
+    for (var n = LOW; n <= HIGH; n++) {
+      var k = keyEls[n];
+      if (!k || !k.classList.contains("outscale")) continue;
+      var target = snapPitchAbs(n, semisAbs, mode);
+      if (target === n) continue;
+      var lab = document.createElement("span");
+      lab.className = "snap-lab";
+      var to = document.createElement("span");
+      to.className = "snap-to";
+      to.textContent = PC_MAJOR[target % 12] + octLabel(target).slice(1);
+      var from = document.createElement("span");
+      from.className = "snap-from";
+      from.textContent = PC_MAJOR[n % 12] + octLabel(n).slice(1);
+      lab.appendChild(to);
+      lab.appendChild(from);
+      k.appendChild(lab);
+    }
+  }
+  function snapPitchAbs(note, semisAbs, bias) {
+    var base = note - (note % 12);
+    var cands = [];
+    semisAbs.forEach(function (pc) { cands.push(base + pc - 12, base + pc, base + pc + 12); });
+    var best;
+    if (bias === "up") {
+      var ups = cands.filter(function (c) { return c >= note; });
+      best = ups.length ? Math.min.apply(null, ups) : base + semisAbs[0] + 12;
+    } else if (bias === "down") {
+      var downs = cands.filter(function (c) { return c <= note; });
+      best = downs.length ? Math.max.apply(null, downs) : base + semisAbs[semisAbs.length - 1] - 12;
+    } else {
+      var sorted = cands.slice().sort(function (a, b) {
+        var da = Math.abs(a - note), db = Math.abs(b - note);
+        return da === db ? a - b : da - db;
+      });
+      best = sorted[0];
+    }
+    return Math.max(0, Math.min(127, best));
+  }
+
+  // ---- Ver 94: ghost + pivot readouts for the echo world ----
+  // echoMap mirrors state.echo_transform EXACTLY (transpose -> invert -> snap,
+  // deterministic per note, clamped), so the frontend can predict the note the
+  // board will SOUND for a held key without asking the server. The physical
+  // key stays solid; the transformed target lights as a hollow "ghost".
+  function echoSettings() {
+    var ec = { transpose: false, invert: false, snap: false };
+    var t = document.getElementById("transpose-echo");
+    if (t) ec.transpose = t.checked;
+    var i = document.getElementById("invert-echo");
+    if (i) ec.invert = i.checked;
+    var s = document.getElementById("snap-echo");
+    if (s) ec.snap = s.checked;
+    return ec;
+  }
+  function transformFlags() {
+    var fl = { invert: false, snap: false };
+    var i = document.getElementById("invert-enabled");
+    if (i) fl.invert = i.checked;
+    var s = document.getElementById("snap-enabled");
+    if (s) fl.snap = s.checked;
+    return fl;
+  }
+  function manualPivot() {
+    var pn = document.getElementById("invert-pivot-note");
+    var po = document.getElementById("invert-pivot-oct");
+    if (pn && po) {
+      var n = parseInt(pn.value, 10), o = parseInt(po.value, 10);
+      if (!isNaN(n) && !isNaN(o)) return (o + 1) * 12 + n;
+    }
+    return 48;
+  }
+  var _pivotEffective = 48;  // the pivot actually in force (auto or manual)
+  function echoMap(note) {
+    if (!echoIsOn()) return note;
+    var ec = echoSettings(), fl = transformFlags();
+    var n = note;
+    if (ec.transpose) {
+      var ti = document.getElementById("transpose-input");
+      var st = ti ? parseInt(ti.value, 10) : 0;
+      if (isNaN(st)) st = 0;
+      n += st;
+    }
+    if (ec.invert && fl.invert) n = 2 * _pivotEffective - n;
+    if (ec.snap && fl.snap) {
+      var ton = document.getElementById("key-tonic");
+      var sc = document.getElementById("key-scale");
+      var bias = document.getElementById("snap-bias");
+      var tp = parseInt(ton ? ton.value : "-1", 10);
+      var def = SCALES[sc ? sc.value : ""];
+      if (!isNaN(tp) && tp >= 0 && def) {
+        var semisAbs = [];
+        def.semis.forEach(function (s2) { semisAbs.push((s2 + tp) % 12); });
+        semisAbs.sort(function (a, b) { return a - b; });
+        n = snapPitchAbs(n, semisAbs, bias ? bias.value : "nearest");
+      }
+    }
+    return Math.max(0, Math.min(127, n));
+  }
+  function ghostFor(raw) {
+    if (!echoIsOn()) return;
+    var m = echoMap(raw);
+    if (m === raw) return;
+    var g = keyEls[m];
+    if (g) g.classList.add("ghost");
+  }
+  function unghost(raw) {
+    if (!echoIsOn()) return;
+    var m = echoMap(raw);
+    if (m === raw) return;
+    var g = keyEls[m];
+    if (g) g.classList.remove("ghost");
+  }
+  function clearGhosts() {
+    for (var n = LOW; n <= HIGH; n++) {
+      var k = keyEls[n];
+      if (k) k.classList.remove("ghost");
+    }
+  }
+  function refreshGhosts() {
+    clearGhosts();
+    held.forEach(function (n) { ghostFor(n); });
+  }
+  function markPivotKey(p) {
+    var k = keyEls[p];
+    if (k) k.classList.add("pivot");
+  }
+  function clearPivotMarker() {
+    for (var n = LOW; n <= HIGH; n++) {
+      var k = keyEls[n];
+      if (k) k.classList.remove("pivot");
+    }
+  }
+  // The pivot marker lives in the inverted world (echo on + invert + its echo
+  // opt-in). Auto mode resolves the pivot server-side (the take's first note),
+  // so the marker refreshes from /api/state to track requantized takes live.
+  function applyPivotMarker() {
+    var invEn = document.getElementById("invert-enabled");
+    var invEc = document.getElementById("invert-echo");
+    if (!(echoIsOn() && invEn && invEn.checked && invEc && invEc.checked)) {
+      clearPivotMarker();
+      return;
+    }
+    var auto = document.getElementById("invert-auto");
+    if (auto && auto.checked) {
+      fetch("/api/state", { headers: { "Accept": "application/json" } })
+        .then(function (r) { return r.json(); })
+        .then(function (s) {
+          var t = s && s.transform;
+          if (t && typeof t.invert_pivot_effective === "number") {
+            _pivotEffective = t.invert_pivot_effective;
+            clearPivotMarker();
+            markPivotKey(_pivotEffective);
+          }
+        })
+        .catch(function () {});
+    } else {
+      _pivotEffective = manualPivot();
+      clearPivotMarker();
+      markPivotKey(_pivotEffective);
     }
   }
 
@@ -677,6 +900,7 @@ function buildCatchTooltip() {
       case "note":
         activate(ev.note);
         held.add(ev.note);
+        ghostFor(ev.note);  // Ver 94: echo target as a hollow ghost key
         if (window.motion) window.motion.note();
         addFeed('<span class="time">' + fmtTime(ev.time) +
           '</span>  <span class="nmark">' + ev.name + "</span>  on (v" +
@@ -699,6 +923,7 @@ function buildCatchTooltip() {
       case "noteoff":
         deactivate(ev.note);
         held.delete(ev.note);
+        unghost(ev.note);
         addFeed('<span class="time">' + fmtTime(ev.time) +
           '</span>  <span class="nmark">' + ev.name + "</span>  off", "off");
         break;
@@ -854,7 +1079,7 @@ case "replay":
 
   // render held keys from initial snapshot
   function seedHeld(notes) {
-    notes.forEach(function (n) { activate(n); held.add(n); });
+    notes.forEach(function (n) { activate(n); held.add(n); ghostFor(n); });
   }
 
   var _statusDevice = null;
@@ -1466,6 +1691,8 @@ case "replay":
         applyScaleGuide(tonicSel.value, scaleSel.value);
         pushScaleContext();
         syncPivotFromKey();
+        refreshGhosts();    // echo snap resolves onto this scale context
+        applyPivotMarker();
       }
       tonicSel.addEventListener("change", current);
       scaleSel.addEventListener("change", current);
@@ -1519,6 +1746,7 @@ case "replay":
         .then(function (res) {
           if (res && typeof res.semitones === "number") transposeSt = res.semitones;
           renderNotationFromBuffer();
+          refreshGhosts();  // echo transpose shifts the live targets
         })
         .catch(function () { /* ignore transient */ });
     }
@@ -1576,6 +1804,7 @@ case "replay":
         var body = { op: op };
         body[key] = el.checked;
         postTransform(body);
+        applyLiveColorClasses();
       });
     }
     function onEchoToggle(id, which) {
@@ -1583,6 +1812,7 @@ case "replay":
       if (!el) return;
       el.addEventListener("change", function () {
         postTransform({ op: "echo", which: which, enabled: el.checked });
+        applyLiveColorClasses();
       });
     }
     // scale-snap: snap toggle + bias + echo opt-in
@@ -1592,6 +1822,8 @@ case "replay":
     if (biasSel) {
       biasSel.addEventListener("change", function () {
         postTransform({ op: "snap", bias: biasSel.value });
+        applySnapLabels();  // re-render the landing-note readouts
+        refreshGhosts();    // echo snap targets re-resolve
       });
     }
     // melodic inversion: on + pivot (note + octave selects; the note follows
@@ -1602,8 +1834,24 @@ case "replay":
     var pvOct = document.getElementById("invert-pivot-oct");
     if (pvNote && pvOct) {
       function markCustom() { pvNote.dataset.custom = "1"; }
-      pvNote.addEventListener("change", function () { markCustom(); pushPivot(); });
-      pvOct.addEventListener("change", function () { markCustom(); pushPivot(); });
+      pvNote.addEventListener("change", function () { markCustom(); pushPivot(); applyPivotMarker(); refreshGhosts(); });
+      pvOct.addEventListener("change", function () { markCustom(); pushPivot(); applyPivotMarker(); refreshGhosts(); });
+    }
+    // auto: pivot = the pattern's FIRST note (state._first_note_pitch). The
+    // pickers stand down while it is on (key-following pauses too — the
+    // syncPivotFromKey guard).
+    var autoCk = document.getElementById("invert-auto");
+    if (autoCk) {
+      function setPivotDisabled(on) {
+        if (pvNote) pvNote.disabled = !!on;
+        if (pvOct) pvOct.disabled = !!on;
+      }
+      autoCk.addEventListener("change", function () {
+        setPivotDisabled(autoCk.checked);
+        postTransform({ op: "invert", auto: autoCk.checked });
+        applyPivotMarker();  // marker switches manual <-> auto-resolved pivot
+        refreshGhosts();
+      });
     }
     // reverse: on
     onToggle("reverse-enabled", "reverse", "enabled");
@@ -2017,6 +2265,7 @@ case "replay":
                { action: "local", value: localOn ? 127 : 0 });
       sendEcho(!!KEYS_MODE_ECHO[mode]);
       flashCtrlStatus("keys: " + mode, false);
+      applyLiveColorClasses();  // echo routing gates the inverted piano look
     }
     if (keysSeg) {
       keysSeg.addEventListener("click", function (e) {
@@ -2028,6 +2277,7 @@ case "replay":
     window.syncKeysMode = function (localOn, echoOn) {
       var mode = echoOn ? (localOn ? "layer" : "echo") : (localOn ? "keys" : "midi");
       setKeysSeg(mode);
+      applyLiveColorClasses();
     };
     // Changing the OUT voice while echo is on re-applies it to the echo path.
     var rvSel = document.getElementById("replay-voice");
@@ -2442,6 +2692,18 @@ if (typeof s.time_signature === "string" && s.time_signature.indexOf("/") > 0) {
           // else was a deliberate pick and stops key-following until reset.
           pvNote.dataset.custom = tr.invert_pivot === 48 ? "0" : "1";
         }
+        var autoCk = document.getElementById("invert-auto");
+        if (autoCk && document.activeElement !== autoCk) {
+          autoCk.checked = !!tr.invert_pivot_auto;
+          if (pvNote) pvNote.disabled = autoCk.checked;
+          if (pvOct) pvOct.disabled = autoCk.checked;
+        }
+        // Ver 94: remember the pivot actually in force (auto-resolved or manual).
+        if (typeof tr.invert_pivot_effective === "number") {
+          _pivotEffective = tr.invert_pivot_effective;
+        }
+        // Ver 94: live-look classes (echo-invert colours / snap red marker).
+        applyLiveColorClasses();
         // Key context (scale-snap resolves onto the tonic·scale card).
         if (s.scale) {
           var tonSel = document.getElementById("key-tonic");
