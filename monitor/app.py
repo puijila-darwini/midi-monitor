@@ -169,6 +169,15 @@ def _run_capture(cap):
                          "channel": event["channel"],
                          "name": Capture.VOICE_BY_PROGRAM.get((event.get("bank", 0), event["program"]), "Unknown"),
                          "time": t})
+            # Echo follow: with the echo voice on "auto" the echo stream is
+            # meant to mirror the panel, but the RX voice is independent of the
+            # panel voice - a panel voice change leaves the echoed sound stuck
+            # on the old instrument until echo is re-toggled. Re-apply the
+            # panel's bank+program to the RX side so "auto" really follows.
+            if state.echo_enabled and state.echo_voice == "auto":
+                state.receive_bank = event.get("bank", 0)
+                state.receive_program = event["program"]
+                program_change(state.receive_bank, state.receive_program)
         elif etype == "control_change":
             # Watch CCs arriving FROM the keyboard (wheel, aux resets). Throttle
             # to ~4/s per controller so a wiggled wheel can't flood the feed.

@@ -1574,6 +1574,19 @@ case "replay":
     }
     var sfxBtn = document.getElementById("ctrl-sfx-defaults");
     if (sfxBtn) sfxBtn.addEventListener("click", resetSoundFx);
+    // TODO(dejank): Ver 83 motion patterns work but are janky in known ways.
+    //   1. Ramps are approximated by a client-side 25ms setInterval ticking:
+    //      steps bunch/stall under browser tab throttling and drift from the
+    //      true timeline, so sweeps can feel rubbery.
+    //   2. One HTTP POST per step (~50+ requests per note) is chatty and can
+    //      queue behind /api/ctrl; bursts can lag the ramps.
+    //   3. The 120ms chord debounce means fast repeated single notes can lose
+    //      a restart (swallowed retriggers).
+    //   4. Slider mirroring forces widget values; a real control surface would
+    //      edit state server-side (like received_ctrl) and render from it.
+    //   Proper fix: push pattern scheduling server-side (motion ramp player in
+    //   app.py, steps batched into one raw amidi send per tick, timing exact,
+    //   survives tab sleep and SSE reconnect).
     // Motion patterns: scripted CC / pitch-bend ramps mirroring the board's
     // Motion Effect families (A filter / B pitch / C modulation), armed and
     // note-triggered the way the real [MOTION EFFECT] button behaves: click a

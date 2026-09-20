@@ -1287,3 +1287,21 @@ that file lean. History is chronological; most lines start with a version tag.
   no more muffled follow-up notes. Click the lit button again to disarm;
   defaults + panic also disarm. Verified: app.js syntax clean, served
   tooltip explains arming. Committed agent:, pushed.
+
+- Ver 84: echo auto-follow + dejank TODO. BUG (user): changing the instrument
+  was not reaching the echo stream unless the keys routing was toggled out of
+  and back into echo/layer. The echo voice on "auto" was meant to mirror the
+  panel, but the RX voice is independent of the panel voice, so a panel
+  program change left the echoed sound on the old instrument. Fix in the
+  capture event loop: when a program_change arrives from the board while
+  state.echo_enabled and echo_voice=="auto", re-apply the panel's bank+program
+  to the RX side via program_change() (same raw path /api/echo uses), and sync
+  state.receive_bank/program. Pinned echo voices still layer deliberately
+  (untouched). The dropdown -> echo path (rvSel change -> sendEcho(true)) was
+  already wired and still works for hand-picked voices. Also: TODO(dejank)
+  comment block above the MOTION module in app.js documenting the known jank
+  (25ms client tick approximation, one POST per step, 120ms chord debounce
+  swallowing retriggers, slider mirroring) with the proper server-side
+  scheduling fix sketched. Server restarted for the Python change (take
+  buffer reset). Verified: py_compile + node --check clean, :5050 root 200,
+  /api/state healthy. Committed agent:, pushed.
