@@ -1246,3 +1246,12 @@ that file lean. History is chronological; most lines start with a version tag.
   flagging "(board offline)" if any send dropped. Button lives in the sound &
   fx seg-label row, wired to resetSoundFx. Verified: page serves the button,
   app.js syntax clean. Committed agent:, pushed.
+
+- Ver 81: corrected sound & fx defaults to the instrument's real (GM/XG)
+  neutral values. Ver 79 had picked arbitrary ones - release 0 chopped the
+  piano tail early and reverb 40 left the effect carrying the sound. Now:
+  filter CC74 / resonance CC71 / attack CC73 / release CC72 all default to
+  64 (midpoint = no change to the voice), reverb CC91 / chorus CC93 default
+  to 0 (off); mod CC1 stays 0. The defaults button reads el.defaultValue so
+  it inherits the correction automatically. Verified live on :5050: all six
+  sliders serve value=64/64/64/64/0/0. Committed agent:, pushed.
