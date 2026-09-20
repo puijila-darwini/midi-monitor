@@ -1397,3 +1397,31 @@ that file lean. History is chronological; most lines start with a version tag.
   SSE status events don't wipe the detail. Tooltip on the status chip
   explains seq/raw + why they shift. Verified: device in /api/state, header
   renders the line, template tooltip present. Committed agent:, pushed.
+
+- Ver 92: four more transform-card slots — scale, invert, reverse + echo
+  stream application. The out·ctrl rack stretched the chain row, and the
+  transform card (previously 4 ops: quantize/transpose/velocity/humanize)
+  now holds seven modules in the ops grid:
+  - scale (op-scale, muted-green accent): "snap" forces every pitch onto the
+    tonic·scale card's selection, with bias = nearest / up / down (ties go
+    lower). SCALE_SEMIS in state.py mirrors the JS guide table exactly, so
+    the snap op and the key shading can never drift apart.
+  - invert (op-invert, royal-soft): melodic inversion n' = 2·pivot − n with a
+    pivot input (default 60 = C4).
+  - reverse (op-reverse, pale): plays the take tail-first — reversed order,
+    each note's on/off mirrored around the take span (durations kept).
+  - echo application: the LIVE-capable ops (transpose/snap/invert) each get a
+    tiny "echo" checkbox opt-in that also runs them on the live echo stream
+    (state.echo_transform = pure per-note map, so note_off mirrors exactly;
+    quantize/velocity/humanize/reverse are buffer ops and can't). Echo path
+    in app.py now sends state.echo_transform(note) on both on/off.
+  Chain order in requantize: ... articulation -> invert -> snap -> reverse ->
+  expand -> humanizer. New /api/transform (op snap|invert|reverse|echo) and
+  /api/scale setters (requantize on change); /api/state + settings_snapshot
+  carry the new fields so patterns preserve them; pushScaleContext() keeps
+  the server's key context in lockstep with the tonic·scale card (manual
+  changes + catch resolution). Boot-sync restores all controls + the guide
+  shading on pattern loads. Verified: unit tests for snap bias (nearest/up/
+  down), invert echo map, transpose echo, and a full C4-E4-G4 take through
+  invert+reverse (G inverted to 53 plays first, durations exact). Committed
+  agent:, pushed. Dashboard work stays out of git per standing rule.

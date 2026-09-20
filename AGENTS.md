@@ -54,6 +54,17 @@ folded into a single web app package in `monitor/`:
 - `monitor/state.py`    - live held-notes + note/melody buffers + connectivity
 - `monitor/analysis.py` - progressive recognizer: chord flashes, arpeggio
                           detection (scalar add9no5 suppressed), dedupe
+- Transform card ops (RAW -> quantize -> transpose -> velocity ->
+  articulation -> invert -> scale-snap -> reverse -> OUT): the ops grid which
+  is also the whole point of the card. scale-snap maps pitches onto the
+  tonic·scale card's selection (SCALE_SEMIS in state.py mirrors the JS guide
+  table); invert reflects around a pivot (n' = 2·pivot − n); reverse replays
+  the take tail-first (mirrored timeline, durations kept). The LIVE-CAPABLE
+  ops (transpose/snap/invert) each have an "echo" opt-in that applies them to
+  the live echo stream too (state.echo_transform, a pure per-note map so
+  note_off mirrors exactly); quantize/velocity/humanize/reverse are buffer
+  ops and cannot. /api/transform + /api/scale are the setters (requantize on
+  change); both /api/state and settings_snapshot carry the new fields.
 - `monitor/app.py`      - Flask on :5050. Routes: `/`, `/events` (SSE),
                           `/api/state`. Background capture thread -> hub pub/sub.
                           Replay entry points (/api/replay, /api/replay/loop,

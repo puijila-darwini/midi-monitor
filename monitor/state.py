@@ -8,6 +8,42 @@ from .replay import VOICES as VOICES_BY_PROGRAM
 from . import chords
 
 
+# Scale pitch-class intervals (semitones above the tonic), keyed by the SAME
+# ids as the tonic·scale select in the template + the JS guide table
+# (static/app.js SCALES) — the scale-snap transform stage reuses this single
+# source so the guide shading and the snap op can never drift apart.
+SCALE_SEMIS = {
+    "major": [0, 2, 4, 5, 7, 9, 11],
+    "dorian": [0, 2, 3, 5, 7, 9, 10],
+    "phrygian": [0, 1, 3, 5, 7, 8, 10],
+    "lydian": [0, 2, 4, 6, 7, 9, 11],
+    "mixolydian": [0, 2, 4, 5, 7, 9, 10],
+    "aeolian": [0, 2, 3, 5, 7, 8, 10],
+    "locrian": [0, 1, 3, 5, 6, 8, 10],
+    "harmonic_minor": [0, 2, 3, 5, 7, 8, 11],
+    "melodic_minor": [0, 2, 3, 5, 7, 9, 11],
+    "harmonic_major": [0, 2, 4, 5, 7, 8, 11],
+    "double_harmonic": [0, 1, 4, 5, 7, 8, 11],
+    "phrygian_dominant": [0, 1, 4, 5, 7, 8, 10],
+    "lydian_dominant": [0, 2, 4, 6, 7, 9, 10],
+    "super_locrian": [0, 1, 3, 4, 6, 8, 10],
+    "major_pent": [0, 2, 4, 7, 9],
+    "minor_pent": [0, 3, 5, 7, 10],
+    "blues": [0, 3, 5, 6, 7, 10],
+    "hirajoshi": [0, 2, 3, 7, 8],
+    "bebop_major": [0, 2, 4, 5, 7, 8, 9, 11],
+    "bebop_dominant": [0, 2, 4, 5, 7, 9, 10, 11],
+    "bebop_dorian": [0, 2, 3, 4, 5, 7, 9, 10],
+    "whole_tone": [0, 2, 4, 6, 8, 10],
+    "diminished": [0, 2, 3, 5, 6, 8, 9, 11],
+    "chromatic": list(range(12)),
+    "enigmatic": [0, 1, 4, 6, 8, 10, 11],
+    "hungarian_minor": [0, 2, 3, 6, 7, 8, 11],
+    "neapolitan_major": [0, 1, 3, 5, 7, 9, 11],
+    "neapolitan_minor": [0, 1, 3, 5, 7, 8, 11],
+}
+
+
 class State:
     """Tracks the current picture of what is being played.
 
@@ -122,6 +158,32 @@ class State:
         # leave SILENT — a staccato gap). 0 = legato: each note ends exactly
         # when the next attacks (and may never outlast it).
         self.articulation_gap = 0.0
+        # Ver 92 transform stages: scale-snap, melodic invert, reverse. Applied
+        # AFTER transpose/velocity/articulation, in that order, so OUT + the
+        # notation hear the same take (requantize rebuilds on every change).
+        #   snap  - force every pitch onto the tonic·scale card selection
+        #           (bias = nearest scale tone / next up / next down).
+        #   invert- mirror each pitch around invert_pivot (melodic inversion:
+        #           rising phrases fall, contour flips about the pivot note).
+        #   reverse - play the take backwards: reversed order + each note's
+        #           on/off mirrored around the take's span (durations kept).
+        self.snap_enabled = False
+        self.snap_bias = "nearest"        # "nearest" | "up" | "down"
+        self.invert_enabled = False
+        self.invert_pivot = 60            # MIDI note to reflect around (C4)
+        self.reverse_enabled = False
+        # Echo-stream application (Ver 92): which of the above ALSO run LIVE on
+        # the echoed keybed notes (app.py note_on/note_off path). Only the
+        # per-note ops qualify — quantize/velocity/humanize are buffer ops and
+        # cannot (articulation/reverse have live ordering semantics too, so
+        # they are excluded). transpose is opted in separately.
+        self.echo_transpose = False
+        self.echo_snap = False
+        self.echo_invert = False
+        # Key context from the tonic·scale card (server copy so the scale
+        # stage + echo snap share it). tonic -1 = guide off; scale "" = none.
+        self.key_tonic = -1
+        self.key_scale = ""
         # Received-control watch (signals arriving FROM the keyboard: wheel ->
         # pitch bend + CC1, panel voice buttons -> bank/PC, aux 120/121/123).
         # {controller: last value 0-127}; pitch bend in semitones (+-24).
@@ -208,6 +270,150 @@ class State:
                 return
             self.articulation_gap = max(0.0, min(0.9, gap))
         self.requantize()
+
+    def set_scale_context(self, tonic=None, scale=None):
+        """Set the key context (tonic·scale card). tonic = pitch class 0-11,
+        -1 = off; scale = scale id ("" = off). Rebuilds if snap is live."""
+        if tonic is not None:
+            try:
+                tonic = int(tonic)
+            except (TypeError, ValueError):
+                return
+            self.key_tonic = max(-1, min(11, tonic))
+        if scale is not None:
+            self.key_scale = str(scale) if scale in SCALE_SEMIS else ""
+        self.requantize()
+
+    def set_snap(self, enabled=None, bias=None):
+        """Set the scale-snap stage. bias: "nearest" (default) | "up" | "down"."""
+        if enabled is not None:
+            self.snap_enabled = bool(enabled)
+        if bias in ("nearest", "up", "down"):
+            self.snap_bias = bias
+        self.requantize()
+
+    def set_invert(self, enabled=None, pivot=None):
+        """Set the melodic-inversion stage. pivot = MIDI note to reflect
+        around; the inversion is n' = 2*pivot - n."""
+        if enabled is not None:
+            self.invert_enabled = bool(enabled)
+        if pivot is not None:
+            try:
+                pivot = int(pivot)
+            except (TypeError, ValueError):
+                return
+            self.invert_pivot = max(0, min(127, pivot))
+        self.requantize()
+
+    def set_reverse(self, enabled=None):
+        """Set the reverse stage (take plays backwards)."""
+        if enabled is not None:
+            self.reverse_enabled = bool(enabled)
+        self.requantize()
+
+    def set_echo_transform(self, which=None, enabled=None):
+        """Opt a transform into the LIVE echo stream. which: "transpose" |
+        "snap" | "invert". Only per-note ops qualify (buffer ops cannot)."""
+        if which not in ("transpose", "snap", "invert") or enabled is None:
+            return
+        attr = {"transpose": "echo_transpose",
+                "snap": "echo_snap",
+                "invert": "echo_invert"}[which]
+        setattr(self, attr, bool(enabled))
+
+    def _snap_pitch(self, note):
+        """Snap a single pitch onto the tonic·scale selection's scale, per
+        snap_bias (nearest/up/down). Returns the note when no scale is set."""
+        semis = SCALE_SEMIS.get(self.key_scale)
+        if semis is None or self.key_tonic < 0:
+            return note
+        pcs = sorted((s - self.key_tonic) % 12 for s in semis)
+        base = note - (note % 12)
+        # Candidates around the note: same octave region +/- one octave.
+        cands = [base + pc - 12 for pc in pcs] + [base + pc for pc in pcs] \
+                + [base + pc + 12 for pc in pcs]
+        if self.snap_bias == "up":
+            best = min(c for c in cands if c >= note) if any(c >= note for c in cands) \
+                else base + pcs[0] + 12
+        elif self.snap_bias == "down":
+            best = max(c for c in cands if c <= note) if any(c <= note for c in cands) \
+                else base + pcs[-1] - 12
+        else:  # nearest (ties resolve to the lower scale tone)
+            best = min(cands, key=lambda c: (abs(c - note), c))
+        return max(0, min(127, best))
+
+    def _apply_scale_snap(self, notes):
+        """Scale-snap stage: force every quantized pitch onto the scale set in
+        the tonic·scale card (uses SCALE_SEMIS + key_tonic/key_scale)."""
+        if not self.snap_enabled:
+            return
+        for qn in notes:
+            if qn.get("rest") or qn.get("note") is None:
+                continue
+            try:
+                qn["note"] = self._snap_pitch(int(qn["note"]))
+            except (TypeError, ValueError):
+                continue
+
+    def _apply_invert(self, notes):
+        """Melodic-inversion stage: mirror every pitch around the pivot."""
+        if not self.invert_enabled:
+            return
+        pivot = self.invert_pivot
+        for qn in notes:
+            if qn.get("rest") or qn.get("note") is None:
+                continue
+            try:
+                n = int(qn["note"])
+            except (TypeError, ValueError):
+                continue
+            qn["note"] = max(0, min(127, 2 * pivot - n))
+
+    def _apply_reverse(self, notes):
+        """Reverse stage: play the take backwards. Order is reversed and every
+        note's on/off pair is mirrored around the take's span, so durations are
+        kept (the same phrase shape, played tail-first). Mirrored rests are
+        notation-only; remirroring them keeps the stave's silhouette coherent.
+        Returns the new list (does not mutate in place)."""
+        if not self.reverse_enabled or not notes:
+            return notes
+        span = 0.0
+        for qn in notes:
+            end = qn.get("off_time", qn.get("on_time", 0.0))
+            try:
+                span = max(span, float(end))
+            except (TypeError, ValueError):
+                continue
+        new = []
+        for qn in reversed(notes):
+            m = dict(qn)
+            try:
+                on = float(m["on_time"])
+                off = float(m["off_time"])
+            except (TypeError, ValueError, KeyError):
+                new.append(m)
+                continue
+            m["on_time"] = max(0.0, span - off)
+            m["off_time"] = max(0.0, span - on)
+            new.append(m)
+        return new
+
+    def echo_transform(self, note):
+        """Map a keyed note through the transforms that RUN LIVE on the echo
+        stream (transpose/snap/invert — quantize, velocity, humanize and
+        reverse are buffer ops). Deterministic per note, so note_off mirrors
+        exactly. Applied in the same order as the take chain."""
+        try:
+            n = int(note)
+        except (TypeError, ValueError):
+            return note
+        if self.echo_transpose and self.transpose_semitones:
+            n = max(0, min(127, n + self.transpose_semitones))
+        if self.echo_invert and self.invert_enabled:
+            n = max(0, min(127, 2 * self.invert_pivot - n))
+        if self.echo_snap and self.snap_enabled:
+            n = self._snap_pitch(n)
+        return n
 
     def _apply_articulation(self, notes):
         """Quantized-take post-pass: no monophonic line may ring into the next
@@ -638,6 +844,16 @@ class State:
         # Release articulation: clamp releases to their successor's attack and
         # apply the optional staccato gap (never any ring-over).
         self._apply_articulation(qns)
+        # Ver 92 stages (after articulation, before expansion): melodic
+        # inversion, then scale-snap (snap pulls the inverted line onto the
+        # scale), then reverse (mirrored timeline — pitch ops precede it since
+        # they are time-blind).
+        if self.invert_enabled:
+            self._apply_invert(qns)
+        if self.snap_enabled:
+            self._apply_scale_snap(qns)
+        if self.reverse_enabled:
+            qns = self._apply_reverse(qns)
         self.quantized_take = qns
         self.transformed_events = self._expand_midi(self.quantized_take)
         # Apply humanizer (if enabled) to the final output events
@@ -1189,6 +1405,16 @@ class State:
             "humanizer_timing_ms": self.humanizer_timing_ms,
             "humanizer_velocity": self.humanizer_velocity,
             "articulation_gap": self.articulation_gap,
+            "snap_enabled": self.snap_enabled,
+            "snap_bias": self.snap_bias,
+            "invert_enabled": self.invert_enabled,
+            "invert_pivot": self.invert_pivot,
+            "reverse_enabled": self.reverse_enabled,
+            "echo_transpose": self.echo_transpose,
+            "echo_snap": self.echo_snap,
+            "echo_invert": self.echo_invert,
+            "key_tonic": self.key_tonic,
+            "key_scale": self.key_scale,
             "tempo_bpm": self.tempo_bpm,
             "user_tempo_bpm": self.user_tempo_bpm,
             "time_signature": self.time_signature,
@@ -1260,6 +1486,32 @@ class State:
                 self.articulation_gap = ag
         except (TypeError, ValueError):
             pass
+
+        self.snap_enabled = bool(settings.get("snap_enabled", False))
+        bias = settings.get("snap_bias", "nearest")
+        if bias in ("nearest", "up", "down"):
+            self.snap_bias = bias
+        self.invert_enabled = bool(settings.get("invert_enabled", False))
+        try:
+            pv = int(settings.get("invert_pivot", 60))
+            if 0 <= pv <= 127:
+                self.invert_pivot = pv
+        except (TypeError, ValueError):
+            pass
+        self.reverse_enabled = bool(settings.get("reverse_enabled", False))
+        self.echo_transpose = bool(settings.get("echo_transpose", False))
+        self.echo_snap = bool(settings.get("echo_snap", False))
+        self.echo_invert = bool(settings.get("echo_invert", False))
+        try:
+            kt = int(settings.get("key_tonic", -1))
+            self.key_tonic = max(-1, min(11, kt))
+        except (TypeError, ValueError):
+            pass
+        ks = settings.get("key_scale", "")
+        if ks in SCALE_SEMIS:
+            self.key_scale = ks
+        else:
+            self.key_scale = ""
 
         try:
             u = float(settings.get("user_tempo_bpm", 0.0))
@@ -1376,6 +1628,17 @@ class State:
             "humanizer_timing_ms": self.humanizer_timing_ms,
             "humanizer_velocity": self.humanizer_velocity,
             "articulation_gap": self.articulation_gap,
+            "transform": {
+                "snap_enabled": self.snap_enabled,
+                "snap_bias": self.snap_bias,
+                "invert_enabled": self.invert_enabled,
+                "invert_pivot": self.invert_pivot,
+                "reverse_enabled": self.reverse_enabled,
+                "echo_transpose": self.echo_transpose,
+                "echo_snap": self.echo_snap,
+                "echo_invert": self.echo_invert,
+            },
+            "scale": {"tonic": self.key_tonic, "scale": self.key_scale},
             "received_ctrl": dict(self.received_ctrl),
             "received_pitch_bend": self.received_pitch_bend,
             "control_values": dict(self.control_values),

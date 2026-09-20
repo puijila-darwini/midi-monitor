@@ -135,7 +135,10 @@ def _run_capture(cap):
                 # controls that only bind to received notes (program, sustain,
                 # CC, pitch) apply to live playing. With local on this layers
                 # against the panel voice; local off leaves the echo alone.
-                note_on(event["note"], event["velocity"],
+                # Ver 92: the live-capable transform ops (transpose/snap/
+                # invert opt-ins) run here too — echo_transform is a pure
+                # per-note map, so note_off mirrors exactly.
+                note_on(state.echo_transform(event["note"]), event["velocity"],
                         channel=event.get("channel", 0))
             analyser.on_note(t, event["note"])
             hub.publish({"type": "note", "note": event["note"],
@@ -159,7 +162,8 @@ def _run_capture(cap):
         elif etype == "note_off":
             state.handle(event)
             if state.echo_enabled:
-                note_off(event["note"], channel=event.get("channel", 0))
+                note_off(state.echo_transform(event["note"]),
+                         channel=event.get("channel", 0))
             hub.publish({"type": "noteoff", "note": event["note"],
                          "name": _note_name(event["note"]),
                          "time": t, "held": sorted(state.held)})
@@ -415,6 +419,74 @@ def api_articulation():
         return jsonify({"ok": False, "error": "gap must be between 0 and 0.9"}), 400
     state.set_articulation(gap)
     return jsonify({"ok": True, "gap": state.articulation_gap})
+
+
+@app.route("/api/transform", methods=["POST"])
+def api_transform():
+    """Ver 92 transform-chain ops: scale-snap, melodic invert, reverse, and
+    the echo-stream opt-ins. Body: {"op": <op>, ...}.
+
+      {"op": "snap",    "enabled": bool}                or {"bias": "nearest|up|down"}
+      {"op": "invert",  "enabled": bool}                or {"pivot": 0-127}
+      {"op": "reverse", "enabled": bool}
+      {"op": "echo",    "which": "transpose|snap|invert", "enabled": bool}
+    Setters requantize() where the take is affected (the echo opt-ins only
+    switch the live echo path, so they skip the rebuild).
+    """
+    body = request.get_json(silent=True) or {}
+    op = body.get("op")
+    if op == "snap":
+        if "enabled" in body:
+            state.set_snap(enabled=bool(body.get("enabled")))
+        if body.get("bias") in ("nearest", "up", "down"):
+            state.set_snap(bias=body.get("bias"))
+        return jsonify({"ok": True, "op": "snap", "enabled": state.snap_enabled,
+                        "bias": state.snap_bias})
+    if op == "invert":
+        if "enabled" in body:
+            state.set_invert(enabled=bool(body.get("enabled")))
+        if "pivot" in body:
+            try:
+                state.set_invert(pivot=int(body.get("pivot")))
+            except (TypeError, ValueError):
+                return jsonify({"ok": False, "error": "pivot must be 0-127"}), 400
+        return jsonify({"ok": True, "op": "invert", "enabled": state.invert_enabled,
+                        "pivot": state.invert_pivot})
+    if op == "reverse":
+        state.set_reverse(enabled=bool(body.get("enabled")))
+        return jsonify({"ok": True, "op": "reverse", "enabled": state.reverse_enabled})
+    if op == "echo":
+        which = body.get("which")
+        if which not in ("transpose", "snap", "invert"):
+            return jsonify({"ok": False, "error": "which must be transpose|snap|invert"}), 400
+        state.set_echo_transform(which=which, enabled=bool(body.get("enabled")))
+        attr = {"transpose": "echo_transpose",
+                "snap": "echo_snap",
+                "invert": "echo_invert"}[which]
+        return jsonify({"ok": True, "op": "echo", "which": which,
+                        "enabled": getattr(state, attr)})
+    return jsonify({"ok": False, "error": "op must be snap|invert|reverse|echo"}), 400
+
+
+@app.route("/api/scale", methods=["POST"])
+def api_scale():
+    """Set the key context (tonic·scale card, server copy): the scale-snap
+    stage + echo snap resolve pitches onto this selection. Body:
+    {"tonic": -1..11, "scale": "<scale id>"}.
+    """
+    body = request.get_json(silent=True) or {}
+    if "tonic" in body:
+        try:
+            tonic = int(body.get("tonic"))
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "tonic must be -1..11"}), 400
+        if not (-1 <= tonic <= 11):
+            return jsonify({"ok": False, "error": "tonic must be -1..11"}), 400
+        state.set_scale_context(tonic=tonic)
+    if "scale" in body:
+        state.set_scale_context(scale=str(body.get("scale")))
+    return jsonify({"ok": True, "tonic": state.key_tonic,
+                    "scale": state.key_scale})
 
 
 @app.route("/api/ctrl", methods=["GET", "POST"])

@@ -381,6 +381,22 @@ function buildCatchTooltip() {
     var nm = (PC_MAJOR[rootPc] || "?");
     addFeed('<span class="time">' + fmtTime(catchLastAt) +
       '</span>  TONIC set to ' + nm + (scaleId ? " &middot; " + scaleId + " scale" : ""), "tonic");
+    pushScaleContext();
+  }
+
+  // Ver 92: keep the server's key context (scale-snap stage + echo snap) in
+  // lockstep with the tonic·scale card, so the transform ops resolve onto the
+  // same selection the guide shades. Also called on every manual selector
+  // change (keysec listener below).
+  function pushScaleContext() {
+    var ton = document.getElementById("key-tonic");
+    var sc = document.getElementById("key-scale");
+    if (!ton || !sc) return;
+    fetch("/api/scale", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tonic: parseInt(ton.value, 10), scale: sc.value })
+    }).catch(function () { /* ignore transient */ });
   }
 
   // Fallback path: no chord flash arrived, so resolve from whatever notes were
@@ -1407,6 +1423,7 @@ case "replay":
       // selectors always hold a valid value (-1 initially = guide off)
       function current() {
         applyScaleGuide(tonicSel.value, scaleSel.value);
+        pushScaleContext();
       }
       tonicSel.addEventListener("change", current);
       scaleSel.addEventListener("change", current);
@@ -1492,6 +1509,71 @@ case "replay":
     input.addEventListener("keydown", function (e) {
       if (e.key === "Enter") { input.blur(); apply(); }
     });
+  })();
+
+  // Ver 92 transform ops: scale-snap, melodic invert, reverse + the LIVE echo
+  // opt-ins. Every control posts /api/transform and re-renders the notation
+  // (the server requantizes — OUT, stave and roll all hear the same take).
+  (function () {
+    function postTransform(body) {
+      return fetch("/api/transform", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      }).then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (res && res.ok) renderNotationFromBuffer();
+          return res;
+        })
+        .catch(function () { /* ignore transient */ });
+    }
+    function onToggle(id, op, key) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener("change", function () {
+        var body = { op: op };
+        body[key] = el.checked;
+        postTransform(body);
+      });
+    }
+    function onEchoToggle(id, which) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener("change", function () {
+        postTransform({ op: "echo", which: which, enabled: el.checked });
+      });
+    }
+    // scale-snap: snap toggle + bias + echo opt-in
+    onToggle("snap-enabled", "snap", "enabled");
+    onEchoToggle("snap-echo", "snap");
+    var biasSel = document.getElementById("snap-bias");
+    if (biasSel) {
+      biasSel.addEventListener("change", function () {
+        postTransform({ op: "snap", bias: biasSel.value });
+      });
+    }
+    // melodic inversion: on + pivot (clamped 0-127) + echo opt-in
+    onToggle("invert-enabled", "invert", "enabled");
+    onEchoToggle("invert-echo", "invert");
+    var pivotInput = document.getElementById("invert-pivot");
+    if (pivotInput) {
+      function applyPivot() {
+        var raw = pivotInput.value.trim();
+        var pv = raw === "" ? 60 : parseInt(raw, 10);
+        if (isNaN(pv)) return;
+        pv = Math.max(0, Math.min(127, pv));
+        pivotInput.value = String(pv);
+        postTransform({ op: "invert", pivot: pv });
+      }
+      pivotInput.addEventListener("change", applyPivot);
+      pivotInput.addEventListener("keydown", function (e) {
+        if (e.key === "Enter") { pivotInput.blur(); applyPivot(); }
+      });
+    }
+    // reverse: on
+    onToggle("reverse-enabled", "reverse", "enabled");
+    // transpose echo opt-in
+    onEchoToggle("transpose-echo", "transpose");
   })();
 
   // Out control surface: send CCs / pitch to the keyboard (raw hw:2,0,0) and
@@ -2302,6 +2384,39 @@ if (typeof s.time_signature === "string" && s.time_signature.indexOf("/") > 0) {
           var art = document.getElementById("articulation-input");
           if (art && document.activeElement !== art) {
             art.value = String(Math.round(s.articulation_gap * 100));
+          }
+        }
+        // Ver 92: scale-snap / invert / reverse + the echo opt-ins (sync from
+        // backend; pattern loads restore them via the same settings snapshot).
+        var tr = s.transform || {};
+        chk("snap-enabled", tr.snap_enabled);
+        chk("snap-echo", tr.echo_snap);
+        chk("invert-enabled", tr.invert_enabled);
+        chk("invert-echo", tr.echo_invert);
+        chk("reverse-enabled", tr.reverse_enabled);
+        chk("transpose-echo", tr.echo_transpose);
+        var biasSel = document.getElementById("snap-bias");
+        if (biasSel && tr.snap_bias && document.activeElement !== biasSel) biasSel.value = tr.snap_bias;
+        var pvIn = document.getElementById("invert-pivot");
+        if (pvIn && typeof tr.invert_pivot === "number" && document.activeElement !== pvIn) {
+          pvIn.value = String(tr.invert_pivot);
+        }
+        // Key context (scale-snap resolves onto the tonic·scale card).
+        if (s.scale) {
+          var tonSel = document.getElementById("key-tonic");
+          var scSel = document.getElementById("key-scale");
+          var tonicChanged = false;
+          if (tonSel && typeof s.scale.tonic === "number" && document.activeElement !== tonSel) {
+            tonSel.value = String(s.scale.tonic);
+            tonicChanged = true;
+          }
+          if (scSel && document.activeElement !== scSel) {
+            scSel.value = s.scale.scale && scSel.querySelector('option[value="' + s.scale.scale + '"]')
+              ? s.scale.scale : "-1";
+            tonicChanged = true;
+          }
+          if (tonicChanged && typeof applyScaleGuide === "function" && tonSel && scSel) {
+            applyScaleGuide(tonSel.value, scSel.value);
           }
         }
         // Sync the OUT control surface (last values we sent) + the received

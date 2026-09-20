@@ -272,6 +272,8 @@
                   <input type="number" id="transpose-input" class="tempo-input" min="-24" max="24" step="1"
                          value="0" title="Transpose the transformed take by semitones (-24..+24, 0 = off)">
                 </label>
+                <label class="op-echo"><input type="checkbox" id="transpose-echo"
+                       title="Also apply the transpose LIVE to echoed keybed notes (the echo re-route; note_off mirrors automatically)"><span>echo</span></label>
               </div>
             </div>
 
@@ -313,6 +315,45 @@
                   <input type="number" id="humanizer-velocity" class="humanizer-input" min="0" max="20" step="1"
                          value="5" title="Max random velocity shift (&plusmn;)">
                 </label>
+              </div>
+            </div>
+
+            <div class="op op-scale">
+              <div class="op-head"><span class="op-title">scale</span></div>
+              <div class="op-body">
+                <label class="op-toggle"><input type="checkbox" id="snap-enabled"
+                       title="Snap every note onto the scale chosen in the tonic&amp;middot;scale card (the guide shading shows the tones). Bias decides how an off-scale note resolves."><span>snap</span></label>
+                <label class="op-select"><span>bias</span>
+                  <select id="snap-bias" title="How an off-scale note resolves: nearest scale tone (ties to the lower one), the next one up, or the next one down">
+                    <option value="nearest" selected>nearest</option>
+                    <option value="up">up</option>
+                    <option value="down">down</option>
+                  </select>
+                </label>
+                <label class="op-echo"><input type="checkbox" id="snap-echo"
+                       title="Also snap LIVE echoed keybed notes onto the scale"><span>echo</span></label>
+              </div>
+            </div>
+
+            <div class="op op-invert">
+              <div class="op-head"><span class="op-title">invert</span></div>
+              <div class="op-body">
+                <label class="op-toggle"><input type="checkbox" id="invert-enabled"
+                       title="Mirror each pitch around the pivot note (melodic inversion — a rising phrase falls, the contour flips about the pivot). Pivot defaults to C4."><span>on</span></label>
+                <label class="op-pivot"><span>pivot</span>
+                  <input type="number" id="invert-pivot" class="vel-input" min="0" max="127" step="1"
+                         value="60" title="MIDI note the melody reflects around (60 = C4). The inversion is n' = 2&middot;pivot &minus; n.">
+                </label>
+                <label class="op-echo"><input type="checkbox" id="invert-echo"
+                       title="Also invert LIVE echoed keybed notes"><span>echo</span></label>
+              </div>
+            </div>
+
+            <div class="op op-reverse">
+              <div class="op-head"><span class="op-title">reverse</span></div>
+              <div class="op-body">
+                <label class="op-toggle"><input type="checkbox" id="reverse-enabled"
+                       title="Play the take backwards: notes replay tail-first, each mirrored around the take's span (durations kept). The stave shows the reversed take too."><span>on</span></label>
               </div>
             </div>
           </div>

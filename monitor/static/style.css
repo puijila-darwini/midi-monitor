@@ -884,6 +884,21 @@ select option {
   background: var(--straw);
   box-shadow: 0 0 5px rgba(242, 230, 166, 0.6);
 }
+.op-scale     { border-left-color: var(--muted); }
+.op-scale .op-head::before {
+  background: var(--muted);
+  box-shadow: 0 0 5px rgba(143, 179, 163, 0.6);
+}
+.op-invert    { border-left-color: var(--royal-soft); }
+.op-invert .op-head::before {
+  background: var(--royal-soft);
+  box-shadow: 0 0 5px rgba(155, 126, 216, 0.6);
+}
+.op-reverse   { border-left-color: var(--text); }
+.op-reverse .op-head::before {
+  background: var(--text);
+  box-shadow: 0 0 5px rgba(240, 232, 200, 0.6);
+}
 
 /* compact numeric fields inside the ops */
 .vel-input,
@@ -898,7 +913,9 @@ select option {
   color: var(--text);
 }
 .vel-enable input,
-.humanizer-enable input { accent-color: var(--royal); }
+.humanizer-enable input,
+.op-toggle input,
+.op-echo input { accent-color: var(--royal); }
 
 .feed-list {
   list-style: none;
