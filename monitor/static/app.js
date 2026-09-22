@@ -2422,11 +2422,32 @@ case "replay":
     var enabledChk = document.getElementById("tuning-enabled");
     var presetSel = document.getElementById("tuning-preset");
     var echoChk = document.getElementById("tuning-echo");
+    var masterInput = document.getElementById("tuning-master");
+    var NAMES = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
     var cells = [];
     for (var i = 0; i < 12; i++) {
       cells.push(document.getElementById("tuning-c" + i));
     }
     if (!enabledChk && !presetSel && !cells[0]) return;
+
+    function effCents(i) {
+      var c = cells[i] ? parseFloat(cells[i].value) : NaN;
+      var m = masterInput ? parseFloat(masterInput.value) : NaN;
+      return (isNaN(c) ? 0 : c) + (isNaN(m) ? 0 : m);
+    }
+    // Hz readout: A4 badge + per-cell tooltips for the C4 octave, assuming
+    // the board itself at 440 (its own tune is unreadable). Display only.
+    function updateTuneHz(a4) {
+      var a4el = document.getElementById("tuning-a4");
+      var a4v = (typeof a4 === "number") ? a4 : 440 * Math.pow(2, effCents(9) / 1200);
+      if (a4el) a4el.textContent = "A4 " + a4v.toFixed(1) + " Hz";
+      for (var i = 0; i < 12; i++) {
+        if (!cells[i] || !cells[i].parentElement) continue;
+        var hz = 440 * Math.pow(2, ((60 + i - 69) + effCents(i) / 100) / 12);
+        cells[i].parentElement.title = NAMES[i] + "4 " + hz.toFixed(2) + " Hz";
+      }
+    }
+    window.__tuneHz = updateTuneHz;
 
     function readCells() {
       var out = [];
@@ -2455,6 +2476,11 @@ case "replay":
                 }
               }
             }
+            if (typeof res.master === "number" && masterInput &&
+                document.activeElement !== masterInput) {
+              masterInput.value = String(res.master);
+            }
+            updateTuneHz(res.a4_hz);
           }
         })
         .catch(function () { /* ignore transient */ });
@@ -2479,6 +2505,13 @@ case "replay":
         apply({ cents: readCells() });
       });
     });
+    if (masterInput) {
+      masterInput.addEventListener("change", function () {
+        var m = parseFloat(masterInput.value);
+        apply({ master: isNaN(m) ? 0 : Math.max(-50, Math.min(50, m)) });
+      });
+      masterInput.addEventListener("input", function () { updateTuneHz(); });
+    }
   })();
 
   // Humanizer stage: subtle timing and velocity variation applied at the
@@ -2785,6 +2818,12 @@ if (typeof s.time_signature === "string" && s.time_signature.indexOf("/") > 0) {
               }
             }
           }
+          var tmst = document.getElementById("tuning-master");
+          if (tmst && typeof s.tuning.master === "number" &&
+              document.activeElement !== tmst) {
+            tmst.value = String(s.tuning.master);
+          }
+          if (window.__tuneHz) window.__tuneHz(s.tuning.a4_hz);
         }
         // Sync humanizer settings from backend state
         if (typeof s.humanizer_enabled === "boolean") {

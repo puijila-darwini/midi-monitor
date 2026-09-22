@@ -1549,3 +1549,11 @@ Ver 96 (bend desync fix): the tuning skip-record only tracked tuning's own
   the record (Reset All Controllers re-centers). Verified live in-browser:
   card cell edit E=50 reached the server (custom table); plus 3 route-level
   regression checks (strike, re-send after slider, panic clear) — suite 31/31.
+
+Ver 96 (master + Hz): tuning card gains a master detune (±50c, mirrors the
+  board's own Tuning function — manual discloses 427.0-453.0 Hz ≈ -51.9/+50.4c,
+  so ±50 sits just inside) added to every pitch class at strike time, plus an
+  A4 Hz badge and per-cell C4-octave Hz tooltips (assume the board at 440 —
+  its own tune is unreadable over MIDI). state.tuning_hz; master persists in
+  settings/snapshot; /api/tuning validates ±50. Verified: 40/40 suite
+  (stack/clamp/Hz math/round-trip), API (a4 452.89 at +50, 500 rejected).

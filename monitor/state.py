@@ -222,6 +222,10 @@ class State:
         self.tuning_enabled = False
         self.tuning_cents = [0.0] * 12
         self.tuning_preset = "equal"
+        self.tuning_master = 0.0       # constant detune added to every pc
+                                       # (mirrors the board's own Tuning
+                                       # function, ±50c, for matching other
+                                       # instruments)
         self._tuning_last_bend = {}    # channel -> last sent bend (semis)
         # Press-time echo mapping (Ver 94 de-jank): note_on freezes the mapped
         # pitch SENT to the board so note_off releases exactly that pitch even
@@ -634,11 +638,13 @@ class State:
         return max(1, min(127, int(round(nv))))
 
     # -- Ver 96: microtonal tuning (mono) --------------------------------------
-    def set_tuning(self, enabled=None, cents=None, preset=None):
+    def set_tuning(self, enabled=None, cents=None, preset=None, master=None):
         """Set the microtonal tuning table: cents deviation per pitch class
         C..B, applied as a pitch pre-bend at strike time (echo note_ons +
         replay batches). A preset name loads its table; explicit cents (12
-        numbers, clamped ±100) mark the table "custom". No requantize — the
+        numbers, clamped ±100) mark the table "custom"; master is a constant
+        detune added to every pitch class (±50, mirrors the board's own
+        Tuning function for matching other instruments). No requantize — the
         take's integer notes are untouched."""
         if enabled is not None:
             self.tuning_enabled = bool(enabled)
@@ -655,15 +661,35 @@ class State:
             if len(vals) == 12:
                 self.tuning_cents = vals
                 self.tuning_preset = "custom"
+        if master is not None:
+            try:
+                self.tuning_master = max(-50.0, min(50.0, float(master)))
+            except (TypeError, ValueError):
+                pass
 
     def tuning_cents_for(self, note):
-        """Cents deviation for a MIDI note's pitch class (0.0 when off)."""
+        """Effective cents deviation for a MIDI note: pitch-class table value
+        plus the master detune (0.0 when off)."""
         if not self.tuning_enabled:
             return 0.0
         try:
-            return float(self.tuning_cents[int(note) % 12])
+            return float(self.tuning_cents[int(note) % 12]) + self.tuning_master
         except (TypeError, ValueError, IndexError):
             return 0.0
+
+    def tuning_hz(self, note, base=440.0):
+        """Sounded frequency of a MIDI note under the current table: base
+        concert pitch (the board's own tune, unreadable over MIDI — assumed
+        440) bent by the effective cents. Display only."""
+        try:
+            n = int(note)
+        except (TypeError, ValueError):
+            return 0.0
+        try:
+            eff = float(self.tuning_cents[n % 12]) + float(self.tuning_master)
+        except (TypeError, ValueError, IndexError):
+            eff = 0.0
+        return float(base) * 2.0 ** ((n - 69 + eff / 100.0) / 12.0)
 
     def tuning_strike_bend(self, note, channel=0):
         """Bend (semitones) to send BEFORE striking `note`, or None when the
@@ -1687,6 +1713,7 @@ class State:
             "tuning_enabled": self.tuning_enabled,
             "tuning_cents": list(self.tuning_cents),
             "tuning_preset": self.tuning_preset,
+            "tuning_master": self.tuning_master,
             "key_tonic": self.key_tonic,
             "key_scale": self.key_scale,
             "tempo_bpm": self.tempo_bpm,
@@ -1797,6 +1824,10 @@ class State:
             vals = None
         self.tuning_cents = vals if vals is not None and len(vals) == 12 else list(
             TUNING_PRESETS.get(self.tuning_preset, TUNING_PRESETS["equal"]))
+        try:
+            self.tuning_master = max(-50.0, min(50.0, float(settings.get("tuning_master", 0.0))))
+        except (TypeError, ValueError):
+            self.tuning_master = 0.0
         if not self.tuning_enabled:
             self._tuning_last_bend = {}
         try:
@@ -1948,6 +1979,8 @@ class State:
                 "enabled": self.tuning_enabled,
                 "cents": list(self.tuning_cents),
                 "preset": self.tuning_preset,
+                "master": self.tuning_master,
+                "a4_hz": round(self.tuning_hz(69), 2),
             },
             "scale": {"tonic": self.key_tonic, "scale": self.key_scale},
             "received_ctrl": dict(self.received_ctrl),

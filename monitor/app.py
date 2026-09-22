@@ -397,12 +397,16 @@ def api_tuning():
       {"enabled": bool}                 -> retune on/off (off re-centers bend)
       {"preset": "equal|just|pythagorean|meantone"}
       {"cents": [12 numbers ±100]}      -> custom table (marks preset "custom")
+      {"master": cents ±50}             -> constant detune on every pitch
+                                           class (mirrors the board's Tuning)
     The table rides on every echoed note_on + replay strike as a pre-bend.
     """
     if request.method == "GET":
         return jsonify({"ok": True, "enabled": state.tuning_enabled,
                         "cents": list(state.tuning_cents),
-                        "preset": state.tuning_preset})
+                        "preset": state.tuning_preset,
+                        "master": state.tuning_master,
+                        "a4_hz": round(state.tuning_hz(69), 2)})
     body = request.get_json(silent=True) or {}
     if "preset" in body and body.get("preset") not in (
             "equal", "just", "pythagorean", "meantone"):
@@ -416,9 +420,18 @@ def api_tuning():
         if len(vals) != 12 or any(abs(v) > 100 for v in vals):
             return jsonify({"ok": False,
                             "error": "cents must be 12 numbers within ±100"}), 400
+    if "master" in body:
+        try:
+            mst = float(body.get("master"))
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "master must be a number"}), 400
+        if abs(mst) > 50:
+            return jsonify({"ok": False,
+                            "error": "master must be within ±50"}), 400
     state.set_tuning(enabled=body.get("enabled", None),
                      cents=body.get("cents", None),
-                     preset=body.get("preset", None))
+                     preset=body.get("preset", None),
+                     master=body.get("master", None))
     if not state.tuning_enabled:
         # Leave no detune behind on the board.
         try:
@@ -427,7 +440,9 @@ def api_tuning():
             pass
     return jsonify({"ok": True, "enabled": state.tuning_enabled,
                     "cents": list(state.tuning_cents),
-                    "preset": state.tuning_preset})
+                    "preset": state.tuning_preset,
+                    "master": state.tuning_master,
+                    "a4_hz": round(state.tuning_hz(69), 2)})
 
 
 @app.route("/api/humanizer", methods=["POST"])

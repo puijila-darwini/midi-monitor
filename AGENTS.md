@@ -101,7 +101,10 @@ folded into a single web app package in `monitor/`:
   re-centers at phrase end / on disable). Live-verified with the all-+100c
   honky-tonk demo. Bend range is replay.BEND_RANGE_ST = 2.0, ear-calibrated
   (labeled +100c came out ~8c, so half-throw is 200c); shared by send, receive
-  mapping, /api/ctrl validation, and the pitch slider.
+  mapping, /api/ctrl validation, and the pitch slider. Master detune
+  (state.tuning_master ±50c, mirrors the board Tuning: manual 427-453 Hz) adds
+  to every pc at strike time; A4 Hz badge + per-cell C4 Hz tooltips assume the
+  board at 440 (unreadable).
 - `monitor/app.py`      - Flask on :5050. Routes: `/`, `/events` (SSE),
                           `/api/state`. Background capture thread -> hub pub/sub.
                           Replay entry points (/api/replay, /api/replay/loop,
