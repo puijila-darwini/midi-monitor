@@ -99,9 +99,9 @@ folded into a single web app package in `monitor/`:
   replay/arrange need retune alone; both send pitch_bend(cents/100) on the
   strike channel just before note_on via amidi raw (skip-if-unchanged, bend
   re-centers at phrase end / on disable). Live-verified with the all-+100c
-  honky-tonk demo. OPEN ASSUMPTION: the ±24 bend divisor is unmeasured — if
-  the board is really ±2, detunes land 12x small (slider still pins max);
-  settle with the +2-vs-+12 ear test.
+  honky-tonk demo. Bend range is replay.BEND_RANGE_ST = 2.0, ear-calibrated
+  (labeled +100c came out ~8c, so half-throw is 200c); shared by send, receive
+  mapping, /api/ctrl validation, and the pitch slider.
 - `monitor/app.py`      - Flask on :5050. Routes: `/`, `/events` (SSE),
                           `/api/state`. Background capture thread -> hub pub/sub.
                           Replay entry points (/api/replay, /api/replay/loop,

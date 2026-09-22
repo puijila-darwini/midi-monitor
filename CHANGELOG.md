@@ -1531,3 +1531,12 @@ Ver 96 (echo opt-in): tuning follows the house pattern — retune drives replay/
   assumption (if the board is really ±2, detunes land 12x small but the
   slider still pins max — matches all observations so far); needs the +2 vs
   +12 ear test to nail down.
+
+Ver 96 (bend range fix): the ±24 divisor was wrong — labeled +100c detunes
+  came out ~8c (subtle honky-tonk, not a semitone clash), which ear-calibrates
+  the PSS-A50's true bend range to ±2 semitones (Yamaha default). New shared
+  constant replay.BEND_RANGE_ST = 2.0 drives send (pitch_bend), receive
+  (received_pitch_bend mapping), /api/ctrl validation, and the out·ctrl pitch
+  slider bounds (now ±2 step 0.1). Musical presets (±3-18c) were landing at
+  ±0.25-1.5c — inaudible, the reported "not working at all". Verified: unit
+  suite still 28/28, live pitch validation rejects +12 / accepts +1.5.

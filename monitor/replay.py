@@ -20,6 +20,11 @@ import time
 from .midiout import SeqOut, list_outs, CC_ALL_NOTES_OFF, CC_ALL_SOUND_OFF
 from .mididev import find_raw_device
 
+# Pitch-bend range of the PSS-A50 in semitones (Ver 96: was wrongly assumed
+# ±24; ear-calibrated 2026-09-22 — labeled +100c detunes came out ~8c, i.e.
+# half-throw is 200c). Single source of truth for send + receive + UI.
+BEND_RANGE_ST = 2.0
+
 # Legacy fallback raw device: the real node is resolved dynamically per send
 # (find_raw_device) because the card number depends on boot enumeration order.
 DEVICE = "hw:2,0,0"
@@ -111,10 +116,10 @@ def control_change(cc, value, channel=0):
 
 
 def pitch_bend(semitones, channel=0):
-    """Send a 14-bit pitch bend to the keyboard. The PSS-A50 bends +-24
-    semitones over the full range (center 8192)."""
+    """Send a 14-bit pitch bend to the keyboard. The PSS-A50 bends
+    ±BEND_RANGE_ST over the full range (center 8192)."""
     ch = max(0, min(15, int(channel)))
-    val = int(round(8192 + max(-24.0, min(24.0, float(semitones))) / 24.0 * 8192))
+    val = int(round(8192 + max(-BEND_RANGE_ST, min(BEND_RANGE_ST, float(semitones))) / BEND_RANGE_ST * 8192))
     val = max(0, min(16383, val))
     ok = _send("E%X %02X %02X" % (ch, val & 0x7F, (val >> 7) & 0x7F))
     time.sleep(0.01)

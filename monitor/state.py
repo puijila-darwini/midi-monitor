@@ -5,6 +5,7 @@ import threading
 import random
 
 from .replay import VOICES as VOICES_BY_PROGRAM
+from .replay import BEND_RANGE_ST
 from . import chords
 
 
@@ -235,7 +236,7 @@ class State:
         self.key_scale = ""
         # Received-control watch (signals arriving FROM the keyboard: wheel ->
         # pitch bend + CC1, panel voice buttons -> bank/PC, aux 120/121/123).
-        # {controller: last value 0-127}; pitch bend in semitones (+-24).
+        # {controller: last value 0-127}; pitch bend in semitones (± range).
         self.received_ctrl = {}
         self.received_pitch_bend = 0.0
         # Out control surface: last values we SENT to the keyboard, for UI
@@ -1608,9 +1609,9 @@ class State:
             self.received_ctrl[int(event["controller"])] = int(event["value"])
         elif etype == "pitch_bend":
             # aseqdump reports the full 14-bit value (0-16383, center 8192);
-            # the PSS-A50 bends +-24 semitones over that whole range.
+            # map onto the board's real bend range (BEND_RANGE_ST).
             v = int(event["value"])
-            self.received_pitch_bend = round((v - 8192) / 8192.0 * 24.0, 2)
+            self.received_pitch_bend = round((v - 8192) / 8192.0 * BEND_RANGE_ST, 2)
         elif etype == "offline":
             self.online = False
             self.recent.append({"type": "offline", "time": event["time"]})

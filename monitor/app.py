@@ -15,6 +15,7 @@ from .mididev import device_info
 from .state import State
 from .analysis import Analyser
 from .replay import (Replay, plan_from_raw, VOICES, control_change, pitch_bend,
+                     BEND_RANGE_ST,
                      gm_system_on, midi_panic, note_on, note_off, program_change)
 from . import midiout
 from . import sinks
@@ -562,7 +563,8 @@ def api_ctrl():
 
     POST body (any of):
       {"cc": int 0-127, "value": int 0-127}      -> send a controller change
-      {"pitch": float -24..24}                   -> 14-bit pitch bend (semis)
+      {"pitch": float ±range}                    -> 14-bit pitch bend (semis;
+                                                   board range BEND_RANGE_ST)
       {"action": "panic"}   all channels all-sound-off + all-notes-off
       {"action": "gmreset"} GM System ON SysEx
       {"action": "local", "value": 0|1}          -> CC122 Local Control off/on
@@ -593,8 +595,8 @@ def api_ctrl():
             extra = {"cc": cc, "value": value}
         elif "pitch" in body:
             semi = float(body["pitch"])
-            if not (-24.0 <= semi <= 24.0):
-                return jsonify({"ok": False, "error": "pitch must be -24..24"}), 400
+            if not (-BEND_RANGE_ST <= semi <= BEND_RANGE_ST):
+                return jsonify({"ok": False, "error": "pitch must be ±%.1f" % BEND_RANGE_ST}), 400
             sent = pitch_bend(semi, channel=ch)
             state.control_pitch_bend = round(semi, 2)
             extra = {"pitch": state.control_pitch_bend}
