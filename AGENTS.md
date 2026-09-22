@@ -103,8 +103,9 @@ folded into a single web app package in `monitor/`:
   (labeled +100c came out ~8c, so half-throw is 200c); shared by send, receive
   mapping, /api/ctrl validation, and the pitch slider. Master detune
   (state.tuning_master ±50c, mirrors the board Tuning: manual 427-453 Hz) adds
-  to every pc at strike time; A4 Hz badge + per-cell C4 Hz tooltips assume the
-  board at 440 (unreadable).
+  to every pc at strike time; A4 Hz badge + per-cell C4 Hz tooltips derive from
+  the hand-entered board pitch (state.tuning_base, default 440 — the board's
+  own tune is unreadable over MIDI).
 - `monitor/app.py`      - Flask on :5050. Routes: `/`, `/events` (SSE),
                           `/api/state`. Background capture thread -> hub pub/sub.
                           Replay entry points (/api/replay, /api/replay/loop,
