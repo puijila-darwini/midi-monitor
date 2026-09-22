@@ -60,9 +60,13 @@ TUNING_PRESETS = {
     # Arabic quartertone shapes (root-relative: index = semitones above the
     # root, so pair with follow-tonic; unrooted they sound on C). Rast on C:
     # E + B half-flat; Bayati shape: the 2nd degree half-flat (tonic D =
-    # Bayati proper, tonic C = Sikah flavour).
+    # Bayati proper, tonic C = Sikah flavour); Saba shape: the 3rd degree
+    # half-flat (tonic C = Saba proper); Segah shape: the root itself
+    # half-flat (tonic E = Segah proper).
     "rast": [0.0, 0.0, 0.0, 0.0, -50.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -50.0],
     "bayati": [0.0, 0.0, -50.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+    "saba": [0.0, 0.0, 0.0, 0.0, -50.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+    "sikah": [-50.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
 }
 
 

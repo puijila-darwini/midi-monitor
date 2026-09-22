@@ -1590,3 +1590,11 @@ Ver 96 (display follows tonic): with follow-tonic on the cells showed the
   storage-order cells until the next refresh — the select sync now runs
   first in refreshState. Verified: node round-trip on the real functions
   (displayed E=-50 on bayati/D, edit lands storage[2], root-off identity).
+
+Ver 96 (more maqam + tonic-event re-voice): Saba (3rd-degree half-flat) and
+  Segah (root itself half-flat) presets join Rast/Bayati (all root-relative
+  shapes); the tuning display now re-voices WHEN the tonic changes (new
+  window.__tuneTonicChanged from a last-storage cache, called by the
+  tonic/scale change handler and catch resolution — not just when the tonic
+  box is toggled). Verified live in-browser: bayati/D showed E=-50, flipping
+  tonic to G re-voiced to A=-50 with no other touch. Suite 58/58 + 13 stuck.

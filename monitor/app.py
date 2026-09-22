@@ -395,7 +395,7 @@ def api_velocity():
 def api_tuning():
     """Ver 96 mono microtonal tuning. GET returns the table; POST body (any of):
       {"enabled": bool}                 -> retune on/off (off re-centers bend)
-      {"preset": "equal|just|pythagorean|meantone|rast|bayati"}
+      {"preset": "equal|just|pythagorean|meantone|rast|bayati|saba|sikah"}
       {"cents": [12 numbers ±100]}      -> custom table (marks preset "custom")
       {"master": cents ±50}             -> constant detune on every pitch
                                            class (mirrors the board's Tuning)
@@ -416,9 +416,10 @@ def api_tuning():
                         "a4_hz": round(state.tuning_hz(69), 2)})
     body = request.get_json(silent=True) or {}
     if "preset" in body and body.get("preset") not in (
-            "equal", "just", "pythagorean", "meantone", "rast", "bayati"):
+            "equal", "just", "pythagorean", "meantone", "rast", "bayati",
+            "saba", "sikah"):
         return jsonify({"ok": False,
-                        "error": "preset must be equal|just|pythagorean|meantone|rast|bayati"}), 400
+                        "error": "preset must be equal|just|pythagorean|meantone|rast|bayati|saba|sikah"}), 400
     if "cents" in body:
         try:
             vals = [float(c) for c in body.get("cents")]

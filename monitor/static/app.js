@@ -383,6 +383,7 @@ function buildCatchTooltip() {
       '</span>  TONIC set to ' + nm + (scaleId ? " &middot; " + scaleId + " scale" : ""), "tonic");
     pushScaleContext();
     syncPivotFromKey();
+    if (window.__tuneTonicChanged) window.__tuneTonicChanged();
   }
 
   // Ver 92: keep the server's key context (scale-snap stage + echo snap) in
@@ -1732,6 +1733,8 @@ case "replay":
         syncPivotFromKey();
         refreshGhosts();    // echo snap resolves onto this scale context
         applyPivotMarker();
+        // Tuning card follows the tonic when its tonic box is checked.
+        if (window.__tuneTonicChanged) window.__tuneTonicChanged();
       }
       tonicSel.addEventListener("change", current);
       scaleSel.addEventListener("change", current);
@@ -2459,7 +2462,9 @@ case "replay":
       var tp = ton ? parseInt(ton.value, 10) : NaN;
       return (rc && rc.checked && !isNaN(tp) && tp >= 0) ? tp : 0;
     }
+    var lastStorage = null;
     function renderCells(storage) {
+      lastStorage = storage.slice();
       var sh = tonicShift();
       for (var i = 0; i < 12; i++) {
         if (cells[i] && document.activeElement !== cells[i]) {
@@ -2486,6 +2491,13 @@ case "replay":
     }
     window.__tuneHz = updateTuneHz;
     window.__tuneCells = renderCells;
+    // Re-voice the card when the key tonic moves (called by the tonic·scale
+    // card, not by refreshState): re-render from the last-known storage so
+    // the display tracks the tonic change event itself.
+    window.__tuneTonicChanged = function () {
+      if (lastStorage) renderCells(lastStorage);
+      updateTuneHz();
+    };
 
     function readCells() {
       var out = new Array(12);
