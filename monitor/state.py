@@ -407,11 +407,16 @@ class State:
     def echo_hold(self, raw, channel=0):
         """Remember a press: map the raw keyed note through the live
         transforms and return the pitch to send. Also records the send channel
-        so the release can match it."""
+        so the release can match it. Re-pressing an already-held key re-sounds
+        the FROZEN pitch without double-counting — otherwise a legato
+        double-on leaves a holder that no release ever clears (stuck note)."""
         try:
             r = int(raw)
         except (TypeError, ValueError):
             r = raw
+        prev = self.echo_held.get(r)
+        if prev is not None:
+            return prev["mapped"]
         mapped = self.echo_transform(r)
         self.echo_held[r] = {"mapped": mapped, "channel": int(channel)}
         self.echo_holders[mapped] = self.echo_holders.get(mapped, 0) + 1

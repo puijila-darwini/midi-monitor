@@ -269,6 +269,27 @@ class Capture:
             self._stop()
             self._reported_online = False
 
+    def _parse_line(self, line, now):
+        """Map one aseqdump note line to an event dict, or None when the line
+        is not a note on/off. A vel-0 note_on is MIDI's running-status release
+        form — it MUST come back as note_off, or every release double-counts
+        as a press (stuck echo notes under snap-collapse refcounting)."""
+        m = _NOTE_ON.search(line)
+        if m:
+            note = int(m.group(2))
+            ch = int(m.group(1))
+            vel = int(m.group(3))
+            if vel == 0:
+                return {"type": "note_off", "note": note,
+                        "channel": ch, "time": now}
+            return {"type": "note_on", "note": note, "velocity": vel,
+                    "channel": ch, "time": now}
+        mo = _NOTE_OFF.search(line)
+        if mo:
+            return {"type": "note_off", "note": int(mo.group(2)),
+                    "channel": int(mo.group(1)), "time": now}
+        return None
+
     def _iterate(self):
         self._reported_online = False
         while True:
@@ -290,24 +311,9 @@ class Capture:
                 # stream ended (keyboard detached / aseqdump quit)
                 continue
             now = self._now()
-            m = _NOTE_ON.search(line)
-            if m:
-                yield {
-                    "type": "note_on",
-                    "note": int(m.group(2)),
-                    "velocity": int(m.group(3)),
-                    "channel": int(m.group(1)),
-                    "time": now,
-                }
-                continue
-            mo = _NOTE_OFF.search(line)
-            if mo:
-                yield {
-                    "type": "note_off",
-                    "note": int(mo.group(2)),
-                    "channel": int(mo.group(1)),
-                    "time": now,
-                }
+            ev = self._parse_line(line, now)
+            if ev is not None:
+                yield ev
                 continue
             kp = _KEY_PRESSURE.search(line)
             if kp:

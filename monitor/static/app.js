@@ -2450,6 +2450,23 @@ case "replay":
     function effCentsForPc(pc) {
       return effCents(tableIndex(pc));
     }
+    // Display rotation: with follow-tonic on, each cell shows what its KEY
+    // sounds (storage rotated by the tonic); edits are inverse-rotated on
+    // write so the stored shape stays root-relative.
+    function tonicShift() {
+      var rc = document.getElementById("tuning-tonic");
+      var ton = document.getElementById("key-tonic");
+      var tp = ton ? parseInt(ton.value, 10) : NaN;
+      return (rc && rc.checked && !isNaN(tp) && tp >= 0) ? tp : 0;
+    }
+    function renderCells(storage) {
+      var sh = tonicShift();
+      for (var i = 0; i < 12; i++) {
+        if (cells[i] && document.activeElement !== cells[i]) {
+          cells[i].value = String(storage[(((i - sh) % 12) + 12) % 12]);
+        }
+      }
+    }
     // Hz readout: A4 badge + per-cell tooltips for the C4 octave, derived
     // from the board pitch (hand-entered — its tune is unreadable).
     // Display only.
@@ -2468,12 +2485,15 @@ case "replay":
       }
     }
     window.__tuneHz = updateTuneHz;
+    window.__tuneCells = renderCells;
 
     function readCells() {
-      var out = [];
+      var out = new Array(12);
+      var sh = tonicShift();
       for (var i = 0; i < 12; i++) {
         var v = cells[i] ? parseFloat(cells[i].value) : NaN;
-        out.push(isNaN(v) ? 0 : Math.max(-100, Math.min(100, v)));
+        v = isNaN(v) ? 0 : Math.max(-100, Math.min(100, v));
+        out[(((i - sh) % 12) + 12) % 12] = v;
       }
       return out;
     }
@@ -2490,11 +2510,7 @@ case "replay":
             }
             if (res.preset && presetSel) presetSel.value = res.preset;
             if (res.cents && res.cents.length === 12) {
-              for (var i = 0; i < 12; i++) {
-                if (cells[i] && document.activeElement !== cells[i]) {
-                  cells[i].value = String(res.cents[i]);
-                }
-              }
+              renderCells(res.cents);
             }
             if (typeof res.master === "number" && masterInput &&
                 document.activeElement !== masterInput) {
@@ -2848,13 +2864,9 @@ if (typeof s.time_signature === "string" && s.time_signature.indexOf("/") > 0) {
           if (tpre && s.tuning.preset && document.activeElement !== tpre) {
             tpre.value = s.tuning.preset;
           }
-          if (s.tuning.cents && s.tuning.cents.length === 12) {
-            for (var ci = 0; ci < 12; ci++) {
-              var cell = document.getElementById("tuning-c" + ci);
-              if (cell && document.activeElement !== cell) {
-                cell.value = String(s.tuning.cents[ci]);
-              }
-            }
+          if (s.tuning.cents && s.tuning.cents.length === 12 && window.__tuneCells) {
+            // Cells always show what each key sounds (follows tonic live).
+            window.__tuneCells(s.tuning.cents);
           }
           var tmst = document.getElementById("tuning-master");
           if (tmst && typeof s.tuning.master === "number" &&

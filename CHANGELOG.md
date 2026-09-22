@@ -1571,3 +1571,12 @@ Ver 96 (tonic root + maqam): tuning card gains a tonic checkbox — the table
   proper) presets, stored as root-relative shapes. JS tableIndex mirrors
   _tuning_table_index (96/96 grid identical). Verified: 54/54 suite, API
   (rast load + tonic_root round-trip).
+
+Ver 96 (stuck-note fix): with snap collapsing keys onto one pitch, a ghost
+  echoing the same pitch as a held real note could ring forever. Two vectors
+  closed: (1) capture now normalizes vel-0 note_on to note_off (MIDI
+  running-status release form) via a factored _parse_line — a vel-0 release
+  used to double-count as a press no release ever cleared; (2) echo_hold is
+  idempotent per raw key — a legato re-press re-sounds the frozen pitch
+  without adding a holder. Verified: 13 stuck-note checks (parse forms,
+  idempotent hold/release, collapse-pair refcount) + full 44 tuning suite.
