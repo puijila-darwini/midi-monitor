@@ -1557,3 +1557,9 @@ Ver 96 (master + Hz): tuning card gains a master detune (±50c, mirrors the
   its own tune is unreadable over MIDI). state.tuning_hz; master persists in
   settings/snapshot; /api/tuning validates ±50. Verified: 40/40 suite
   (stack/clamp/Hz math/round-trip), API (a4 452.89 at +50, 500 rejected).
+
+Ver 96 (board pitch input): the keyboard's own concert pitch is now an input
+  (board box on the tuning card, 400-480 Hz, default 440) — every Hz readout
+  (A4 badge, per-cell C4 tooltips) derives from it instead of assuming 440.
+  state.tuning_base flows through set_tuning/settings/snapshot/api (validated
+  400-480). Verified: 44/44 suite, API (base 442 -> a4 442.0, 300 rejected).

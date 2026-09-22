@@ -2423,6 +2423,7 @@ case "replay":
     var presetSel = document.getElementById("tuning-preset");
     var echoChk = document.getElementById("tuning-echo");
     var masterInput = document.getElementById("tuning-master");
+    var baseInput = document.getElementById("tuning-base");
     var NAMES = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
     var cells = [];
     for (var i = 0; i < 12; i++) {
@@ -2435,15 +2436,20 @@ case "replay":
       var m = masterInput ? parseFloat(masterInput.value) : NaN;
       return (isNaN(c) ? 0 : c) + (isNaN(m) ? 0 : m);
     }
-    // Hz readout: A4 badge + per-cell tooltips for the C4 octave, assuming
-    // the board itself at 440 (its own tune is unreadable). Display only.
+    // Hz readout: A4 badge + per-cell tooltips for the C4 octave, derived
+    // from the board pitch (hand-entered — its tune is unreadable).
+    // Display only.
+    function baseHz() {
+      var b = baseInput ? parseFloat(baseInput.value) : NaN;
+      return isNaN(b) ? 440 : Math.max(400, Math.min(480, b));
+    }
     function updateTuneHz(a4) {
       var a4el = document.getElementById("tuning-a4");
-      var a4v = (typeof a4 === "number") ? a4 : 440 * Math.pow(2, effCents(9) / 1200);
+      var a4v = (typeof a4 === "number") ? a4 : baseHz() * Math.pow(2, effCents(9) / 1200);
       if (a4el) a4el.textContent = "A4 " + a4v.toFixed(1) + " Hz";
       for (var i = 0; i < 12; i++) {
         if (!cells[i] || !cells[i].parentElement) continue;
-        var hz = 440 * Math.pow(2, ((60 + i - 69) + effCents(i) / 100) / 12);
+        var hz = baseHz() * Math.pow(2, ((60 + i - 69) + effCents(i) / 100) / 12);
         cells[i].parentElement.title = NAMES[i] + "4 " + hz.toFixed(2) + " Hz";
       }
     }
@@ -2480,6 +2486,10 @@ case "replay":
                 document.activeElement !== masterInput) {
               masterInput.value = String(res.master);
             }
+            if (typeof res.base === "number" && baseInput &&
+                document.activeElement !== baseInput) {
+              baseInput.value = String(res.base);
+            }
             updateTuneHz(res.a4_hz);
           }
         })
@@ -2511,6 +2521,13 @@ case "replay":
         apply({ master: isNaN(m) ? 0 : Math.max(-50, Math.min(50, m)) });
       });
       masterInput.addEventListener("input", function () { updateTuneHz(); });
+    }
+    if (baseInput) {
+      baseInput.addEventListener("change", function () {
+        var b = parseFloat(baseInput.value);
+        apply({ base: isNaN(b) ? 440 : Math.max(400, Math.min(480, b)) });
+      });
+      baseInput.addEventListener("input", function () { updateTuneHz(); });
     }
   })();
 
@@ -2822,6 +2839,11 @@ if (typeof s.time_signature === "string" && s.time_signature.indexOf("/") > 0) {
           if (tmst && typeof s.tuning.master === "number" &&
               document.activeElement !== tmst) {
             tmst.value = String(s.tuning.master);
+          }
+          var tbse = document.getElementById("tuning-base");
+          if (tbse && typeof s.tuning.base === "number" &&
+              document.activeElement !== tbse) {
+            tbse.value = String(s.tuning.base);
           }
           if (window.__tuneHz) window.__tuneHz(s.tuning.a4_hz);
         }

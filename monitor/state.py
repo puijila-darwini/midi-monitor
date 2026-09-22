@@ -226,6 +226,9 @@ class State:
                                        # (mirrors the board's own Tuning
                                        # function, ±50c, for matching other
                                        # instruments)
+        self.tuning_base = 440.0       # the board's OWN concert pitch (A4 Hz):
+                                       # unreadable over MIDI, so hand-entered;
+                                       # every Hz readout derives from it
         self._tuning_last_bend = {}    # channel -> last sent bend (semis)
         # Press-time echo mapping (Ver 94 de-jank): note_on freezes the mapped
         # pitch SENT to the board so note_off releases exactly that pitch even
@@ -638,7 +641,7 @@ class State:
         return max(1, min(127, int(round(nv))))
 
     # -- Ver 96: microtonal tuning (mono) --------------------------------------
-    def set_tuning(self, enabled=None, cents=None, preset=None, master=None):
+    def set_tuning(self, enabled=None, cents=None, preset=None, master=None, base=None):
         """Set the microtonal tuning table: cents deviation per pitch class
         C..B, applied as a pitch pre-bend at strike time (echo note_ons +
         replay batches). A preset name loads its table; explicit cents (12
@@ -666,6 +669,11 @@ class State:
                 self.tuning_master = max(-50.0, min(50.0, float(master)))
             except (TypeError, ValueError):
                 pass
+        if base is not None:
+            try:
+                self.tuning_base = max(400.0, min(480.0, float(base)))
+            except (TypeError, ValueError):
+                pass
 
     def tuning_cents_for(self, note):
         """Effective cents deviation for a MIDI note: pitch-class table value
@@ -677,19 +685,20 @@ class State:
         except (TypeError, ValueError, IndexError):
             return 0.0
 
-    def tuning_hz(self, note, base=440.0):
-        """Sounded frequency of a MIDI note under the current table: base
-        concert pitch (the board's own tune, unreadable over MIDI — assumed
-        440) bent by the effective cents. Display only."""
+    def tuning_hz(self, note, base=None):
+        """Sounded frequency of a MIDI note under the current table: the
+        board's concert pitch (tuning_base, hand-entered — its own tune is
+        unreadable over MIDI) bent by the effective cents. Display only."""
         try:
             n = int(note)
         except (TypeError, ValueError):
             return 0.0
+        b = self.tuning_base if base is None else base
         try:
             eff = float(self.tuning_cents[n % 12]) + float(self.tuning_master)
         except (TypeError, ValueError, IndexError):
             eff = 0.0
-        return float(base) * 2.0 ** ((n - 69 + eff / 100.0) / 12.0)
+        return float(b) * 2.0 ** ((n - 69 + eff / 100.0) / 12.0)
 
     def tuning_strike_bend(self, note, channel=0):
         """Bend (semitones) to send BEFORE striking `note`, or None when the
@@ -1714,6 +1723,7 @@ class State:
             "tuning_cents": list(self.tuning_cents),
             "tuning_preset": self.tuning_preset,
             "tuning_master": self.tuning_master,
+            "tuning_base": self.tuning_base,
             "key_tonic": self.key_tonic,
             "key_scale": self.key_scale,
             "tempo_bpm": self.tempo_bpm,
@@ -1828,6 +1838,10 @@ class State:
             self.tuning_master = max(-50.0, min(50.0, float(settings.get("tuning_master", 0.0))))
         except (TypeError, ValueError):
             self.tuning_master = 0.0
+        try:
+            self.tuning_base = max(400.0, min(480.0, float(settings.get("tuning_base", 440.0))))
+        except (TypeError, ValueError):
+            self.tuning_base = 440.0
         if not self.tuning_enabled:
             self._tuning_last_bend = {}
         try:
@@ -1980,6 +1994,7 @@ class State:
                 "cents": list(self.tuning_cents),
                 "preset": self.tuning_preset,
                 "master": self.tuning_master,
+                "base": self.tuning_base,
                 "a4_hz": round(self.tuning_hz(69), 2),
             },
             "scale": {"tonic": self.key_tonic, "scale": self.key_scale},

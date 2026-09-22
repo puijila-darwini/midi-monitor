@@ -399,6 +399,9 @@ def api_tuning():
       {"cents": [12 numbers ±100]}      -> custom table (marks preset "custom")
       {"master": cents ±50}             -> constant detune on every pitch
                                            class (mirrors the board's Tuning)
+      {"base": Hz 400-480}              -> the board's OWN concert pitch
+                                           (unreadable over MIDI); every Hz
+                                           readout derives from it
     The table rides on every echoed note_on + replay strike as a pre-bend.
     """
     if request.method == "GET":
@@ -406,6 +409,7 @@ def api_tuning():
                         "cents": list(state.tuning_cents),
                         "preset": state.tuning_preset,
                         "master": state.tuning_master,
+                        "base": state.tuning_base,
                         "a4_hz": round(state.tuning_hz(69), 2)})
     body = request.get_json(silent=True) or {}
     if "preset" in body and body.get("preset") not in (
@@ -428,10 +432,19 @@ def api_tuning():
         if abs(mst) > 50:
             return jsonify({"ok": False,
                             "error": "master must be within ±50"}), 400
+    if "base" in body:
+        try:
+            bse = float(body.get("base"))
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "base must be a number"}), 400
+        if not (400 <= bse <= 480):
+            return jsonify({"ok": False,
+                            "error": "base must be 400-480 Hz"}), 400
     state.set_tuning(enabled=body.get("enabled", None),
                      cents=body.get("cents", None),
                      preset=body.get("preset", None),
-                     master=body.get("master", None))
+                     master=body.get("master", None),
+                     base=body.get("base", None))
     if not state.tuning_enabled:
         # Leave no detune behind on the board.
         try:
@@ -442,6 +455,7 @@ def api_tuning():
                     "cents": list(state.tuning_cents),
                     "preset": state.tuning_preset,
                     "master": state.tuning_master,
+                    "base": state.tuning_base,
                     "a4_hz": round(state.tuning_hz(69), 2)})
 
 
