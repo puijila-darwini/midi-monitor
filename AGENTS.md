@@ -108,7 +108,9 @@ folded into a single web app package in `monitor/`:
   own tune is unreadable over MIDI). Tonic checkbox voices the table
   root-relative on the key tonic (degree d above tonic -> table[d]); Rast +
   Bayati quartertone presets stored as root-relative shapes (JS tableIndex
-  mirrors _tuning_table_index 96/96).
+  mirrors _tuning_table_index 96/96). Stuck-note hardening: capture._parse_line
+  normalizes vel-0 note_on to note_off; echo_hold is idempotent per raw key
+  (re-press re-sounds the frozen pitch, no double holder).
 - `monitor/app.py`      - Flask on :5050. Routes: `/`, `/events` (SSE),
                           `/api/state`. Background capture thread -> hub pub/sub.
                           Replay entry points (/api/replay, /api/replay/loop,
