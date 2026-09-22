@@ -2421,6 +2421,7 @@ case "replay":
   (function () {
     var enabledChk = document.getElementById("tuning-enabled");
     var presetSel = document.getElementById("tuning-preset");
+    var echoChk = document.getElementById("tuning-echo");
     var cells = [];
     for (var i = 0; i < 12; i++) {
       cells.push(document.getElementById("tuning-c" + i));
@@ -2461,6 +2462,13 @@ case "replay":
 
     if (enabledChk) enabledChk.addEventListener("change", function () {
       apply({ enabled: enabledChk.checked });
+    });
+    if (echoChk) echoChk.addEventListener("change", function () {
+      fetch("/api/transform", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ op: "echo", which: "tuning", enabled: echoChk.checked })
+      }).catch(function () { /* ignore transient */ });
     });
     if (presetSel) presetSel.addEventListener("change", function () {
       // Picking a temperament implies wanting to hear it.
@@ -2807,6 +2815,7 @@ if (typeof s.time_signature === "string" && s.time_signature.indexOf("/") > 0) {
         chk("reverse-enabled", tr.reverse_enabled);
         chk("transpose-echo", tr.echo_transpose);
         chk("velocity-echo", tr.echo_velocity);
+        chk("tuning-echo", tr.echo_tuning);
         var invModeSel = document.getElementById("invert-mode");
         if (invModeSel && tr.invert_mode && document.activeElement !== invModeSel) {
           invModeSel.value = tr.invert_mode;

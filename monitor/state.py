@@ -210,6 +210,9 @@ class State:
                                        # live on echoed note_ons; the band uses
                                        # the compressor's std/width, compress
                                        # mode rescales a rolling seen-window
+        self.echo_tuning = False       # Ver 96: tuning pre-bend ALSO runs live
+                                       # on echoed note_ons (opt-in like the
+                                       # other transform ops)
         self._echo_vel_hist = []       # rolling velocities for live compress
         # Microtonal tuning (Ver 96, mono): cents deviation per pitch class,
         # applied as a pitch pre-bend at strike time (echo note_ons + replay
@@ -368,14 +371,15 @@ class State:
 
     def set_echo_transform(self, which=None, enabled=None):
         """Opt a transform into the LIVE echo stream. which: "transpose" |
-        "snap" | "invert" | "velocity". Only per-note ops qualify (buffer ops
-        cannot)."""
-        if which not in ("transpose", "snap", "invert", "velocity") or enabled is None:
+        "snap" | "invert" | "velocity" | "tuning". Only per-note ops qualify
+        (buffer ops cannot)."""
+        if which not in ("transpose", "snap", "invert", "velocity", "tuning") or enabled is None:
             return
         attr = {"transpose": "echo_transpose",
                 "snap": "echo_snap",
                 "invert": "echo_invert",
-                "velocity": "echo_velocity"}[which]
+                "velocity": "echo_velocity",
+                "tuning": "echo_tuning"}[which]
         if attr == "echo_velocity" and enabled:
             self._echo_vel_hist = []   # fresh window for the newly-live comp
         setattr(self, attr, bool(enabled))
@@ -1678,6 +1682,7 @@ class State:
             "echo_snap": self.echo_snap,
             "echo_invert": self.echo_invert,
             "echo_velocity": self.echo_velocity,
+            "echo_tuning": self.echo_tuning,
             "tuning_enabled": self.tuning_enabled,
             "tuning_cents": list(self.tuning_cents),
             "tuning_preset": self.tuning_preset,
@@ -1780,6 +1785,7 @@ class State:
         self.echo_velocity = bool(settings.get("echo_velocity", False))
         if self.echo_velocity:
             self._echo_vel_hist = []
+        self.echo_tuning = bool(settings.get("echo_tuning", False))
         self.tuning_enabled = bool(settings.get("tuning_enabled", False))
         tp = settings.get("tuning_preset", "equal")
         self.tuning_preset = tp if tp in TUNING_PRESETS or tp == "custom" else "equal"
@@ -1935,6 +1941,7 @@ class State:
                 "echo_snap": self.echo_snap,
                 "echo_invert": self.echo_invert,
                 "echo_velocity": self.echo_velocity,
+                "echo_tuning": self.echo_tuning,
             },
             "tuning": {
                 "enabled": self.tuning_enabled,

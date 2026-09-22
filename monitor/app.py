@@ -144,8 +144,10 @@ def _run_capture(cap):
                 # stream (applied live to each keyed note_on's velocity).
                 vel = state.map_echo_velocity(event["velocity"])
                 # Ver 96 mono tuning: pre-bend the channel to this strike's
-                # detune (None when unchanged — skips the extra amidi hop).
-                bend = state.tuning_strike_bend(mapped, event.get("channel", 0))
+                # detune when the tuning op opts into echo (None when
+                # unchanged — skips the extra amidi hop).
+                bend = state.tuning_strike_bend(mapped, event.get("channel", 0)) \
+                    if state.echo_tuning else None
                 if bend is not None:
                     pitch_bend(bend, channel=event.get("channel", 0))
                 note_on(mapped, vel,
@@ -483,7 +485,7 @@ def api_transform():
                                                          or {"auto": bool}
                                                          or {"mode": "chromatic|diatonic"}
       {"op": "reverse", "enabled": bool}
-      {"op": "echo",    "which": "transpose|snap|invert|velocity", "enabled": bool}
+      {"op": "echo",    "which": "transpose|snap|invert|velocity|tuning", "enabled": bool}
     Setters requantize() where the take is affected (the echo opt-ins only
     switch the live echo path, so they skip the rebuild).
     """
@@ -517,13 +519,14 @@ def api_transform():
         return jsonify({"ok": True, "op": "reverse", "enabled": state.reverse_enabled})
     if op == "echo":
         which = body.get("which")
-        if which not in ("transpose", "snap", "invert", "velocity"):
-            return jsonify({"ok": False, "error": "which must be transpose|snap|invert|velocity"}), 400
+        if which not in ("transpose", "snap", "invert", "velocity", "tuning"):
+            return jsonify({"ok": False, "error": "which must be transpose|snap|invert|velocity|tuning"}), 400
         state.set_echo_transform(which=which, enabled=bool(body.get("enabled")))
         attr = {"transpose": "echo_transpose",
                 "snap": "echo_snap",
                 "invert": "echo_invert",
-                "velocity": "echo_velocity"}[which]
+                "velocity": "echo_velocity",
+                "tuning": "echo_tuning"}[which]
         return jsonify({"ok": True, "op": "echo", "which": which,
                         "enabled": getattr(state, attr)})
     return jsonify({"ok": False, "error": "op must be snap|invert|reverse|echo"}), 400
