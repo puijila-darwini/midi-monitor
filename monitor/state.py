@@ -57,6 +57,12 @@ TUNING_PRESETS = {
                     -3.9, 9.8],
     "meantone": [0.0, -24.0, -6.8, 10.3, -13.7, 3.4, -20.5, -3.4, 13.7,
                  -10.3, 6.8, -17.1],
+    # Arabic quartertone shapes (root-relative: index = semitones above the
+    # root, so pair with follow-tonic; unrooted they sound on C). Rast on C:
+    # E + B half-flat; Bayati shape: the 2nd degree half-flat (tonic D =
+    # Bayati proper, tonic C = Sikah flavour).
+    "rast": [0.0, 0.0, 0.0, 0.0, -50.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -50.0],
+    "bayati": [0.0, 0.0, -50.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
 }
 
 
@@ -229,6 +235,10 @@ class State:
         self.tuning_base = 440.0       # the board's OWN concert pitch (A4 Hz):
                                        # unreadable over MIDI, so hand-entered;
                                        # every Hz readout derives from it
+        self.tuning_tonic_root = False # follow the key card's tonic: the table
+                                       # is read root-relative (degree d above
+                                       # the tonic gets table[d]); off = the
+                                       # table sounds rooted on C
         self._tuning_last_bend = {}    # channel -> last sent bend (semis)
         # Press-time echo mapping (Ver 94 de-jank): note_on freezes the mapped
         # pitch SENT to the board so note_off releases exactly that pitch even
@@ -641,14 +651,17 @@ class State:
         return max(1, min(127, int(round(nv))))
 
     # -- Ver 96: microtonal tuning (mono) --------------------------------------
-    def set_tuning(self, enabled=None, cents=None, preset=None, master=None, base=None):
+    def set_tuning(self, enabled=None, cents=None, preset=None, master=None, base=None,
+                 tonic_root=None):
         """Set the microtonal tuning table: cents deviation per pitch class
         C..B, applied as a pitch pre-bend at strike time (echo note_ons +
         replay batches). A preset name loads its table; explicit cents (12
         numbers, clamped ±100) mark the table "custom"; master is a constant
         detune added to every pitch class (±50, mirrors the board's own
-        Tuning function for matching other instruments). No requantize — the
-        take's integer notes are untouched."""
+        Tuning function for matching other instruments); base is the board's
+        own concert pitch in Hz (400-480, display only); tonic_root voices
+        the table root-relative on the key card's tonic (off = rooted on C).
+        No requantize — the take's integer notes are untouched."""
         if enabled is not None:
             self.tuning_enabled = bool(enabled)
             if not self.tuning_enabled:
@@ -674,14 +687,27 @@ class State:
                 self.tuning_base = max(400.0, min(480.0, float(base)))
             except (TypeError, ValueError):
                 pass
+        if tonic_root is not None:
+            self.tuning_tonic_root = bool(tonic_root)
+
+    def _tuning_table_index(self, note):
+        """Table index for a MIDI note: root-relative degree when follow-tonic
+        is on and a tonic is declared, else the plain pitch class."""
+        try:
+            pc = int(note) % 12
+        except (TypeError, ValueError):
+            return 0
+        if self.tuning_tonic_root and self.key_tonic >= 0:
+            return (pc - self.key_tonic) % 12
+        return pc
 
     def tuning_cents_for(self, note):
-        """Effective cents deviation for a MIDI note: pitch-class table value
-        plus the master detune (0.0 when off)."""
+        """Effective cents deviation for a MIDI note: table value at the
+        (possibly root-relative) index plus the master detune (0.0 when off)."""
         if not self.tuning_enabled:
             return 0.0
         try:
-            return float(self.tuning_cents[int(note) % 12]) + self.tuning_master
+            return float(self.tuning_cents[self._tuning_table_index(note)]) + self.tuning_master
         except (TypeError, ValueError, IndexError):
             return 0.0
 
@@ -695,7 +721,7 @@ class State:
             return 0.0
         b = self.tuning_base if base is None else base
         try:
-            eff = float(self.tuning_cents[n % 12]) + float(self.tuning_master)
+            eff = float(self.tuning_cents[self._tuning_table_index(n)]) + float(self.tuning_master)
         except (TypeError, ValueError, IndexError):
             eff = 0.0
         return float(b) * 2.0 ** ((n - 69 + eff / 100.0) / 12.0)
@@ -1724,6 +1750,7 @@ class State:
             "tuning_preset": self.tuning_preset,
             "tuning_master": self.tuning_master,
             "tuning_base": self.tuning_base,
+            "tuning_tonic_root": self.tuning_tonic_root,
             "key_tonic": self.key_tonic,
             "key_scale": self.key_scale,
             "tempo_bpm": self.tempo_bpm,
@@ -1842,6 +1869,7 @@ class State:
             self.tuning_base = max(400.0, min(480.0, float(settings.get("tuning_base", 440.0))))
         except (TypeError, ValueError):
             self.tuning_base = 440.0
+        self.tuning_tonic_root = bool(settings.get("tuning_tonic_root", False))
         if not self.tuning_enabled:
             self._tuning_last_bend = {}
         try:
@@ -1995,6 +2023,7 @@ class State:
                 "preset": self.tuning_preset,
                 "master": self.tuning_master,
                 "base": self.tuning_base,
+                "tonic_root": self.tuning_tonic_root,
                 "a4_hz": round(self.tuning_hz(69), 2),
             },
             "scale": {"tonic": self.key_tonic, "scale": self.key_scale},

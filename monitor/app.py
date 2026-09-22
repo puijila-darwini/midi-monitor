@@ -395,13 +395,15 @@ def api_velocity():
 def api_tuning():
     """Ver 96 mono microtonal tuning. GET returns the table; POST body (any of):
       {"enabled": bool}                 -> retune on/off (off re-centers bend)
-      {"preset": "equal|just|pythagorean|meantone"}
+      {"preset": "equal|just|pythagorean|meantone|rast|bayati"}
       {"cents": [12 numbers ±100]}      -> custom table (marks preset "custom")
       {"master": cents ±50}             -> constant detune on every pitch
                                            class (mirrors the board's Tuning)
       {"base": Hz 400-480}              -> the board's OWN concert pitch
                                            (unreadable over MIDI); every Hz
                                            readout derives from it
+      {"tonic_root": bool}              -> voice the table root-relative on
+                                           the key card's tonic (off: on C)
     The table rides on every echoed note_on + replay strike as a pre-bend.
     """
     if request.method == "GET":
@@ -410,12 +412,13 @@ def api_tuning():
                         "preset": state.tuning_preset,
                         "master": state.tuning_master,
                         "base": state.tuning_base,
+                        "tonic_root": state.tuning_tonic_root,
                         "a4_hz": round(state.tuning_hz(69), 2)})
     body = request.get_json(silent=True) or {}
     if "preset" in body and body.get("preset") not in (
-            "equal", "just", "pythagorean", "meantone"):
+            "equal", "just", "pythagorean", "meantone", "rast", "bayati"):
         return jsonify({"ok": False,
-                        "error": "preset must be equal|just|pythagorean|meantone"}), 400
+                        "error": "preset must be equal|just|pythagorean|meantone|rast|bayati"}), 400
     if "cents" in body:
         try:
             vals = [float(c) for c in body.get("cents")]
@@ -444,7 +447,8 @@ def api_tuning():
                      cents=body.get("cents", None),
                      preset=body.get("preset", None),
                      master=body.get("master", None),
-                     base=body.get("base", None))
+                     base=body.get("base", None),
+                     tonic_root=body.get("tonic_root", None))
     if not state.tuning_enabled:
         # Leave no detune behind on the board.
         try:
@@ -456,6 +460,7 @@ def api_tuning():
                     "preset": state.tuning_preset,
                     "master": state.tuning_master,
                     "base": state.tuning_base,
+                    "tonic_root": state.tuning_tonic_root,
                     "a4_hz": round(state.tuning_hz(69), 2)})
 
 

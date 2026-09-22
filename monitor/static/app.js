@@ -2431,10 +2431,24 @@ case "replay":
     }
     if (!enabledChk && !presetSel && !cells[0]) return;
 
+    // Root-relative mirror of state._tuning_table_index: with the tonic box
+    // checked and a tonic declared, sounding pc p reads table[(p-tonic)%12].
+    function tableIndex(pc) {
+      var rc = document.getElementById("tuning-tonic");
+      var ton = document.getElementById("key-tonic");
+      var tp = ton ? parseInt(ton.value, 10) : NaN;
+      if (rc && rc.checked && !isNaN(tp) && tp >= 0) {
+        return (((pc - tp) % 12) + 12) % 12;
+      }
+      return ((pc % 12) + 12) % 12;
+    }
     function effCents(i) {
       var c = cells[i] ? parseFloat(cells[i].value) : NaN;
       var m = masterInput ? parseFloat(masterInput.value) : NaN;
       return (isNaN(c) ? 0 : c) + (isNaN(m) ? 0 : m);
+    }
+    function effCentsForPc(pc) {
+      return effCents(tableIndex(pc));
     }
     // Hz readout: A4 badge + per-cell tooltips for the C4 octave, derived
     // from the board pitch (hand-entered — its tune is unreadable).
@@ -2445,11 +2459,11 @@ case "replay":
     }
     function updateTuneHz(a4) {
       var a4el = document.getElementById("tuning-a4");
-      var a4v = (typeof a4 === "number") ? a4 : baseHz() * Math.pow(2, effCents(9) / 1200);
+      var a4v = (typeof a4 === "number") ? a4 : baseHz() * Math.pow(2, effCentsForPc(9) / 1200);
       if (a4el) a4el.textContent = "A4 " + a4v.toFixed(1) + " Hz";
       for (var i = 0; i < 12; i++) {
         if (!cells[i] || !cells[i].parentElement) continue;
-        var hz = baseHz() * Math.pow(2, ((60 + i - 69) + effCents(i) / 100) / 12);
+        var hz = baseHz() * Math.pow(2, ((60 + i - 69) + effCentsForPc(60 + i) / 100) / 12);
         cells[i].parentElement.title = NAMES[i] + "4 " + hz.toFixed(2) + " Hz";
       }
     }
@@ -2490,6 +2504,9 @@ case "replay":
                 document.activeElement !== baseInput) {
               baseInput.value = String(res.base);
             }
+            if (typeof res.tonic_root === "boolean" && tonicChk) {
+              tonicChk.checked = res.tonic_root;
+            }
             updateTuneHz(res.a4_hz);
           }
         })
@@ -2505,6 +2522,10 @@ case "replay":
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ op: "echo", which: "tuning", enabled: echoChk.checked })
       }).catch(function () { /* ignore transient */ });
+    });
+    var tonicChk = document.getElementById("tuning-tonic");
+    if (tonicChk) tonicChk.addEventListener("change", function () {
+      apply({ tonic_root: tonicChk.checked });
     });
     if (presetSel) presetSel.addEventListener("change", function () {
       // Picking a temperament implies wanting to hear it.
@@ -2844,6 +2865,10 @@ if (typeof s.time_signature === "string" && s.time_signature.indexOf("/") > 0) {
           if (tbse && typeof s.tuning.base === "number" &&
               document.activeElement !== tbse) {
             tbse.value = String(s.tuning.base);
+          }
+          var trot = document.getElementById("tuning-tonic");
+          if (trot && document.activeElement !== trot) {
+            trot.checked = !!s.tuning.tonic_root;
           }
           if (window.__tuneHz) window.__tuneHz(s.tuning.a4_hz);
         }

@@ -1563,3 +1563,11 @@ Ver 96 (board pitch input): the keyboard's own concert pitch is now an input
   (A4 badge, per-cell C4 tooltips) derives from it instead of assuming 440.
   state.tuning_base flows through set_tuning/settings/snapshot/api (validated
   400-480). Verified: 44/44 suite, API (base 442 -> a4 442.0, 300 rejected).
+
+Ver 96 (tonic root + maqam): tuning card gains a tonic checkbox — the table
+  is voiced root-relative on the key card's tonic (degree d above tonic gets
+  table[d]; off = rooted on C; follows tonic changes live, no requantize) —
+  plus Rast (E/B half-flat) and Bayati (2nd-degree half-flat; tonic D = Bayati
+  proper) presets, stored as root-relative shapes. JS tableIndex mirrors
+  _tuning_table_index (96/96 grid identical). Verified: 54/54 suite, API
+  (rast load + tonic_root round-trip).
