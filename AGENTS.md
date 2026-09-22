@@ -93,7 +93,15 @@ folded into a single web app package in `monitor/`:
   state.tuning_cents/TUNING_PRESETS equal/just/pythagorean/meantone; pre-bend
   at strike time on echo via tuning_strike_bend skip-if-unchanged + on
   replay/arrange batches via Replay(play tuning=fn), bass detune wins chords,
-  raw-path only; integer take untouched, persists in settings).
+  raw-path only; integer take untouched, persists in settings). PATH: card
+  cells/preset select -> POST /api/tuning -> state.tuning_cents -> strike
+  time: echo note_ons need retune AND the echo opt-in (state.echo_tuning),
+  replay/arrange need retune alone; both send pitch_bend(cents/100) on the
+  strike channel just before note_on via amidi raw (skip-if-unchanged, bend
+  re-centers at phrase end / on disable). Live-verified with the all-+100c
+  honky-tonk demo. OPEN ASSUMPTION: the ±24 bend divisor is unmeasured — if
+  the board is really ±2, detunes land 12x small (slider still pins max);
+  settle with the +2-vs-+12 ear test.
 - `monitor/app.py`      - Flask on :5050. Routes: `/`, `/events` (SSE),
                           `/api/state`. Background capture thread -> hub pub/sub.
                           Replay entry points (/api/replay, /api/replay/loop,

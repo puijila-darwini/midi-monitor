@@ -1521,3 +1521,13 @@ Ver 96: mono microtonal tuning (new tuning op: retune checkbox + preset +
 Ver 96 fix: picking a tuning preset now auto-enables retune — diagnosed live
   (/api/state showed enabled:true + all-zero equal table, which correctly
   bends nothing). No send-path bug; static-only change, no restart.
+
+Ver 96 (echo opt-in): tuning follows the house pattern — retune drives replay/
+  arrange, a new echo checkbox (echo_tuning, in transform/settings/snapshot)
+  opts the live stream in. Verified live with the user: all-pcs-+100¢ demo
+  produced the expected honky-tonk (audible detune on echo) — the earlier
+  "nothing changes" was an all-zero table + uncommitted cell edits, not the
+  send path. OPEN: the ±24 bend-range divisor is still an unmeasured
+  assumption (if the board is really ±2, detunes land 12x small but the
+  slider still pins max — matches all observations so far); needs the +2 vs
+  +12 ear test to nail down.
