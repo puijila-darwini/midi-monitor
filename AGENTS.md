@@ -110,7 +110,8 @@ folded into a single web app package in `monitor/`:
   Bayati quartertone presets stored as root-relative shapes (JS tableIndex
   mirrors _tuning_table_index 96/96). Stuck-note hardening: capture._parse_line
   normalizes vel-0 note_on to note_off; echo_hold is idempotent per raw key
-  (re-press re-sounds the frozen pitch, no double holder).
+  (re-press re-sounds the frozen pitch, no double holder). Saba + Segah join
+  Rast/Bayati; the card re-voices on tonic-change events (not just the box).
 - `monitor/app.py`      - Flask on :5050. Routes: `/`, `/events` (SSE),
                           `/api/state`. Background capture thread -> hub pub/sub.
                           Replay entry points (/api/replay, /api/replay/loop,
