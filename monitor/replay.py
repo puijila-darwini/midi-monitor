@@ -259,13 +259,17 @@ class Replay:
         except Exception:
             pass
 
-    def play(self, quantized_notes, speed=1.0, on_event=None, voice=None, loop=False):
+    def play(self, quantized_notes, speed=1.0, on_event=None, voice=None, loop=False,
+             tuning=None):
         """Start playback on a background thread. Returns True if started.
 
         on_event receives dicts ({type:'replay', phase: ..., ...}) as progress
         is made (start/step/done/stopped/error); it may be the SSE hub publish.
         voice: (bank, pc) program change to send before playback; None = skip.
         loop: if True, replay the pattern continuously until stop() is called.
+        tuning: callable(note)->cents (or None) for Ver 96 mono microtonal
+        playback — a pitch pre-bend is sent to the keyboard before each
+        strike batch (bass note's detune; chords share one channel).
         Raises nothing; playback errors are reported via on_event instead.
         """
         if self.active:
@@ -277,12 +281,12 @@ class Replay:
         # or quantized note dicts, and plan accordingly.
         raw = bool(quantized_notes and isinstance(quantized_notes[0], dict) and "type" in quantized_notes[0])
         self._thread = threading.Thread(
-            target=self._run, args=(list(quantized_notes), float(speed), on_event, raw, voice),
+            target=self._run, args=(list(quantized_notes), float(speed), on_event, raw, voice, tuning),
             name="replay", daemon=True)
         self._thread.start()
         return True
 
-    def _run(self, notes, speed, on_event, raw, voice=None):
+    def _run(self, notes, speed, on_event, raw, voice=None, tuning=None):
         def emit(phase, **kw):
             if on_event is not None:
                 try:
@@ -298,6 +302,19 @@ class Replay:
                 self._last_error = exc
                 emit("error", message="seq out failed: %s: %s" % (type(exc).__name__, exc))
                 return
+
+        # Ver 96 mono tuning: bend state for this run (keyboard raw path
+        # only — seq targets like VCV get the unbent notes).
+        tune_last = 0.0
+
+        def tune_reset():
+            nonlocal tune_last
+            if tune_last != 0.0 and self.raw_devices:
+                try:
+                    pitch_bend(0.0, channel=self.channel)
+                except Exception:
+                    pass
+                tune_last = 0.0
 
         while True:
             try:
@@ -330,6 +347,7 @@ class Replay:
                             break
                         if self._stop.wait(wait):
                             self._all_off(seq)
+                            tune_reset()
                             emit("stopped", elapsed=round(time.monotonic() - base, 2))
                             if seq is not None:
                                 seq.close()
@@ -354,6 +372,19 @@ class Replay:
                             program_change(bank, pc)
                         emit("voice", bank=bank, pc=pc)
                         continue
+                    if kind == "on" and tuning is not None and self.raw_devices and batch:
+                        # Mono pre-bend: the chord shares one channel, so the
+                        # bass note's detune wins (documented mono caveat).
+                        try:
+                            semis = float(tuning(min(n for n, _ in batch))) / 100.0
+                        except (TypeError, ValueError):
+                            semis = 0.0
+                        if abs(semis - tune_last) > 0.005:
+                            try:
+                                pitch_bend(semis, channel=self.channel)
+                            except Exception:
+                                pass
+                            tune_last = semis
                     self._send_batch(seq, kind, batch)
                     if kind == "on":
                         # t = seconds since this pass's first onset (resets each
@@ -361,6 +392,7 @@ class Replay:
                         emit("step", notes=[n for n, _ in batch],
                              t=round(rel_t, 4))
                 self._all_off(seq)
+                tune_reset()
                 emit("done", duration=round(duration, 3))
                 if not self._loop:
                     if seq is not None:
@@ -374,6 +406,7 @@ class Replay:
                     self._all_off(seq)
                 except Exception:
                     pass
+                tune_reset()
                 emit("error", message="%s: %s" % (type(exc).__name__, exc))
                 if seq is not None:
                     seq.close()

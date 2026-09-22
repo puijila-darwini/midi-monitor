@@ -303,6 +303,26 @@
               </div>
             </div>
 
+            <div class="op op-tune">
+              <div class="op-head"><span class="op-title">tuning</span></div>
+              <div class="op-body">
+                <label class="tune-enable"><input type="checkbox" id="tuning-enabled"
+                       title="Retune the keyboard away from 12-TET: every echoed note and replay strike is pre-bent to its pitch-class offset (MONO — one shared bend channel; a chord takes the bass note's detune)"><span>retune</span></label>
+                <label class="tune-preset-label"><span>preset</span>
+                  <select id="tuning-preset" title="Equal = 12-TET (all zero); just = 5-limit just intonation; pythagorean = stacked pure fifths; meantone = quarter-comma (wolf C# at -24c is authentic)">
+                    <option value="equal" selected>equal</option>
+                    <option value="just">just</option>
+                    <option value="pythagorean">pythagorean</option>
+                    <option value="meantone">meantone</option>
+                    <option value="custom">custom</option>
+                  </select>
+                </label>
+                <div class="tune-cents" title="Cents deviation per pitch class (±100)">
+                  <label>C<input type="number" id="tuning-c0" class="vel-input" min="-100" max="100" step="0.1" value="0"></label><label>C#<input type="number" id="tuning-c1" class="vel-input" min="-100" max="100" step="0.1" value="0"></label><label>D<input type="number" id="tuning-c2" class="vel-input" min="-100" max="100" step="0.1" value="0"></label><label>Eb<input type="number" id="tuning-c3" class="vel-input" min="-100" max="100" step="0.1" value="0"></label><label>E<input type="number" id="tuning-c4" class="vel-input" min="-100" max="100" step="0.1" value="0"></label><label>F<input type="number" id="tuning-c5" class="vel-input" min="-100" max="100" step="0.1" value="0"></label><label>F#<input type="number" id="tuning-c6" class="vel-input" min="-100" max="100" step="0.1" value="0"></label><label>G<input type="number" id="tuning-c7" class="vel-input" min="-100" max="100" step="0.1" value="0"></label><label>Ab<input type="number" id="tuning-c8" class="vel-input" min="-100" max="100" step="0.1" value="0"></label><label>A<input type="number" id="tuning-c9" class="vel-input" min="-100" max="100" step="0.1" value="0"></label><label>Bb<input type="number" id="tuning-c10" class="vel-input" min="-100" max="100" step="0.1" value="0"></label><label>B<input type="number" id="tuning-c11" class="vel-input" min="-100" max="100" step="0.1" value="0"></label>
+                </div>
+              </div>
+            </div>
+
             <div class="op op-humanize">
               <div class="op-head"><span class="op-title">humanize</span></div>
               <div class="op-body">

@@ -89,6 +89,11 @@ folded into a single web app package in `monitor/`:
   diatonic mode (state.invert_mode; diatonic reflects ON the scale ladder so
   results stay in-key, needs tonic·scale else chromatic fallback; JS
   invertPitch mirrors _invert_pitch — cross-validated 20740/20740).
+  Ver 96: mono microtonal tuning op (retune + preset + 12 cents cells;
+  state.tuning_cents/TUNING_PRESETS equal/just/pythagorean/meantone; pre-bend
+  at strike time on echo via tuning_strike_bend skip-if-unchanged + on
+  replay/arrange batches via Replay(play tuning=fn), bass detune wins chords,
+  raw-path only; integer take untouched, persists in settings).
 - `monitor/app.py`      - Flask on :5050. Routes: `/`, `/events` (SSE),
                           `/api/state`. Background capture thread -> hub pub/sub.
                           Replay entry points (/api/replay, /api/replay/loop,

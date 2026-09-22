@@ -143,6 +143,11 @@ def _run_capture(cap):
                 # Ver 95: the velocity compressor can also run on the echo
                 # stream (applied live to each keyed note_on's velocity).
                 vel = state.map_echo_velocity(event["velocity"])
+                # Ver 96 mono tuning: pre-bend the channel to this strike's
+                # detune (None when unchanged — skips the extra amidi hop).
+                bend = state.tuning_strike_bend(mapped, event.get("channel", 0))
+                if bend is not None:
+                    pitch_bend(bend, channel=event.get("channel", 0))
                 note_on(mapped, vel,
                         channel=event.get("channel", 0))
             analyser.on_note(t, event["note"])
@@ -381,6 +386,45 @@ def api_velocity():
         "enabled": state.velocity_enabled,
         "detected": state.compute_velocity_stats(),
     })
+
+
+@app.route("/api/tuning", methods=["GET", "POST"])
+def api_tuning():
+    """Ver 96 mono microtonal tuning. GET returns the table; POST body (any of):
+      {"enabled": bool}                 -> retune on/off (off re-centers bend)
+      {"preset": "equal|just|pythagorean|meantone"}
+      {"cents": [12 numbers ±100]}      -> custom table (marks preset "custom")
+    The table rides on every echoed note_on + replay strike as a pre-bend.
+    """
+    if request.method == "GET":
+        return jsonify({"ok": True, "enabled": state.tuning_enabled,
+                        "cents": list(state.tuning_cents),
+                        "preset": state.tuning_preset})
+    body = request.get_json(silent=True) or {}
+    if "preset" in body and body.get("preset") not in (
+            "equal", "just", "pythagorean", "meantone"):
+        return jsonify({"ok": False,
+                        "error": "preset must be equal|just|pythagorean|meantone"}), 400
+    if "cents" in body:
+        try:
+            vals = [float(c) for c in body.get("cents")]
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "cents must be 12 numbers"}), 400
+        if len(vals) != 12 or any(abs(v) > 100 for v in vals):
+            return jsonify({"ok": False,
+                            "error": "cents must be 12 numbers within ±100"}), 400
+    state.set_tuning(enabled=body.get("enabled", None),
+                     cents=body.get("cents", None),
+                     preset=body.get("preset", None))
+    if not state.tuning_enabled:
+        # Leave no detune behind on the board.
+        try:
+            pitch_bend(0.0, channel=state.midi_channel)
+        except Exception:
+            pass
+    return jsonify({"ok": True, "enabled": state.tuning_enabled,
+                    "cents": list(state.tuning_cents),
+                    "preset": state.tuning_preset})
 
 
 @app.route("/api/humanizer", methods=["POST"])
@@ -831,7 +875,10 @@ def _play_events(events, body, loop, extra=None):
     if voice is not None:
         state.receive_program = voice[1]
         state.receive_bank = voice[0]
-    replayer.play(events, speed=speed, on_event=hub.publish, voice=voice, loop=loop)
+    # Ver 96 mono tuning: the replayer pre-bends each strike batch when on.
+    tuning_fn = state.tuning_cents_for if state.tuning_enabled else None
+    replayer.play(events, speed=speed, on_event=hub.publish, voice=voice, loop=loop,
+                  tuning=tuning_fn)
     count = sum(1 for e in events if e.get("type") == "note_on")
     resp = {"ok": True, "notes": count, "speed": speed,
             "voice": body.get("voice", "auto"), "loop": loop}
@@ -1149,8 +1196,9 @@ def api_arrange_play():
         except Exception:
             pass
 
+    tuning_fn = state.tuning_cents_for if state.tuning_enabled else None
     replayer.play(built["events"], speed=1.0, on_event=on_event,
-                  voice=None, loop=loop)
+                  voice=None, loop=loop, tuning=tuning_fn)
     hub.publish({"type": "arrange", "action": "play", "slots": built["slots"],
                  "bars": built["total_bars"], "time": time.time()})
     return jsonify({"ok": True, "slots": built["slots"],

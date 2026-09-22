@@ -1500,3 +1500,20 @@ Ver 95: velocity compressor joins the echo stream (new echo opt-in on the
   impossible; API round-trip (mode diatonic/chromatic, echo velocity
   on/off, bad-which 400, defaults restored); node --check + py_compile
   clean; server restarted (stale pid 2450031 reaped).
+
+Ver 96: mono microtonal tuning (new tuning op: retune checkbox + preset +
+  12 cents cells). Cents-per-pitch-class table (TUNING_PRESETS: equal, 5-limit
+  just, pythagorean, quarter-comma meantone with the authentic wolf C# -24c)
+  applied as a pitch pre-bend at strike time — echoed note_ons (skip-if-
+  unchanged via tuning_strike_bend, no extra amidi hop on repeats) + replay/
+  arrange strikes (bass note's detune wins in a chord; keyboard raw path only,
+  seq targets stay unbent; bend re-centers at phrase end and on disable).
+  Take/notation/patterns keep integer notes (performance layer, no requantize);
+  table persists via settings_snapshot. Correction logged: the wheel is NOT
+  forwarded by the live loop (pitch_bend branch is record + SSE only) — the
+  bend heard with local ON is the board's own voice; but the out·ctrl slider
+  bends echoed RX notes, which is the mechanism this uses.
+  Verified: 28 unit checks (presets, clamp/custom, strike skip + channel
+  independence, snapshot round-trip, replay bend sequence with monkeypatched
+  pitch_bend, untuned silence); API round-trip (GET, preset load, state carry,
+  bad-preset/cents 400s, disable); node --check + py_compile clean; restarted.

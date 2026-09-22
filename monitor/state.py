@@ -43,6 +43,21 @@ SCALE_SEMIS = {
     "neapolitan_minor": [0, 1, 3, 5, 7, 8, 11],
 }
 
+# Microtonal tuning presets (Ver 96, mono): cents deviation per pitch class
+# C..B, applied as a per-strike pitch pre-bend (echo + replay, one channel).
+# equal = 12-TET (all zero); just = 5-limit just intonation; pythagorean =
+# stacked pure fifths; meantone = quarter-comma (note the wolf C# at -24c —
+# authentic, not a typo).
+TUNING_PRESETS = {
+    "equal": [0.0] * 12,
+    "just": [0.0, 11.7, 3.9, 15.6, -13.7, -2.0, -9.8, 2.0, 13.7, -15.6,
+             17.6, -11.7],
+    "pythagorean": [0.0, 13.7, 3.9, -5.9, 7.8, -2.0, 11.7, 2.0, -7.8, 5.9,
+                    -3.9, 9.8],
+    "meantone": [0.0, -24.0, -6.8, 10.3, -13.7, 3.4, -20.5, -3.4, 13.7,
+                 -10.3, 6.8, -17.1],
+}
+
 
 class State:
     """Tracks the current picture of what is being played.
@@ -196,6 +211,14 @@ class State:
                                        # the compressor's std/width, compress
                                        # mode rescales a rolling seen-window
         self._echo_vel_hist = []       # rolling velocities for live compress
+        # Microtonal tuning (Ver 96, mono): cents deviation per pitch class,
+        # applied as a pitch pre-bend at strike time (echo note_ons + replay
+        # batches, one shared channel). Integer notes everywhere else stay
+        # 12-TET, so this needs no requantize — it is a performance layer.
+        self.tuning_enabled = False
+        self.tuning_cents = [0.0] * 12
+        self.tuning_preset = "equal"
+        self._tuning_last_bend = {}    # channel -> last sent bend (semis)
         # Press-time echo mapping (Ver 94 de-jank): note_on freezes the mapped
         # pitch SENT to the board so note_off releases exactly that pitch even
         # when the transforms change mid-hold. echo_holders refcounts per
@@ -604,6 +627,54 @@ class State:
         scale = (hi - lo) / (mx - mn)
         nv = lo + (v - mn) * scale
         return max(1, min(127, int(round(nv))))
+
+    # -- Ver 96: microtonal tuning (mono) --------------------------------------
+    def set_tuning(self, enabled=None, cents=None, preset=None):
+        """Set the microtonal tuning table: cents deviation per pitch class
+        C..B, applied as a pitch pre-bend at strike time (echo note_ons +
+        replay batches). A preset name loads its table; explicit cents (12
+        numbers, clamped ±100) mark the table "custom". No requantize — the
+        take's integer notes are untouched."""
+        if enabled is not None:
+            self.tuning_enabled = bool(enabled)
+            if not self.tuning_enabled:
+                self._tuning_last_bend = {}
+        if preset in TUNING_PRESETS:
+            self.tuning_preset = preset
+            self.tuning_cents = list(TUNING_PRESETS[preset])
+        if cents is not None:
+            try:
+                vals = [max(-100.0, min(100.0, float(c))) for c in cents]
+            except (TypeError, ValueError):
+                return
+            if len(vals) == 12:
+                self.tuning_cents = vals
+                self.tuning_preset = "custom"
+
+    def tuning_cents_for(self, note):
+        """Cents deviation for a MIDI note's pitch class (0.0 when off)."""
+        if not self.tuning_enabled:
+            return 0.0
+        try:
+            return float(self.tuning_cents[int(note) % 12])
+        except (TypeError, ValueError, IndexError):
+            return 0.0
+
+    def tuning_strike_bend(self, note, channel=0):
+        """Bend (semitones) to send BEFORE striking `note`, or None when the
+        channel already carries it. Skips the redundant amidi round-trip when
+        the same detune repeats (fast repeated notes, unbent pcs)."""
+        if not self.tuning_enabled:
+            return None
+        try:
+            ch = int(channel) & 0x0F
+        except (TypeError, ValueError):
+            ch = 0
+        semis = self.tuning_cents_for(note) / 100.0
+        if abs(semis - self._tuning_last_bend.get(ch, 0.0)) <= 0.005:
+            return None
+        self._tuning_last_bend[ch] = semis
+        return semis
 
     def _apply_articulation(self, notes):
         """Quantized-take post-pass: no monophonic line may ring into the next
@@ -1607,6 +1678,9 @@ class State:
             "echo_snap": self.echo_snap,
             "echo_invert": self.echo_invert,
             "echo_velocity": self.echo_velocity,
+            "tuning_enabled": self.tuning_enabled,
+            "tuning_cents": list(self.tuning_cents),
+            "tuning_preset": self.tuning_preset,
             "key_tonic": self.key_tonic,
             "key_scale": self.key_scale,
             "tempo_bpm": self.tempo_bpm,
@@ -1706,6 +1780,18 @@ class State:
         self.echo_velocity = bool(settings.get("echo_velocity", False))
         if self.echo_velocity:
             self._echo_vel_hist = []
+        self.tuning_enabled = bool(settings.get("tuning_enabled", False))
+        tp = settings.get("tuning_preset", "equal")
+        self.tuning_preset = tp if tp in TUNING_PRESETS or tp == "custom" else "equal"
+        tc = settings.get("tuning_cents", None)
+        try:
+            vals = [max(-100.0, min(100.0, float(c))) for c in tc] if tc is not None else None
+        except (TypeError, ValueError):
+            vals = None
+        self.tuning_cents = vals if vals is not None and len(vals) == 12 else list(
+            TUNING_PRESETS.get(self.tuning_preset, TUNING_PRESETS["equal"]))
+        if not self.tuning_enabled:
+            self._tuning_last_bend = {}
         try:
             kt = int(settings.get("key_tonic", -1))
             self.key_tonic = max(-1, min(11, kt))
@@ -1849,6 +1935,11 @@ class State:
                 "echo_snap": self.echo_snap,
                 "echo_invert": self.echo_invert,
                 "echo_velocity": self.echo_velocity,
+            },
+            "tuning": {
+                "enabled": self.tuning_enabled,
+                "cents": list(self.tuning_cents),
+                "preset": self.tuning_preset,
             },
             "scale": {"tonic": self.key_tonic, "scale": self.key_scale},
             "received_ctrl": dict(self.received_ctrl),

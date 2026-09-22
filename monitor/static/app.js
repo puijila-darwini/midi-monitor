@@ -2415,6 +2415,63 @@ case "replay":
     if (enabledChk) enabledChk.addEventListener("change", apply);
   })();
 
+  // Ver 96 mono microtonal tuning: cents-per-pitch-class table + preset.
+  // Retunes the board away from 12-TET via pre-bend on echoed notes and
+  // replay strikes (one shared channel — chords take the bass detune).
+  (function () {
+    var enabledChk = document.getElementById("tuning-enabled");
+    var presetSel = document.getElementById("tuning-preset");
+    var cells = [];
+    for (var i = 0; i < 12; i++) {
+      cells.push(document.getElementById("tuning-c" + i));
+    }
+    if (!enabledChk && !presetSel && !cells[0]) return;
+
+    function readCells() {
+      var out = [];
+      for (var i = 0; i < 12; i++) {
+        var v = cells[i] ? parseFloat(cells[i].value) : NaN;
+        out.push(isNaN(v) ? 0 : Math.max(-100, Math.min(100, v)));
+      }
+      return out;
+    }
+    function apply(body) {
+      fetch("/api/tuning", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      }).then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (res && res.ok) {
+            if (typeof res.enabled === "boolean" && enabledChk) {
+              enabledChk.checked = res.enabled;
+            }
+            if (res.preset && presetSel) presetSel.value = res.preset;
+            if (res.cents && res.cents.length === 12) {
+              for (var i = 0; i < 12; i++) {
+                if (cells[i] && document.activeElement !== cells[i]) {
+                  cells[i].value = String(res.cents[i]);
+                }
+              }
+            }
+          }
+        })
+        .catch(function () { /* ignore transient */ });
+    }
+
+    if (enabledChk) enabledChk.addEventListener("change", function () {
+      apply({ enabled: enabledChk.checked });
+    });
+    if (presetSel) presetSel.addEventListener("change", function () {
+      apply({ preset: presetSel.value });
+    });
+    cells.forEach(function (el) {
+      if (el) el.addEventListener("change", function () {
+        apply({ cents: readCells() });
+      });
+    });
+  })();
+
   // Humanizer stage: subtle timing and velocity variation applied at the
   // very end of the transform chain (to the final OUT MIDI events).
   (function () {
@@ -2702,6 +2759,23 @@ if (typeof s.time_signature === "string" && s.time_signature.indexOf("/") > 0) {
           // We assume it's always enabled for UI purposes; the control set enables/disables it
           // but we keep UI showing it as enabled so user can adjust parameters
           // (disabled state is handled by the backend; UI always allows tweaking)
+        }
+        // Ver 96: sync the microtonal tuning table (pattern loads restore it).
+        if (s.tuning) {
+          var ten = document.getElementById("tuning-enabled");
+          if (ten && document.activeElement !== ten) ten.checked = !!s.tuning.enabled;
+          var tpre = document.getElementById("tuning-preset");
+          if (tpre && s.tuning.preset && document.activeElement !== tpre) {
+            tpre.value = s.tuning.preset;
+          }
+          if (s.tuning.cents && s.tuning.cents.length === 12) {
+            for (var ci = 0; ci < 12; ci++) {
+              var cell = document.getElementById("tuning-c" + ci);
+              if (cell && document.activeElement !== cell) {
+                cell.value = String(s.tuning.cents[ci]);
+              }
+            }
+          }
         }
         // Sync humanizer settings from backend state
         if (typeof s.humanizer_enabled === "boolean") {
