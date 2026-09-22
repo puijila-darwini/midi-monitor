@@ -105,7 +105,10 @@ folded into a single web app package in `monitor/`:
   (state.tuning_master ±50c, mirrors the board Tuning: manual 427-453 Hz) adds
   to every pc at strike time; A4 Hz badge + per-cell C4 Hz tooltips derive from
   the hand-entered board pitch (state.tuning_base, default 440 — the board's
-  own tune is unreadable over MIDI).
+  own tune is unreadable over MIDI). Tonic checkbox voices the table
+  root-relative on the key tonic (degree d above tonic -> table[d]); Rast +
+  Bayati quartertone presets stored as root-relative shapes (JS tableIndex
+  mirrors _tuning_table_index 96/96).
 - `monitor/app.py`      - Flask on :5050. Routes: `/`, `/events` (SSE),
                           `/api/state`. Background capture thread -> hub pub/sub.
                           Replay entry points (/api/replay, /api/replay/loop,
