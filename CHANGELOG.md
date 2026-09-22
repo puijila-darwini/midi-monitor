@@ -1517,3 +1517,7 @@ Ver 96: mono microtonal tuning (new tuning op: retune checkbox + preset +
   independence, snapshot round-trip, replay bend sequence with monkeypatched
   pitch_bend, untuned silence); API round-trip (GET, preset load, state carry,
   bad-preset/cents 400s, disable); node --check + py_compile clean; restarted.
+
+Ver 96 fix: picking a tuning preset now auto-enables retune — diagnosed live
+  (/api/state showed enabled:true + all-zero equal table, which correctly
+  bends nothing). No send-path bug; static-only change, no restart.
