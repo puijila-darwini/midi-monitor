@@ -65,10 +65,10 @@ folded into a single web app package in `monitor/`:
   refreshState treats backend pivot 48 as "un-custom", anything else as
   deliberate); reverse replays the take tail-first (mirrored timeline,
   durations kept). The LIVE-CAPABLE
-  ops (transpose/snap/invert) each have an "echo" opt-in that applies them to
-  the live echo stream too (state.echo_transform, a pure per-note map so
-  note_off mirrors exactly); quantize/velocity/humanize/reverse are buffer
-  ops and cannot. /api/transform + /api/scale are the setters (requantize on
+  ops (transpose/snap/invert + velocity touch) each have an "echo" opt-in that
+  applies them to the live echo stream too (state.echo_transform, a pure
+  per-note map so note_off mirrors exactly, plus map_echo_velocity on each
+  echoed note_on); quantize/humanize/reverse are buffer ops and cannot. /api/transform + /api/scale are the setters (requantize on
   change); both /api/state and settings_snapshot carry the new fields.
   Ver 94: echo is STABLE under mid-hold changes — the press-time mapping is
   frozen (state.echo_hold/release/release_all, per-mapped-note refcount for
@@ -83,6 +83,12 @@ folded into a single web app package in `monitor/`:
   red-strips out-of-scale keys and shows the landing note above the
   struck-through played name. TONAL FIX: _snap_pitch builds pcs as
   (s + tonic) % 12 (subtraction was wrong for every non-zero tonic).
+  Ver 95: velocity joins the echo opt-ins (echo_velocity flag, live threshold
+  clip / compress-rescale via state.map_echo_velocity on each echoed note_on;
+  quantize/humanize/reverse stay buffer-only); invert gains a chromatic /
+  diatonic mode (state.invert_mode; diatonic reflects ON the scale ladder so
+  results stay in-key, needs tonic·scale else chromatic fallback; JS
+  invertPitch mirrors _invert_pitch — cross-validated 20740/20740).
 - `monitor/app.py`      - Flask on :5050. Routes: `/`, `/events` (SSE),
                           `/api/state`. Background capture thread -> hub pub/sub.
                           Replay entry points (/api/replay, /api/replay/loop,

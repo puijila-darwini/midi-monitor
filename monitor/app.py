@@ -140,7 +140,10 @@ def _run_capture(cap):
                 # release a different pitch (stuck-note jank). Refcounted per
                 # mapped pitch so snap-collapsed keys each hold the tone.
                 mapped = state.echo_hold(event["note"], event.get("channel", 0))
-                note_on(mapped, event["velocity"],
+                # Ver 95: the velocity compressor can also run on the echo
+                # stream (applied live to each keyed note_on's velocity).
+                vel = state.map_echo_velocity(event["velocity"])
+                note_on(mapped, vel,
                         channel=event.get("channel", 0))
             analyser.on_note(t, event["note"])
             hub.publish({"type": "note", "note": event["note"],
@@ -433,8 +436,10 @@ def api_transform():
 
       {"op": "snap",    "enabled": bool}                or {"bias": "nearest|up|down"}
       {"op": "invert",  "enabled": bool}                or {"pivot": 0-127}
+                                                         or {"auto": bool}
+                                                         or {"mode": "chromatic|diatonic"}
       {"op": "reverse", "enabled": bool}
-      {"op": "echo",    "which": "transpose|snap|invert", "enabled": bool}
+      {"op": "echo",    "which": "transpose|snap|invert|velocity", "enabled": bool}
     Setters requantize() where the take is affected (the echo opt-ins only
     switch the live echo path, so they skip the rebuild).
     """
@@ -457,20 +462,24 @@ def api_transform():
                 state.set_invert(pivot=int(body.get("pivot")))
             except (TypeError, ValueError):
                 return jsonify({"ok": False, "error": "pivot must be 0-127"}), 400
+        if "mode" in body and body.get("mode") in ("chromatic", "diatonic"):
+            state.set_invert(mode=body.get("mode"))
         return jsonify({"ok": True, "op": "invert", "enabled": state.invert_enabled,
                         "pivot": state.invert_pivot,
-                        "auto": state.invert_pivot_auto})
+                        "auto": state.invert_pivot_auto,
+                        "mode": state.invert_mode})
     if op == "reverse":
         state.set_reverse(enabled=bool(body.get("enabled")))
         return jsonify({"ok": True, "op": "reverse", "enabled": state.reverse_enabled})
     if op == "echo":
         which = body.get("which")
-        if which not in ("transpose", "snap", "invert"):
-            return jsonify({"ok": False, "error": "which must be transpose|snap|invert"}), 400
+        if which not in ("transpose", "snap", "invert", "velocity"):
+            return jsonify({"ok": False, "error": "which must be transpose|snap|invert|velocity"}), 400
         state.set_echo_transform(which=which, enabled=bool(body.get("enabled")))
         attr = {"transpose": "echo_transpose",
                 "snap": "echo_snap",
-                "invert": "echo_invert"}[which]
+                "invert": "echo_invert",
+                "velocity": "echo_velocity"}[which]
         return jsonify({"ok": True, "op": "echo", "which": which,
                         "enabled": getattr(state, attr)})
     return jsonify({"ok": False, "error": "op must be snap|invert|reverse|echo"}), 400

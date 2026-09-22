@@ -667,6 +667,44 @@ function buildCatchTooltip() {
     return Math.max(0, Math.min(127, best));
   }
 
+  // Ver 95: inversion mirror in JS — chromatic (exact semitone reflection)
+  // or diatonic (reflect ON the scale ladder so results stay in the key;
+  // needs the tonic·scale card; chromatic fallback otherwise). Mirrors
+  // state._invert_pitch / _diatonic_invert exactly.
+  function nearestLadderIndex(ladder, pitch) {
+    var best = 0;
+    for (var i = 1; i < ladder.length; i++) {
+      if (Math.abs(ladder[i] - pitch) < Math.abs(ladder[best] - pitch)) best = i;
+    }
+    return best;
+  }
+  function invertPitch(note, pivot) {
+    var modeSel = document.getElementById("invert-mode");
+    if (modeSel && modeSel.value === "diatonic") {
+      var ton = document.getElementById("key-tonic");
+      var sc = document.getElementById("key-scale");
+      var tp = parseInt(ton ? ton.value : "-1", 10);
+      var def = SCALES[sc ? sc.value : ""];
+      if (!isNaN(tp) && tp >= 0 && def) {
+        var inPcs = [];
+        def.semis.forEach(function (s) { inPcs.push((s + tp) % 12); });
+        var ladder = [];
+        for (var x = 0; x <= 127; x++) {
+          var pc = x % 12;
+          for (var i = 0; i < inPcs.length; i++) {
+            if (inPcs[i] === pc) { ladder.push(x); break; }
+          }
+        }
+        var si = nearestLadderIndex(ladder, note);
+        var pi = nearestLadderIndex(ladder, pivot);
+        var ti = 2 * pi - si;
+        if (ti < 0) ti = 0; else if (ti >= ladder.length) ti = ladder.length - 1;
+        return ladder[ti];
+      }
+    }
+    return Math.max(0, Math.min(127, 2 * pivot - note));
+  }
+
   // ---- Ver 94: ghost + pivot readouts for the echo world ----
   // echoMap mirrors state.echo_transform EXACTLY (transpose -> invert -> snap,
   // deterministic per note, clamped), so the frontend can predict the note the
@@ -710,7 +748,7 @@ function buildCatchTooltip() {
       if (isNaN(st)) st = 0;
       n += st;
     }
-    if (ec.invert && fl.invert) n = 2 * _pivotEffective - n;
+    if (ec.invert && fl.invert) n = invertPitch(n, _pivotEffective);
     if (ec.snap && fl.snap) {
       var ton = document.getElementById("key-tonic");
       var sc = document.getElementById("key-scale");
@@ -1858,6 +1896,18 @@ case "replay":
     onToggle("reverse-enabled", "reverse", "enabled");
     // transpose echo opt-in
     onEchoToggle("transpose-echo", "transpose");
+    // Ver 95: velocity compressor echo opt-in (applied to each echoed note_on)
+    onEchoToggle("velocity-echo", "velocity");
+    // Ver 95: inversion mode — chromatic (exact semitones) vs diatonic
+    // (reflects on the scale ladder, results stay in the key).
+    var invModeSel = document.getElementById("invert-mode");
+    if (invModeSel) {
+      invModeSel.addEventListener("change", function () {
+        postTransform({ op: "invert", mode: invModeSel.value });
+        refreshGhosts();  // diatonic moves the echoed targets
+        applyPivotMarker();
+      });
+    }
   })();
 
   // Out control surface: send CCs / pitch to the keyboard (raw hw:2,0,0) and
@@ -2681,6 +2731,11 @@ if (typeof s.time_signature === "string" && s.time_signature.indexOf("/") > 0) {
         chk("invert-echo", tr.echo_invert);
         chk("reverse-enabled", tr.reverse_enabled);
         chk("transpose-echo", tr.echo_transpose);
+        chk("velocity-echo", tr.echo_velocity);
+        var invModeSel = document.getElementById("invert-mode");
+        if (invModeSel && tr.invert_mode && document.activeElement !== invModeSel) {
+          invModeSel.value = tr.invert_mode;
+        }
         var biasSel = document.getElementById("snap-bias");
         if (biasSel && tr.snap_bias && document.activeElement !== biasSel) biasSel.value = tr.snap_bias;
         var pvNote = document.getElementById("invert-pivot-note");

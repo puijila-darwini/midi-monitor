@@ -1482,3 +1482,21 @@ that file lean. History is chronological; most lines start with a version tag.
   pairs 59/60 -> 60; echo_release_all; snapshot carries invert_pivot_auto);
   API round-trip (auto true/false + effective pivot); node --check +
   py_compile clean; server restarted.
+
+Ver 95: velocity compressor joins the echo stream (new echo opt-in on the
+  velocity op; threshold clips each keyed note_on to the std/width band,
+  compress rescales a rolling 48-note seen-window into the band with clip
+  warm-up) + diatonic inversion mode (new mode selector on the invert op;
+  reflects ON the scale ladder so results stay IN the key — C-major E about
+  C gives A, not Gb; needs tonic·scale, chromatic fallback otherwise).
+  Fixed a real name-collision bug the feature exposed: the echo_velocity
+  bool shadowed the live-velocity method (bool not callable) — method is
+  now map_echo_velocity, app.py echo send maps velocity through it.
+  Verified: 23 unit checks (ladder mirror, off-scale pivot tie-lower, no-key
+  fallback, _apply_invert + echo_transform diatonic, threshold/compress/
+  degenerate band, settings round-trip); 20740-case JS/Py grid (28 scales x
+  3 tonics x 4 pivots x 61 notes + chromatic) IDENTICAL — the harness
+  extracts the REAL invertPitch + SCALES slices from app.js, so drift is
+  impossible; API round-trip (mode diatonic/chromatic, echo velocity
+  on/off, bad-which 400, defaults restored); node --check + py_compile
+  clean; server restarted (stale pid 2450031 reaped).

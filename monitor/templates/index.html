@@ -298,6 +298,8 @@
                     <option value="threshold">clip</option>
                   </select>
                 </label>
+                <label class="op-echo"><input type="checkbox" id="velocity-echo"
+                       title="Also apply the velocity compressor LIVE to echoed keybed notes (threshold clips to the band; compress rescales the recent window into the band)"><span>echo</span></label>
               </div>
             </div>
 
@@ -367,6 +369,13 @@
                     <option value="6">6</option>
                     <option value="7">7</option>
                     <option value="8">8</option>
+                  </select>
+                </label>
+                <label class="op-select"><span>mode</span>
+                  <select id="invert-mode"
+                          title="Chromatic inversion mirrors exact semitones (n' = 2·pivot − n). Diatonic reflects ON the scale ladder instead, so every inverted note lands IN the key — mirror a rising C-major phrase about C and E becomes B, not G♭ (needs the tonic·scale card declared)">
+                    <option value="chromatic" selected>chromatic</option>
+                    <option value="diatonic">diatonic</option>
                   </select>
                 </label>
                 <label class="op-auto"><input type="checkbox" id="invert-auto"

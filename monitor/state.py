@@ -178,6 +178,10 @@ class State:
                                           # note (earliest attack), so the
                                           # inverted phrase keeps its register
         self.invert_pivot_live = None     # resolved auto pivot (take -> echo)
+        self.invert_mode = "chromatic"     # "chromatic" | "diatonic" (Ver 95:
+                                           # diatonic reflects ON the scale
+                                           # ladder so every result stays in
+                                           # the key; needs tonic·scale set)
         self.reverse_enabled = False
         # Echo-stream application (Ver 92): which of the above ALSO run LIVE on
         # the echoed keybed notes (app.py note_on/note_off path). Only the
@@ -187,6 +191,11 @@ class State:
         self.echo_transpose = False
         self.echo_snap = False
         self.echo_invert = False
+        self.echo_velocity = False     # Ver 95: velocity compressor ALSO runs
+                                       # live on echoed note_ons; the band uses
+                                       # the compressor's std/width, compress
+                                       # mode rescales a rolling seen-window
+        self._echo_vel_hist = []       # rolling velocities for live compress
         # Press-time echo mapping (Ver 94 de-jank): note_on freezes the mapped
         # pitch SENT to the board so note_off releases exactly that pitch even
         # when the transforms change mid-hold. echo_holders refcounts per
@@ -306,10 +315,12 @@ class State:
             self.snap_bias = bias
         self.requantize()
 
-    def set_invert(self, enabled=None, pivot=None, auto=None):
+    def set_invert(self, enabled=None, pivot=None, auto=None, mode=None):
         """Set the melodic-inversion stage. pivot = MIDI note to reflect
         around (when auto is off); auto = pivot follows the pattern's FIRST
-        note so the inverted phrase keeps its register. n' = 2*pivot - n."""
+        note so the inverted phrase keeps its register; mode = "chromatic"
+        (exact semitones, n' = 2*pivot - n) or "diatonic" (reflects on the
+        scale ladder so every result stays IN the key — needs the key set)."""
         if enabled is not None:
             self.invert_enabled = bool(enabled)
         if auto is not None:
@@ -322,6 +333,8 @@ class State:
             except (TypeError, ValueError):
                 return
             self.invert_pivot = max(0, min(127, pivot))
+        if mode in ("chromatic", "diatonic"):
+            self.invert_mode = mode
         self.requantize()
 
     def set_reverse(self, enabled=None):
@@ -332,12 +345,16 @@ class State:
 
     def set_echo_transform(self, which=None, enabled=None):
         """Opt a transform into the LIVE echo stream. which: "transpose" |
-        "snap" | "invert". Only per-note ops qualify (buffer ops cannot)."""
-        if which not in ("transpose", "snap", "invert") or enabled is None:
+        "snap" | "invert" | "velocity". Only per-note ops qualify (buffer ops
+        cannot)."""
+        if which not in ("transpose", "snap", "invert", "velocity") or enabled is None:
             return
         attr = {"transpose": "echo_transpose",
                 "snap": "echo_snap",
-                "invert": "echo_invert"}[which]
+                "invert": "echo_invert",
+                "velocity": "echo_velocity"}[which]
+        if attr == "echo_velocity" and enabled:
+            self._echo_vel_hist = []   # fresh window for the newly-live comp
         setattr(self, attr, bool(enabled))
 
     # -- press-time echo map (Ver 94): keyed notes map ONCE at press; note_off
@@ -437,6 +454,49 @@ class State:
                     continue
         return best[1] if best else None
 
+    # -- Ver 95: inversion modes -------------------------------------------------
+    def _scale_pcs(self):
+        """Absolute pitch classes of the tonic·scale selection, or None when
+        no key context is declared (mirrors the JS guide shading exactly)."""
+        semis = SCALE_SEMIS.get(self.key_scale)
+        if semis is None or self.key_tonic < 0:
+            return None
+        return sorted((s + self.key_tonic) % 12 for s in semis)
+
+    def _nearest_ladder_index(self, ladder, pitch):
+        """Index of the ladder tone nearest to `pitch` (ties to the lower)."""
+        best = 0
+        for i in range(1, len(ladder)):
+            if abs(ladder[i] - pitch) < abs(ladder[best] - pitch):
+                best = i
+        return best
+
+    def _diatonic_invert(self, note, pivot):
+        """Mirror `note` around `pivot` ON THE DIATONIC LADDER: both pitches
+        map to their scale position (nearest scale tone) and the degree index
+        reflects, 2*pivotIdx - noteIdx, so the result always lands IN the
+        key — a C-major E inverted around C gives B, not Gb. Returns None
+        when no key context is declared."""
+        pcs = self._scale_pcs()
+        if pcs is None:
+            return None
+        ladder = sorted(x for x in range(0, 128) if x % 12 in pcs)
+        src_idx = self._nearest_ladder_index(ladder, note)
+        piv_idx = self._nearest_ladder_index(ladder, pivot)
+        tgt_idx = 2 * piv_idx - src_idx
+        tgt_idx = max(0, min(len(ladder) - 1, tgt_idx))
+        return ladder[tgt_idx]
+
+    def _invert_pitch(self, note, pivot):
+        """Mirror a single pitch around `pivot` per invert_mode: chromatic
+        (exact semitones, n' = 2*pivot - n) or diatonic (stays on the scale
+        ladder when the tonic·scale context is declared, chromatic fallback)."""
+        if self.invert_mode == "diatonic":
+            d = self._diatonic_invert(note, pivot)
+            if d is not None:
+                return d
+        return max(0, min(127, 2 * pivot - note))
+
     def _apply_invert(self, notes):
         """Melodic-inversion stage: mirror every pitch around the pivot. Auto
         mode pivots on the pattern's FIRST note (the inverted phrase keeps its
@@ -459,7 +519,7 @@ class State:
                 n = int(qn["note"])
             except (TypeError, ValueError):
                 continue
-            qn["note"] = max(0, min(127, 2 * pivot - n))
+            qn["note"] = self._invert_pitch(n, pivot)
 
     def _apply_reverse(self, notes):
         """Reverse stage: play the take backwards. Order is reversed and every
@@ -505,10 +565,45 @@ class State:
             pivot = self.invert_pivot_live \
                 if (self.invert_pivot_auto and self.invert_pivot_live is not None) \
                 else self.invert_pivot
-            n = max(0, min(127, 2 * pivot - n))
+            n = self._invert_pitch(n, pivot)
         if self.echo_snap and self.snap_enabled:
             n = self._snap_pitch(n)
         return n
+
+    def map_echo_velocity(self, velocity):
+        """Velocity-compressor stage for the LIVE echo stream (Ver 95): a raw
+        keyed note_on's velocity is remapped the way the take pipeline does.
+        threshold clips to the standard±width/2 band; compress rescales the
+        rolling window of recent note velocities into that band (early notes
+        clip until the window warms). Deterministic per note_on; note_off
+        carries no velocity."""
+        if not self.echo_velocity or not self.velocity_enabled or self.velocity_width <= 0:
+            return velocity
+        try:
+            v = int(velocity)
+        except (TypeError, ValueError):
+            return velocity
+        std = self.velocity_standard
+        width = self.velocity_width
+        lo = max(1, int(std - width / 2.0))
+        hi = min(127, int(std + width / 2.0))
+        if lo >= hi:
+            return velocity
+        if self.velocity_mode == "threshold":
+            return max(lo, min(hi, v))
+        # compress: rescale the recent seen window into the band
+        self._echo_vel_hist.append(v)
+        if len(self._echo_vel_hist) > 48:
+            del self._echo_vel_hist[0]
+        if len(self._echo_vel_hist) < 3:
+            return max(lo, min(hi, v))
+        mn = min(self._echo_vel_hist)
+        mx = max(self._echo_vel_hist)
+        if mn >= mx:
+            return max(lo, min(hi, v))
+        scale = (hi - lo) / (mx - mn)
+        nv = lo + (v - mn) * scale
+        return max(1, min(127, int(round(nv))))
 
     def _apply_articulation(self, notes):
         """Quantized-take post-pass: no monophonic line may ring into the next
@@ -634,6 +729,7 @@ class State:
             self.velocity_mode = mode
         self.velocity_standard = max(1.0, min(127.0, self.velocity_standard))
         self.velocity_width = max(1.0, min(127.0, self.velocity_width))
+        self._echo_vel_hist = []   # Ver 95: band changed — restart the live window
         self.requantize()
 
     def compute_velocity_stats(self):
@@ -1503,12 +1599,14 @@ class State:
             "snap_enabled": self.snap_enabled,
             "snap_bias": self.snap_bias,
             "invert_enabled": self.invert_enabled,
+            "invert_mode": self.invert_mode,
             "invert_pivot": self.invert_pivot,
             "invert_pivot_auto": self.invert_pivot_auto,
             "reverse_enabled": self.reverse_enabled,
             "echo_transpose": self.echo_transpose,
             "echo_snap": self.echo_snap,
             "echo_invert": self.echo_invert,
+            "echo_velocity": self.echo_velocity,
             "key_tonic": self.key_tonic,
             "key_scale": self.key_scale,
             "tempo_bpm": self.tempo_bpm,
@@ -1598,10 +1696,16 @@ class State:
         self.invert_pivot_auto = auto
         if not auto:
             self.invert_pivot_live = None
+        imode = settings.get("invert_mode", "chromatic")
+        if imode in ("chromatic", "diatonic"):
+            self.invert_mode = imode
         self.reverse_enabled = bool(settings.get("reverse_enabled", False))
         self.echo_transpose = bool(settings.get("echo_transpose", False))
         self.echo_snap = bool(settings.get("echo_snap", False))
         self.echo_invert = bool(settings.get("echo_invert", False))
+        self.echo_velocity = bool(settings.get("echo_velocity", False))
+        if self.echo_velocity:
+            self._echo_vel_hist = []
         try:
             kt = int(settings.get("key_tonic", -1))
             self.key_tonic = max(-1, min(11, kt))
@@ -1732,6 +1836,7 @@ class State:
                 "snap_enabled": self.snap_enabled,
                 "snap_bias": self.snap_bias,
                 "invert_enabled": self.invert_enabled,
+                "invert_mode": self.invert_mode,
                 "invert_pivot_auto": self.invert_pivot_auto,
                 "invert_pivot": self.invert_pivot,
                 # Ver 94: the pivot actually in force — the auto-resolved one
@@ -1743,6 +1848,7 @@ class State:
                 "echo_transpose": self.echo_transpose,
                 "echo_snap": self.echo_snap,
                 "echo_invert": self.echo_invert,
+                "echo_velocity": self.echo_velocity,
             },
             "scale": {"tonic": self.key_tonic, "scale": self.key_scale},
             "received_ctrl": dict(self.received_ctrl),
