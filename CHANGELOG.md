@@ -1540,3 +1540,12 @@ Ver 96 (bend range fix): the ±24 divisor was wrong — labeled +100c detunes
   slider bounds (now ±2 step 0.1). Musical presets (±3-18c) were landing at
   ±0.25-1.5c — inaudible, the reported "not working at all". Verified: unit
   suite still 28/28, live pitch validation rejects +12 / accepts +1.5.
+
+Ver 96 (bend desync fix): the tuning skip-record only tracked tuning's own
+  sends — the pitch slider, motion ramps, defaults burst, panic and GM reset
+  all move the board's bend behind its back, so the next strike concluded
+  "already bent" and stayed silent (the reported dead knobs after slider use).
+  /api/ctrl pitch now records every bend per channel; panic/GM-reset clear
+  the record (Reset All Controllers re-centers). Verified live in-browser:
+  card cell edit E=50 reached the server (custom table); plus 3 route-level
+  regression checks (strike, re-send after slider, panic clear) — suite 31/31.

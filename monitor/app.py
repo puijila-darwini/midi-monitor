@@ -599,14 +599,22 @@ def api_ctrl():
                 return jsonify({"ok": False, "error": "pitch must be ±%.1f" % BEND_RANGE_ST}), 400
             sent = pitch_bend(semi, channel=ch)
             state.control_pitch_bend = round(semi, 2)
+            # The tuning skip-record must track EVERY bend on the channel
+            # (slider, motion ramps, defaults all land here) or the next
+            # strike wrongly concludes "already bent" and stays silent.
+            state._tuning_last_bend[ch] = semi
             extra = {"pitch": state.control_pitch_bend}
         else:
             action = body.get("action")
             if action == "panic":
                 sent = midi_panic()
+                # Reset All Controllers re-centers the board's bend; drop the
+                # tuning skip-record with it (same for GM reset below).
+                state._tuning_last_bend = {}
                 extra = {"action": "panic"}
             elif action == "gmreset":
                 sent = gm_system_on()
+                state._tuning_last_bend = {}
                 state.control_values.pop(0, None)
                 extra = {"action": "gmreset"}
             elif action == "local":
