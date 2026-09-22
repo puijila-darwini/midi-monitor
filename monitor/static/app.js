@@ -2463,7 +2463,8 @@ case "replay":
       apply({ enabled: enabledChk.checked });
     });
     if (presetSel) presetSel.addEventListener("change", function () {
-      apply({ preset: presetSel.value });
+      // Picking a temperament implies wanting to hear it.
+      apply({ preset: presetSel.value, enabled: true });
     });
     cells.forEach(function (el) {
       if (el) el.addEventListener("change", function () {
