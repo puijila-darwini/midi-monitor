@@ -2857,6 +2857,23 @@ if (typeof s.time_signature === "string" && s.time_signature.indexOf("/") > 0) {
           // (disabled state is handled by the backend; UI always allows tweaking)
         }
         // Ver 96: sync the microtonal tuning table (pattern loads restore it).
+        // Key-context selects sync EARLY, before any reader: the tuning cell
+        // rotation reads the tonic select from the DOM, so it must already
+        // hold this pass's value when the tuning block renders below (one
+        // pass with a stale select leaves storage-order cells painted until
+        // the next refresh). Guide/pivot follow-ups stay in their block.
+        if (s.scale) {
+          var tonSelEarly = document.getElementById("key-tonic");
+          var scSelEarly = document.getElementById("key-scale");
+          if (tonSelEarly && typeof s.scale.tonic === "number"
+              && document.activeElement !== tonSelEarly) {
+            tonSelEarly.value = String(s.scale.tonic);
+          }
+          if (scSelEarly && document.activeElement !== scSelEarly) {
+            scSelEarly.value = s.scale.scale && scSelEarly.querySelector('option[value="' + s.scale.scale + '"]')
+              ? s.scale.scale : "-1";
+          }
+        }
         if (s.tuning) {
           var ten = document.getElementById("tuning-enabled");
           if (ten && document.activeElement !== ten) ten.checked = !!s.tuning.enabled;

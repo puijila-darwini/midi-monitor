@@ -1580,3 +1580,13 @@ Ver 96 (stuck-note fix): with snap collapsing keys onto one pitch, a ghost
   idempotent per raw key — a legato re-press re-sounds the frozen pitch
   without adding a holder. Verified: 13 stuck-note checks (parse forms,
   idempotent hold/release, collapse-pair refcount) + full 44 tuning suite.
+
+Ver 96 (display follows tonic): with follow-tonic on the cells showed the
+  stored shape while the board played rotated. Cells now display effective
+  per-key detune (renderCells rotates by the tonic; edits inverse-rotate on
+  write so the stored shape stays root-relative; Hz tooltips already did).
+  Fixed a real ordering bug found via in-browser repro: the tuning render
+  read the tonic select before the key-context sync updated it, freezing
+  storage-order cells until the next refresh — the select sync now runs
+  first in refreshState. Verified: node round-trip on the real functions
+  (displayed E=-50 on bayati/D, edit lands storage[2], root-off identity).
