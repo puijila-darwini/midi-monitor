@@ -1598,3 +1598,15 @@ Ver 96 (more maqam + tonic-event re-voice): Saba (3rd-degree half-flat) and
   tonic/scale change handler and catch resolution — not just when the tonic
   box is toggled). Verified live in-browser: bayati/D showed E=-50, flipping
   tonic to G re-voiced to A=-50 with no other touch. Suite 58/58 + 13 stuck.
+
+Ver 97 (emulated scales in the big list): Rast, Bayati, Saba, Sikah + a
+  Slendro-ish pentatonic (0·235·475·720·955c) join the tonic·scale dropdown
+  under "Emulated microtonal". Each = 12-key skeleton (guide shading, snap,
+  diatonic invert resolve onto it) + root-relative detune voiced through the
+  tuning pre-bend. Selecting one bundles scale context + voiced table +
+  follow-tonic + retune + echo so it sounds immediately; a 12-TET pick leaves
+  the tuning flags alone. Piano prints the scales' own degree names (N3/N7
+  neutral, ~ half-flat) via a per-scale override with 12-TET fallback; stave
+  shows no key signature (sig null). Verified: 25 emu checks + 58 tuning +
+  13 stuck; live in-browser (dropdown select armed the bundle, cells showed
+  the voiced table, guide labels use the override).

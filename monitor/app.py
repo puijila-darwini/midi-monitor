@@ -573,7 +573,11 @@ def api_scale():
     """Set the key context (tonic·scale card, server copy): the scale-snap
     stage + echo snap resolve pitches onto this selection. Body:
     {"tonic": -1..11, "scale": "<scale id>"}.
+    An EMULATED scale id (rast/bayati/saba/sikah/slendro) voices the tuning
+    table root-relative too (follow-tonic + retune + echo on) so it sounds
+    immediately; a plain 12-TET id leaves the tuning flags alone.
     """
+    from .state import EMU_SCALES
     body = request.get_json(silent=True) or {}
     if "tonic" in body:
         try:
@@ -583,10 +587,23 @@ def api_scale():
         if not (-1 <= tonic <= 11):
             return jsonify({"ok": False, "error": "tonic must be -1..11"}), 400
         state.set_scale_context(tonic=tonic)
+    emulated = False
     if "scale" in body:
-        state.set_scale_context(scale=str(body.get("scale")))
-    return jsonify({"ok": True, "tonic": state.key_tonic,
-                    "scale": state.key_scale})
+        sid = str(body.get("scale"))
+        if sid in EMU_SCALES:
+            state.select_emulated_scale(sid)
+            emulated = True
+        else:
+            state.set_scale_context(scale=sid)
+    resp = {"ok": True, "tonic": state.key_tonic,
+            "scale": state.key_scale, "emulated": emulated}
+    if emulated:
+        resp["tuning"] = {"enabled": state.tuning_enabled,
+                          "preset": state.tuning_preset,
+                          "tonic_root": state.tuning_tonic_root,
+                          "echo": state.echo_tuning,
+                          "cents": list(state.tuning_cents)}
+    return jsonify(resp)
 
 
 @app.route("/api/ctrl", methods=["GET", "POST"])

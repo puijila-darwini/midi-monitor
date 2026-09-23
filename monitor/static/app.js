@@ -393,12 +393,19 @@ function buildCatchTooltip() {
   function pushScaleContext() {
     var ton = document.getElementById("key-tonic");
     var sc = document.getElementById("key-scale");
-    if (!ton || !sc) return;
-    fetch("/api/scale", {
+    if (!ton || !sc) return Promise.resolve(null);
+    return fetch("/api/scale", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ tonic: parseInt(ton.value, 10), scale: sc.value })
-    }).catch(function () { /* ignore transient */ });
+    }).then(function (r) { return r.json(); })
+      .then(function (res) {
+        // An emulated select voices the tuning table server-side; re-render
+        // so the tuning card shows the applied table + flags at once.
+        if (res && res.emulated && window.refreshState) window.refreshState();
+        return res;
+      })
+      .catch(function () { /* ignore transient */ });
   }
 
   // Ver 93: the invert pivot is two dropdowns (note + octave) instead of a
@@ -538,8 +545,30 @@ function buildCatchTooltip() {
     "enigmatic":       { semis: [0, 1, 4, 6, 8, 10, 11],      sig: null },
     "hungarian_minor": { semis: [0, 2, 3, 6, 7, 8, 11],       sig: null },
     "neapolitan_major": { semis: [0, 1, 3, 5, 7, 9, 11],      sig: null },
-    "neapolitan_minor": { semis: [0, 1, 3, 5, 7, 8, 11],      sig: null }
+    "neapolitan_minor": { semis: [0, 1, 3, 5, 7, 8, 11],      sig: null },
+    // Emulated microtonal scales (Ver 97): 12-key skeleton + pre-bend.
+    // semis = skeleton degrees; intervals = guide/shorthand names per
+    // degree; sig null (no key signature); the tuning table voices the
+    // microtones at strike time (backend EMU_SCALES mirrors this).
+    "rast":    { semis: [0, 2, 4, 5, 7, 9, 11], sig: null, emu: true,
+                 intervals: {0:"1",2:"2",4:"N3",5:"4",7:"5",9:"6",11:"N7"} },
+    "bayati":  { semis: [0, 2, 3, 5, 7, 8, 10], sig: null, emu: true,
+                 intervals: {0:"1",2:"2~",3:"m3",5:"4",7:"5",8:"m6",10:"m7"} },
+    "saba":    { semis: [0, 1, 4, 5, 6, 9, 10], sig: null, emu: true,
+                 intervals: {0:"1",1:"m2",4:"3~",5:"4",6:"d5",9:"6",10:"m7"} },
+    "sikah":   { semis: [0, 2, 3, 5, 7, 8, 10], sig: null, emu: true,
+                 intervals: {0:"1~",2:"2",3:"m3",5:"4",7:"5",8:"m6",10:"m7"} },
+    "slendro": { semis: [0, 2, 4, 7, 9], sig: null, emu: true,
+                 intervals: {0:"1",2:"2",4:"3",7:"5",9:"6"} }
   };
+  // Interval name for a tonic-relative distance, preferring an emulated
+  // scale's own degree names (N3 = neutral third, ~ = half-flat).
+  function ivlName(def, dist) {
+    if (def && def.intervals && def.intervals[dist] !== undefined) {
+      return def.intervals[dist];
+    }
+    return INTERVAL_NAMES[dist];
+  }
   // Conventional major-key spelling per pitch class (mirrors stave.js).
   var PC_MAJOR = ["C", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
 
@@ -583,7 +612,7 @@ function buildCatchTooltip() {
       if (!k) continue;
       var lab = document.createElement("span");
       lab.className = "ivl-label";
-      lab.textContent = INTERVAL_NAMES[dist];
+      lab.textContent = ivlName(def, dist);
       k.appendChild(lab);
       if (inScale[pc]) {
         k.classList.add("inscale");
@@ -638,10 +667,10 @@ function buildCatchTooltip() {
       lab.className = "snap-lab";
       var to = document.createElement("span");
       to.className = "snap-to";
-      to.textContent = INTERVAL_NAMES[(target % 12 - tonicPc + 12) % 12];
+      to.textContent = ivlName(def, (target % 12 - tonicPc + 12) % 12);
       var from = document.createElement("span");
       from.className = "snap-from";
-      from.textContent = INTERVAL_NAMES[(n % 12 - tonicPc + 12) % 12];
+      from.textContent = ivlName(def, (n % 12 - tonicPc + 12) % 12);
       lab.appendChild(to);
       lab.appendChild(from);
       k.appendChild(lab);

@@ -44,6 +44,56 @@ SCALE_SEMIS = {
     "neapolitan_minor": [0, 1, 3, 5, 7, 8, 11],
 }
 
+# Emulated microtonal scales (Ver 97): 12-key skeletons + detune, voiced
+# through the tuning pre-bend. degrees = semitone offsets from the tonic
+# (the 12-TET keys a player uses); cents = {degree: detune} sounded via
+# pre-bend; labels = {degree: guide/Shorthand name}. Selecting one sets the
+# scale context (guide/snap/invert resolve onto the skeleton) AND voices the
+# tuning table root-relative (follow-tonic + retune + echo on).
+EMU_SCALES = {
+    "rast": {
+        "degrees": [0, 2, 4, 5, 7, 9, 11],
+        "cents": {4: -50.0, 11: -50.0},
+        "labels": {0: "1", 2: "2", 4: "N3", 5: "4", 7: "5", 9: "6", 11: "N7"},
+        "blurb": "Rast: neutral 3rd + neutral 7th",
+    },
+    "bayati": {
+        "degrees": [0, 2, 3, 5, 7, 8, 10],
+        "cents": {2: -50.0},
+        "labels": {0: "1", 2: "2~", 3: "m3", 5: "4", 7: "5", 8: "m6", 10: "m7"},
+        "blurb": "Bayati: 2nd degree half-flat (tonic D = Bayati proper)",
+    },
+    "saba": {
+        "degrees": [0, 1, 4, 5, 6, 9, 10],
+        "cents": {4: -50.0},
+        "labels": {0: "1", 1: "m2", 4: "3~", 5: "4", 6: "d5", 9: "6", 10: "m7"},
+        "blurb": "Saba: 3rd degree half-flat (tonic C = Saba proper)",
+    },
+    "sikah": {
+        "degrees": [0, 2, 3, 5, 7, 8, 10],
+        "cents": {0: -50.0},
+        "labels": {0: "1~", 2: "2", 3: "m3", 5: "4", 7: "5", 8: "m6", 10: "m7"},
+        "blurb": "Segah: root itself half-flat (tonic E = Segah proper)",
+    },
+    "slendro": {
+        "degrees": [0, 2, 4, 7, 9],
+        "cents": {2: 35.0, 4: 75.0, 7: 20.0, 9: 55.0},
+        "labels": {0: "1", 2: "2", 4: "3", 7: "5", 9: "6"},
+        "blurb": "Slendro-ish pentatonic: 0·235·475·720·955c",
+    },
+}
+
+
+def scale_degrees(name):
+    """Root-relative degree set for any scale id: the 12-TET semis for real
+    scales, the skeleton for emulated ones, None when unset/unknown."""
+    if name in SCALE_SEMIS:
+        return list(SCALE_SEMIS[name])
+    emu = EMU_SCALES.get(name)
+    if emu is not None:
+        return list(emu["degrees"])
+    return None
+
 # Microtonal tuning presets (Ver 96, mono): cents deviation per pitch class
 # C..B, applied as a per-strike pitch pre-bend (echo + replay, one channel).
 # equal = 12-TET (all zero); just = 5-limit just intonation; pythagorean =
@@ -352,8 +402,36 @@ class State:
                 return
             self.key_tonic = max(-1, min(11, tonic))
         if scale is not None:
-            self.key_scale = str(scale) if scale in SCALE_SEMIS else ""
+            s = str(scale)
+            self.key_scale = s if (s in SCALE_SEMIS or s in EMU_SCALES) else ""
         self.requantize()
+
+    def select_emulated_scale(self, name):
+        """Voice an EMU_SCALES entry: scale context onto its skeleton (guide,
+        snap, invert) + the tuning table shaped root-relative (follow-tonic,
+        retune and echo on so it sounds immediately). Returns False when the
+        id is not emulated."""
+        emu = EMU_SCALES.get(name)
+        if emu is None:
+            return False
+        self.key_scale = name
+        table = [0.0] * 12
+        for deg, cents in emu["cents"].items():
+            try:
+                d = int(deg) % 12
+            except (TypeError, ValueError):
+                continue
+            try:
+                table[d] = max(-100.0, min(100.0, float(cents)))
+            except (TypeError, ValueError):
+                pass
+        self.tuning_cents = table
+        self.tuning_preset = "custom"
+        self.tuning_tonic_root = True
+        self.tuning_enabled = True
+        self.echo_tuning = True
+        self.requantize()
+        return True
 
     def set_snap(self, enabled=None, bias=None):
         """Set the scale-snap stage. bias: "nearest" (default) | "up" | "down"."""
@@ -455,8 +533,10 @@ class State:
 
     def _snap_pitch(self, note):
         """Snap a single pitch onto the tonic·scale selection's scale, per
-        snap_bias (nearest/up/down). Returns the note when no scale is set."""
-        semis = SCALE_SEMIS.get(self.key_scale)
+        snap_bias (nearest/up/down). Emulated scales resolve onto their
+        12-key skeleton (the pre-bend voices the microtone at strike time).
+        Returns the note when no scale is set."""
+        semis = scale_degrees(self.key_scale)
         if semis is None or self.key_tonic < 0:
             return note
         # Absolute pitch classes of the scale under this tonic = (s + tonic),
@@ -511,8 +591,9 @@ class State:
     # -- Ver 95: inversion modes -------------------------------------------------
     def _scale_pcs(self):
         """Absolute pitch classes of the tonic·scale selection, or None when
-        no key context is declared (mirrors the JS guide shading exactly)."""
-        semis = SCALE_SEMIS.get(self.key_scale)
+        no key context is declared (mirrors the JS guide shading exactly).
+        Emulated scales contribute their skeleton."""
+        semis = scale_degrees(self.key_scale)
         if semis is None or self.key_tonic < 0:
             return None
         return sorted((s + self.key_tonic) % 12 for s in semis)
@@ -1887,7 +1968,7 @@ class State:
         except (TypeError, ValueError):
             pass
         ks = settings.get("key_scale", "")
-        if ks in SCALE_SEMIS:
+        if ks in SCALE_SEMIS or ks in EMU_SCALES:
             self.key_scale = ks
         else:
             self.key_scale = ""
