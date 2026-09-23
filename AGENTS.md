@@ -119,6 +119,8 @@ folded into a single web app package in `monitor/`:
   (emu) added (N3 350c, ~5 570c, ~7 septimal 970c); TUNING_PRESETS expands
   from EMU_SCALES (single source). Shortlist shipped: just major/minor
   (otonal pair), Thai-ish 7-TET, Pelog-ish; preset validator reads the dict.
+  Boxed in: entering emulation stashes tuning, leaving restores it (bend
+  re-centered); routing/tonic warnings flash on select; Hz flat when off.
 - `monitor/app.py`      - Flask on :5050. Routes: `/`, `/events` (SSE),
                           `/api/state`. Background capture thread -> hub pub/sub.
                           Replay entry points (/api/replay, /api/replay/loop,
