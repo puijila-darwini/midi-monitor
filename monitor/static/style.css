@@ -949,13 +949,19 @@ select option {
   min-width: 46px;
 }
 /* Checkbox rows spread edge to edge: label left, tickybox flush right
-   (matches the title-bar echo boxes). */
+   (matches the title bars; DOM order is box-then-text so re-order). */
 .op-body label:has(> input[type="checkbox"]) {
   justify-content: space-between;
 }
 .op-body label:has(> input[type="checkbox"]) > span:first-child {
   min-width: 0;
+  order: 1;
 }
+.op-body label:has(> input[type="checkbox"]) > input[type="checkbox"] {
+  order: 2;
+}
+.op-head .op-echo > span { order: 1; }
+.op-head .op-echo > input[type="checkbox"] { order: 2; }
 .op-body .unit { color: var(--muted); }
 .op-body select { width: 100%; }
 .op-pivot select#invert-pivot-note { width: auto; flex: 1 1 0; }
