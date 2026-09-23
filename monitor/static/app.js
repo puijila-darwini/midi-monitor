@@ -561,7 +561,15 @@ function buildCatchTooltip() {
     "slendro": { semis: [0, 2, 4, 7, 9], sig: null, emu: true,
                  intervals: {0:"1",2:"2",4:"3",7:"5",9:"6"} },
     "blues":   { semis: [0, 3, 5, 6, 7, 10], sig: null, emu: true,
-                 intervals: {0:"1",3:"N3",5:"4",6:"~5",7:"5",10:"~7"} }
+                 intervals: {0:"1",3:"N3",5:"4",6:"~5",7:"5",10:"~7"} },
+    "just_major": { semis: [0, 2, 4, 5, 7, 9, 11], sig: null, emu: true,
+                 intervals: {0:"1",2:"M2",4:"M3",5:"P4",7:"P5",9:"M6",11:"M7"} },
+    "just_minor": { semis: [0, 2, 3, 5, 7, 8, 10], sig: null, emu: true,
+                 intervals: {0:"1",2:"M2",3:"m3",5:"P4",7:"P5",8:"m6",10:"m7"} },
+    "thai":    { semis: [0, 1, 3, 5, 7, 9, 11], sig: null, emu: true,
+                 intervals: {0:"1",1:"2",3:"3",5:"4",7:"5",9:"6",11:"7"} },
+    "pelog":   { semis: [0, 1, 2, 5, 7, 8, 10], sig: null, emu: true,
+                 intervals: {0:"1",1:"2",2:"3",5:"4",7:"5",8:"6",10:"7"} }
   };
   // Interval name for a tonic-relative distance, preferring an emulated
   // scale's own degree names (N3 = neutral third, ~ = half-flat).

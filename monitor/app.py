@@ -12,7 +12,7 @@ from flask import Flask, jsonify, render_template, request, Response
 
 from .capture import Capture
 from .mididev import device_info
-from .state import State
+from .state import State, TUNING_PRESETS
 from .analysis import Analyser
 from .replay import (Replay, plan_from_raw, VOICES, control_change, pitch_bend,
                      BEND_RANGE_ST,
@@ -395,7 +395,7 @@ def api_velocity():
 def api_tuning():
     """Ver 96 mono microtonal tuning. GET returns the table; POST body (any of):
       {"enabled": bool}                 -> retune on/off (off re-centers bend)
-      {"preset": "equal|just|pythagorean|meantone|rast|bayati|saba|sikah|blues"}
+      {"preset": "<one of TUNING_PRESETS: equal|just|pythagorean|meantone|maqam shapes|slendro|blues|just_major|just_minor|thai|pelog>"}
       {"cents": [12 numbers ±100]}      -> custom table (marks preset "custom")
       {"master": cents ±50}             -> constant detune on every pitch
                                            class (mirrors the board's Tuning)
@@ -415,11 +415,9 @@ def api_tuning():
                         "tonic_root": state.tuning_tonic_root,
                         "a4_hz": round(state.tuning_hz(69), 2)})
     body = request.get_json(silent=True) or {}
-    if "preset" in body and body.get("preset") not in (
-            "equal", "just", "pythagorean", "meantone", "rast", "bayati",
-            "saba", "sikah", "blues"):
+    if "preset" in body and body.get("preset") not in TUNING_PRESETS:
         return jsonify({"ok": False,
-                        "error": "preset must be equal|just|pythagorean|meantone|rast|bayati|saba|sikah|slendro|blues"}), 400
+                        "error": "preset must be one of: " + "|".join(sorted(TUNING_PRESETS))}), 400
     if "cents" in body:
         try:
             vals = [float(c) for c in body.get("cents")]

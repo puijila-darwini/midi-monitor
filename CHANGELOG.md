@@ -1617,3 +1617,12 @@ Ver 97 (emulated blues + single-sourced shapes): Blues (emu) joins the list —
   (one source of truth — caught a near-miss where the /api/tuning validator
   would have accepted names nothing loads); slendro+blues join the tuning
   preset dropdown too. Verified: 32 emu checks + suites, live bundle reply.
+
+Ver 97 (shortlist: just pair, thai, pelog): Just Major (otonal 5-limit) +
+  Just Minor, Thai-ish 7-TET (equal 171c steps, ±71 max) and Pelog-ish join
+  the emulated list with skeletons, degree names and voiced tables. Registry
+  hygiene: TUNING_PRESETS now auto-expands every EMU_SCALES shape (one
+  registry — caught live Skews where thai/pelog/slendro validated but loaded
+  nothing), the /api/tuning validator reads the dict (no more name lists),
+  and the suite pins emu⊆presets + table identity. Verified: 40 emu checks +
+  suites, live thai bundle reply.

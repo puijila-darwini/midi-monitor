@@ -87,6 +87,30 @@ EMU_SCALES = {
         "labels": {0: "1", 3: "N3", 5: "4", 6: "~5", 7: "5", 10: "~7"},
         "blurb": "Blues with blue notes: neutral 3rd 350c, blue 5th 570c, septimal 7th 970c",
     },
+    "just_major": {
+        "degrees": [0, 2, 4, 5, 7, 9, 11],
+        "cents": {2: 4.0, 4: -14.0, 5: -2.0, 7: 2.0, 9: -16.0, 11: -12.0},
+        "labels": {0: "1", 2: "M2", 4: "M3", 5: "P4", 7: "P5", 9: "M6", 11: "M7"},
+        "blurb": "5-limit just major (otonal)",
+    },
+    "just_minor": {
+        "degrees": [0, 2, 3, 5, 7, 8, 10],
+        "cents": {2: 4.0, 3: 16.0, 5: -2.0, 7: 2.0, 8: 14.0, 10: 18.0},
+        "labels": {0: "1", 2: "M2", 3: "m3", 5: "P4", 7: "P5", 8: "m6", 10: "m7"},
+        "blurb": "5-limit just minor (utonal-leaning)",
+    },
+    "thai": {
+        "degrees": [0, 1, 3, 5, 7, 9, 11],
+        "cents": {1: 71.0, 3: 43.0, 5: 14.0, 7: -14.0, 9: -43.0, 11: -71.0},
+        "labels": {0: "1", 1: "2", 3: "3", 5: "4", 7: "5", 9: "6", 11: "7"},
+        "blurb": "Thai-ish 7-TET: equal 171c steps",
+    },
+    "pelog": {
+        "degrees": [0, 1, 2, 5, 7, 8, 10],
+        "cents": {1: 65.0, 2: 85.0, 5: 20.0, 7: -30.0, 8: -15.0, 10: -50.0},
+        "labels": {0: "1", 1: "2", 2: "3", 5: "4", 7: "5", 8: "6", 10: "7"},
+        "blurb": "Pelog-ish (narrow/wide intervals)",
+    },
 }
 
 
@@ -126,12 +150,9 @@ TUNING_PRESETS = {
                  -10.3, 6.8, -17.1],
     # Maqam/slendro/blues shapes single-sourced from EMU_SCALES (root shapes;
     # pair with follow-tonic; unrooted they sound on C).
-    "rast": _emu_table("rast"),
-    "bayati": _emu_table("bayati"),
-    "saba": _emu_table("saba"),
-    "sikah": _emu_table("sikah"),
-    "slendro": _emu_table("slendro"),
-    "blues": _emu_table("blues"),
+    # Every EMU_SCALES shape is loadable as a tuning preset automatically —
+    # one registry, no skew between the scale list and the preset list.
+    **{name: _emu_table(name) for name in EMU_SCALES},
 }
 
 
