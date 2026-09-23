@@ -112,6 +112,10 @@ folded into a single web app package in `monitor/`:
   normalizes vel-0 note_on to note_off; echo_hold is idempotent per raw key
   (re-press re-sounds the frozen pitch, no double holder). Saba + Segah join
   Rast/Bayati; the card re-voices on tonic-change events (not just the box).
+  Ver 97: EMU_SCALES (rast/bayati/saba/sikah/slendro) live in the scale
+  dropdown as emulated (skeleton for guide/snap/invert + root-relative detune
+  voiced via pre-bend); selecting one bundles context + table + follow-tonic
+  + retune + echo, with its own degree names on the keys (N3/N7, ~).
 - `monitor/app.py`      - Flask on :5050. Routes: `/`, `/events` (SSE),
                           `/api/state`. Background capture thread -> hub pub/sub.
                           Replay entry points (/api/replay, /api/replay/loop,
