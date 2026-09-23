@@ -382,10 +382,11 @@
                 <label class="op-toggle"><input type="checkbox" id="snap-enabled"
                        title="Snap every note onto the scale chosen in the tonic&amp;middot;scale card (the guide shading shows the tones). Bias decides how an off-scale note resolves."><span>snap</span></label>
                 <label class="op-select"><span>bias</span>
-                  <select id="snap-bias" title="How an off-scale note resolves: nearest scale tone (ties to the lower one), the next one up, or the next one down">
+                  <select id="snap-bias" title="How an off-scale note resolves: nearest scale tone (ties to the lower one), the next one up, the next one down — or silence (off-scale notes make no sound at all)">
                     <option value="nearest" selected>nearest</option>
                     <option value="up">up</option>
                     <option value="down">down</option>
+                    <option value="silent">off · silence</option>
                   </select>
                 </label>
               </div>

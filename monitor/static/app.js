@@ -684,8 +684,9 @@ function buildCatchTooltip() {
   // Ver 94: on snap-liable keys (out-of-scale, snap armed) show what the key
   // will SOUND after snapping — the landing INTERVAL relative to the key tonic
   // ABOVE the struck-through played interval (the same per-PC language all the
-  // other keys print, e.g. 1 above a struck m2). Mirrors state._snap_pitch
-  // exactly (nearest tie-lower / up / down; candidates +-1 octave; clamped).
+  // other keys print, e.g. 1 above a struck m2). "silent" bias lands on — :
+  // the key makes no sound. Mirrors state._snap_pitch exactly (nearest
+  // tie-lower / up / down / silent; candidates +-1 octave; clamped).
   // Rebuilds on guide changes, snap/bias toggles and boot-sync.
   function applySnapLabels() {
     for (var m = LOW; m <= HIGH; m++) {
@@ -710,6 +711,21 @@ function buildCatchTooltip() {
       var k = keyEls[n];
       if (!k || !k.classList.contains("outscale")) continue;
       var target = snapPitchAbs(n, semisAbs, mode);
+      if (target === null) {
+        // Silent: the key is dead — mark the landing as such.
+        var mlab = document.createElement("span");
+        mlab.className = "snap-lab";
+        var mto = document.createElement("span");
+        mto.className = "snap-to";
+        mto.textContent = "—";
+        var mfrom = document.createElement("span");
+        mfrom.className = "snap-from";
+        mfrom.textContent = ivlName(def, (n % 12 - tonicPc + 12) % 12);
+        mlab.appendChild(mto);
+        mlab.appendChild(mfrom);
+        k.appendChild(mlab);
+        continue;
+      }
       if (target === n) continue;
       var lab = document.createElement("span");
       lab.className = "snap-lab";
@@ -725,6 +741,14 @@ function buildCatchTooltip() {
     }
   }
   function snapPitchAbs(note, semisAbs, bias) {
+    // Mirrors state._snap_pitch: "silent" returns null for off-scale notes
+    // (rest in the take, muted on echo — no ghost either).
+    if (bias === "silent") {
+      for (var k = 0; k < semisAbs.length; k++) {
+        if (note % 12 === semisAbs[k]) return note;
+      }
+      return null;
+    }
     var base = note - (note % 12);
     var cands = [];
     semisAbs.forEach(function (pc) { cands.push(base + pc - 12, base + pc, base + pc + 12); });
@@ -838,6 +862,7 @@ function buildCatchTooltip() {
         def.semis.forEach(function (s2) { semisAbs.push((s2 + tp) % 12); });
         semisAbs.sort(function (a, b) { return a - b; });
         n = snapPitchAbs(n, semisAbs, bias ? bias.value : "nearest");
+        if (n === null) return null;   // silent-snap mute: no ghost
       }
     }
     return Math.max(0, Math.min(127, n));
@@ -845,14 +870,14 @@ function buildCatchTooltip() {
   function ghostFor(raw) {
     if (!echoIsOn()) return;
     var m = echoMap(raw);
-    if (m === raw) return;
+    if (m === null || m === raw) return;
     var g = keyEls[m];
     if (g) g.classList.add("ghost");
   }
   function unghost(raw) {
     if (!echoIsOn()) return;
     var m = echoMap(raw);
-    if (m === raw) return;
+    if (m === null || m === raw) return;
     var g = keyEls[m];
     if (g) g.classList.remove("ghost");
   }

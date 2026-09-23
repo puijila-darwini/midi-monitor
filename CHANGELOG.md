@@ -1652,3 +1652,11 @@ Ver 97 (transformer UI polish): Nilotic tickyboxes everywhere in the ops
   tuning module gets its straw accent; stale pitch ±24 title fixed. Verified:
   markup balanced, no dup ids, echo-all posts all five on/off/mixed on the
   real IIFE.
+
+Ver 97 (snap silence + box fit): snap bias gains "silent" — off-scale notes
+  rest in the take (timing kept) and strike-but-mute on echo (no hold, no
+  send, no ghost; feed still hears the strike; landing readout shows —).
+  Tuning module fits again (detune grid 4×3); all body checkboxes spread
+  edge-to-edge with boxes flush right, matching the title bars. Verified:
+  15 silence checks + 2196-case JS/Py snap grid identical + suites; API
+  round-trip.

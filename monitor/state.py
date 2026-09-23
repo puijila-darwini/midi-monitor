@@ -513,10 +513,12 @@ class State:
         return True
 
     def set_snap(self, enabled=None, bias=None):
-        """Set the scale-snap stage. bias: "nearest" (default) | "up" | "down"."""
+        """Set the scale-snap stage. bias: "nearest" (default) | "up" | "down" |
+        "silent" (off-scale notes make no sound: rests in the take, struck-but-
+        muted on the echo stream)."""
         if enabled is not None:
             self.snap_enabled = bool(enabled)
-        if bias in ("nearest", "up", "down"):
+        if bias in ("nearest", "up", "down", "silent"):
             self.snap_bias = bias
         self.requantize()
 
@@ -579,6 +581,10 @@ class State:
         if prev is not None:
             return prev["mapped"]
         mapped = self.echo_transform(r)
+        if mapped is None:
+            # Silent-snap mute: nothing to hold, nothing will sound, and no
+            # release will ever come for it — record nothing.
+            return None
         self.echo_held[r] = {"mapped": mapped, "channel": int(channel)}
         self.echo_holders[mapped] = self.echo_holders.get(mapped, 0) + 1
         return mapped
@@ -612,9 +618,10 @@ class State:
 
     def _snap_pitch(self, note):
         """Snap a single pitch onto the tonic·scale selection's scale, per
-        snap_bias (nearest/up/down). Emulated scales resolve onto their
-        12-key skeleton (the pre-bend voices the microtone at strike time).
-        Returns the note when no scale is set."""
+        snap_bias (nearest/up/down/silent). "silent" returns None for
+        off-scale notes (rest in the take, muted on echo). Emulated scales
+        resolve onto their 12-key skeleton (the pre-bend voices the microtone
+        at strike time). Returns the note when no scale is set."""
         semis = scale_degrees(self.key_scale)
         if semis is None or self.key_tonic < 0:
             return note
@@ -622,6 +629,10 @@ class State:
         # exactly what the JS guide shades. (Was (s - tonic), which snapped
         # non-zero tonics onto a DIFFERENT scale than the one displayed.)
         pcs = sorted((s + self.key_tonic) % 12 for s in semis)
+        if self.snap_bias == "silent":
+            # Off-scale notes make no sound: None tells the take to rest and
+            # the echo stream to strike-but-mute (no hold, no send, no ghost).
+            return note if note % 12 in pcs else None
         base = note - (note % 12)
         # Candidates around the note: same octave region +/- one octave.
         cands = [base + pc - 12 for pc in pcs] + [base + pc for pc in pcs] \
@@ -638,16 +649,21 @@ class State:
 
     def _apply_scale_snap(self, notes):
         """Scale-snap stage: force every quantized pitch onto the scale set in
-        the tonic·scale card (uses SCALE_SEMIS + key_tonic/key_scale)."""
+        the tonic·scale card (scale_degrees + key_tonic/key_scale). "silent"
+        bias rests off-scale notes outright (timing kept, nothing sounds)."""
         if not self.snap_enabled:
             return
         for qn in notes:
             if qn.get("rest") or qn.get("note") is None:
                 continue
             try:
-                qn["note"] = self._snap_pitch(int(qn["note"]))
+                snapped = self._snap_pitch(int(qn["note"]))
             except (TypeError, ValueError):
                 continue
+            if snapped is None:
+                qn["rest"] = True
+            else:
+                qn["note"] = snapped
 
     def _first_note_pitch(self, notes):
         """Pitch of the take's earliest attack — the auto-invert pivot.
@@ -2002,7 +2018,7 @@ class State:
 
         self.snap_enabled = bool(settings.get("snap_enabled", False))
         bias = settings.get("snap_bias", "nearest")
-        if bias in ("nearest", "up", "down"):
+        if bias in ("nearest", "up", "down", "silent"):
             self.snap_bias = bias
         self.invert_enabled = bool(settings.get("invert_enabled", False))
         try:

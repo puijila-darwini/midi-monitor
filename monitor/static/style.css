@@ -914,6 +914,14 @@ select option {
   color: var(--straw-soft);
   min-width: 46px;
 }
+/* Checkbox rows spread edge to edge: label left, tickybox flush right
+   (matches the title-bar echo boxes). */
+.op-body label:has(> input[type="checkbox"]) {
+  justify-content: space-between;
+}
+.op-body label:has(> input[type="checkbox"]) > span:first-child {
+  min-width: 0;
+}
 .op-body .unit { color: var(--muted); }
 .op-body select { width: 100%; }
 .op-pivot select#invert-pivot-note { width: auto; flex: 1 1 0; }
@@ -977,14 +985,14 @@ select option {
 }
 .tune-cents {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 3px 8px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px 8px;
 }
 .tune-cents label {
   font-size: 10px;
   gap: 3px;
 }
-.tune-cents .vel-input { width: 46px; }
+.tune-cents .vel-input { width: 42px; }
 .tune-a4 {
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
   font-size: 10.5px;

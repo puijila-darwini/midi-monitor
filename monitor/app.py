@@ -141,18 +141,22 @@ def _run_capture(cap):
                 # release a different pitch (stuck-note jank). Refcounted per
                 # mapped pitch so snap-collapsed keys each hold the tone.
                 mapped = state.echo_hold(event["note"], event.get("channel", 0))
-                # Ver 95: the velocity compressor can also run on the echo
-                # stream (applied live to each keyed note_on's velocity).
-                vel = state.map_echo_velocity(event["velocity"])
-                # Ver 96 mono tuning: pre-bend the channel to this strike's
-                # detune when the tuning op opts into echo (None when
-                # unchanged — skips the extra amidi hop).
-                bend = state.tuning_strike_bend(mapped, event.get("channel", 0)) \
-                    if state.echo_tuning else None
-                if bend is not None:
-                    pitch_bend(bend, channel=event.get("channel", 0))
-                note_on(mapped, vel,
-                        channel=event.get("channel", 0))
+                # Silent-snap mute (mapped None): the off-scale key struck but
+                # nothing sounds — no hold recorded, so the release sends
+                # nothing either. Feed + analysis below still hear the strike.
+                if mapped is not None:
+                    # Ver 95: the velocity compressor can also run on the echo
+                    # stream (applied live to each keyed note_on's velocity).
+                    vel = state.map_echo_velocity(event["velocity"])
+                    # Ver 96 mono tuning: pre-bend the channel to this strike's
+                    # detune when the tuning op opts into echo (None when
+                    # unchanged — skips the extra amidi hop).
+                    bend = state.tuning_strike_bend(mapped, event.get("channel", 0)) \
+                        if state.echo_tuning else None
+                    if bend is not None:
+                        pitch_bend(bend, channel=event.get("channel", 0))
+                    note_on(mapped, vel,
+                            channel=event.get("channel", 0))
             analyser.on_note(t, event["note"])
             hub.publish({"type": "note", "note": event["note"],
                          "name": _note_name(event["note"]),
@@ -514,7 +518,7 @@ def api_transform():
     """Ver 92 transform-chain ops: scale-snap, melodic invert, reverse, and
     the echo-stream opt-ins. Body: {"op": <op>, ...}.
 
-      {"op": "snap",    "enabled": bool}                or {"bias": "nearest|up|down"}
+      {"op": "snap",    "enabled": bool}                or {"bias": "nearest|up|down|silent"}
       {"op": "invert",  "enabled": bool}                or {"pivot": 0-127}
                                                          or {"auto": bool}
                                                          or {"mode": "chromatic|diatonic"}
@@ -528,7 +532,7 @@ def api_transform():
     if op == "snap":
         if "enabled" in body:
             state.set_snap(enabled=bool(body.get("enabled")))
-        if body.get("bias") in ("nearest", "up", "down"):
+        if body.get("bias") in ("nearest", "up", "down", "silent"):
             state.set_snap(bias=body.get("bias"))
         return jsonify({"ok": True, "op": "snap", "enabled": state.snap_enabled,
                         "bias": state.snap_bias})
