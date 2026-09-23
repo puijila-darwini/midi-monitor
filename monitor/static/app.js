@@ -401,8 +401,12 @@ function buildCatchTooltip() {
     }).then(function (r) { return r.json(); })
       .then(function (res) {
         // An emulated select voices the tuning table server-side; re-render
-        // so the tuning card shows the applied table + flags at once.
+        // so the tuning card shows the applied table + flags at once. The
+        // box warnings (no echo routing / no tonic) flash center-stage.
         if (res && res.emulated && window.refreshState) window.refreshState();
+        if (res && res.warnings && res.warnings.length && window.__flashWarn) {
+          window.__flashWarn(res.warnings);
+        }
         return res;
       })
       .catch(function () { /* ignore transient */ });
@@ -945,6 +949,13 @@ function buildCatchTooltip() {
     void flashEl.offsetWidth;
     flashEl.classList.add("pop");
   }
+  // Box warnings (emulated scale without echo routing / tonic): flash the
+  // first center-stage and log them all on the feed.
+  window.__flashWarn = function (lines) {
+    if (!lines || !lines.length) return;
+    flash(lines[0], "warn");
+    lines.forEach(function (w) { addFeed("WARN &middot; " + w, "warn"); });
+  };
 
   // Last signals seen ARRIVING from the keyboard (wheel -> pb/CC1, panel).
   var ctrlRx = { cc: {}, pb: 0 };

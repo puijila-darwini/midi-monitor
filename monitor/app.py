@@ -586,15 +586,32 @@ def api_scale():
             return jsonify({"ok": False, "error": "tonic must be -1..11"}), 400
         state.set_scale_context(tonic=tonic)
     emulated = False
+    exited = False
     if "scale" in body:
         sid = str(body.get("scale"))
         if sid in EMU_SCALES:
             state.select_emulated_scale(sid)
             emulated = True
         else:
-            state.set_scale_context(scale=sid)
+            exited = bool(state.set_scale_context(scale=sid))
+    if exited:
+        # No detune survives the box: re-center the board's bend outright.
+        try:
+            pitch_bend(0.0, channel=state.midi_channel)
+        except Exception:
+            pass
     resp = {"ok": True, "tonic": state.key_tonic,
-            "scale": state.key_scale, "emulated": emulated}
+            "scale": state.key_scale, "emulated": emulated,
+            "exited_emu": exited}
+    warnings = []
+    if emulated:
+        if not state.echo_enabled:
+            warnings.append("emulated scale voiced but keys routing is not echo/layer — "
+                            "live detune needs the echo path (replay still bends)")
+        if state.key_tonic < 0:
+            warnings.append("emulated scale voiced with no tonic set — pick one on the key card")
+    if warnings:
+        resp["warnings"] = warnings
     if emulated:
         resp["tuning"] = {"enabled": state.tuning_enabled,
                           "preset": state.tuning_preset,

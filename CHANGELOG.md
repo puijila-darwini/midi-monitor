@@ -1626,3 +1626,13 @@ Ver 97 (shortlist: just pair, thai, pelog): Just Major (otonal 5-limit) +
   nothing), the /api/tuning validator reads the dict (no more name lists),
   and the suite pins emu⊆presets + table identity. Verified: 40 emu checks +
   suites, live thai bundle reply.
+
+Ver 97 (boxing the emulated box): entering emulation stashes the tuning
+  (table/preset/master/root/enabled/echo — emu-to-emu keeps the original);
+  leaving for any 12-TET/off scale restores it so no detune survives exit
+  (plus a bend re-center send); patterns clear the stash (self-contained).
+  The bundle warns when keys routing is not echo/layer or no tonic is set
+  (flash center-stage + feed lines, once per select). Hz readouts go flat
+  when retune is off (display honesty). Verified: 48 emu checks (incl.
+  save/restore, warnings, exit flag, flat-hz) + suites; live enter/exit
+  round-trip with both warnings firing.

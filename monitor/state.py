@@ -329,6 +329,8 @@ class State:
                                        # is read root-relative (degree d above
                                        # the tonic gets table[d]); off = the
                                        # table sounds rooted on C
+        self._emu_prev = None          # pre-emulation tuning to restore when
+                                       # leaving an emulated scale (the box)
         self._tuning_last_bend = {}    # channel -> last sent bend (semis)
         # Press-time echo mapping (Ver 94 de-jank): note_on freezes the mapped
         # pitch SENT to the board so note_off releases exactly that pitch even
@@ -430,26 +432,67 @@ class State:
 
     def set_scale_context(self, tonic=None, scale=None):
         """Set the key context (tonic·scale card). tonic = pitch class 0-11,
-        -1 = off; scale = scale id ("" = off). Rebuilds if snap is live."""
+        -1 = off; scale = scale id ("" = off). Rebuilds if snap is live.
+        Leaving an emulated scale for anything else restores the
+        pre-emulation tuning (the box: no detune survives exit) and returns
+        True so the caller can re-center the board's bend."""
         if tonic is not None:
             try:
                 tonic = int(tonic)
             except (TypeError, ValueError):
-                return
+                return False
             self.key_tonic = max(-1, min(11, tonic))
+        exited = False
         if scale is not None:
             s = str(scale)
-            self.key_scale = s if (s in SCALE_SEMIS or s in EMU_SCALES) else ""
+            if s in EMU_SCALES:
+                self.key_scale = s
+            else:
+                if self.key_scale in EMU_SCALES:
+                    self._exit_emulated()
+                    exited = True
+                self.key_scale = s if s in SCALE_SEMIS else ""
         self.requantize()
+        return exited
+
+    def _exit_emulated(self):
+        """Restore the stashed pre-emulation tuning (or a flat table when
+        there is none) and drop the stash."""
+        prev = self._emu_prev or {}
+        self.tuning_cents = list(prev.get("cents", [0.0] * 12))[:12]
+        if len(self.tuning_cents) != 12:
+            self.tuning_cents = [0.0] * 12
+        self.tuning_preset = prev.get("preset", "equal")
+        if self.tuning_preset not in TUNING_PRESETS and self.tuning_preset != "custom":
+            self.tuning_preset = "equal"
+        try:
+            self.tuning_master = max(-50.0, min(50.0, float(prev.get("master", 0.0))))
+        except (TypeError, ValueError):
+            self.tuning_master = 0.0
+        self.tuning_tonic_root = bool(prev.get("tonic_root", False))
+        self.tuning_enabled = bool(prev.get("enabled", False))
+        self.echo_tuning = bool(prev.get("echo", False))
+        self._emu_prev = None
+        self._tuning_last_bend = {}
 
     def select_emulated_scale(self, name):
         """Voice an EMU_SCALES entry: scale context onto its skeleton (guide,
         snap, invert) + the tuning table shaped root-relative (follow-tonic,
-        retune and echo on so it sounds immediately). Returns False when the
-        id is not emulated."""
+        retune and echo on so it sounds immediately). The pre-emulation
+        tuning is stashed (once — emu-to-emu keeps the original) for restore
+        on exit. Returns False when the id is not emulated."""
         emu = EMU_SCALES.get(name)
         if emu is None:
             return False
+        if self.key_scale not in EMU_SCALES:
+            self._emu_prev = {
+                "cents": list(self.tuning_cents),
+                "preset": self.tuning_preset,
+                "master": self.tuning_master,
+                "tonic_root": self.tuning_tonic_root,
+                "enabled": self.tuning_enabled,
+                "echo": self.echo_tuning,
+            }
         self.key_scale = name
         table = [0.0] * 12
         for deg, cents in emu["cents"].items():
@@ -840,12 +883,18 @@ class State:
     def tuning_hz(self, note, base=None):
         """Sounded frequency of a MIDI note under the current table: the
         board's concert pitch (tuning_base, hand-entered — its own tune is
-        unreadable over MIDI) bent by the effective cents. Display only."""
+        unreadable over MIDI) bent by the effective cents. Retune off means
+        the board plays straight, so the readout is flat base. Display only."""
         try:
             n = int(note)
         except (TypeError, ValueError):
             return 0.0
         b = self.tuning_base if base is None else base
+        if not self.tuning_enabled:
+            try:
+                return float(b)
+            except (TypeError, ValueError):
+                return 0.0
         try:
             eff = float(self.tuning_cents[self._tuning_table_index(n)]) + float(self.tuning_master)
         except (TypeError, ValueError, IndexError):
@@ -1996,6 +2045,7 @@ class State:
         except (TypeError, ValueError):
             self.tuning_base = 440.0
         self.tuning_tonic_root = bool(settings.get("tuning_tonic_root", False))
+        self._emu_prev = None   # patterns are self-contained; no restore owed
         if not self.tuning_enabled:
             self._tuning_last_bend = {}
         try:

@@ -1225,6 +1225,7 @@ select option {
 #flash.c-chord    { color: var(--royal-soft); }
 #flash.c-arpeggio { color: var(--royal-bright); }
 #flash.c-interval { color: var(--straw); }
+#flash.warn      { color: var(--warn); }
 @keyframes pop {
   0% { transform: scale(0.9); opacity: 0.2; }
   40% { transform: scale(1.06); opacity: 1; }
