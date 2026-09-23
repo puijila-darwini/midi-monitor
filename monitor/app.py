@@ -395,7 +395,7 @@ def api_velocity():
 def api_tuning():
     """Ver 96 mono microtonal tuning. GET returns the table; POST body (any of):
       {"enabled": bool}                 -> retune on/off (off re-centers bend)
-      {"preset": "equal|just|pythagorean|meantone|rast|bayati|saba|sikah"}
+      {"preset": "equal|just|pythagorean|meantone|rast|bayati|saba|sikah|blues"}
       {"cents": [12 numbers ±100]}      -> custom table (marks preset "custom")
       {"master": cents ±50}             -> constant detune on every pitch
                                            class (mirrors the board's Tuning)
@@ -417,9 +417,9 @@ def api_tuning():
     body = request.get_json(silent=True) or {}
     if "preset" in body and body.get("preset") not in (
             "equal", "just", "pythagorean", "meantone", "rast", "bayati",
-            "saba", "sikah"):
+            "saba", "sikah", "blues"):
         return jsonify({"ok": False,
-                        "error": "preset must be equal|just|pythagorean|meantone|rast|bayati|saba|sikah"}), 400
+                        "error": "preset must be equal|just|pythagorean|meantone|rast|bayati|saba|sikah|slendro|blues"}), 400
     if "cents" in body:
         try:
             vals = [float(c) for c in body.get("cents")]
@@ -573,7 +573,7 @@ def api_scale():
     """Set the key context (tonic·scale card, server copy): the scale-snap
     stage + echo snap resolve pitches onto this selection. Body:
     {"tonic": -1..11, "scale": "<scale id>"}.
-    An EMULATED scale id (rast/bayati/saba/sikah/slendro) voices the tuning
+    An EMULATED scale id (rast/bayati/saba/sikah/slendro/blues) voices the tuning
     table root-relative too (follow-tonic + retune + echo on) so it sounds
     immediately; a plain 12-TET id leaves the tuning flags alone.
     """

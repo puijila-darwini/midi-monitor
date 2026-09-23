@@ -1610,3 +1610,10 @@ Ver 97 (emulated scales in the big list): Rast, Bayati, Saba, Sikah + a
   shows no key signature (sig null). Verified: 25 emu checks + 58 tuning +
   13 stuck; live in-browser (dropdown select armed the bundle, cells showed
   the voiced table, guide labels use the override).
+
+Ver 97 (emulated blues + single-sourced shapes): Blues (emu) joins the list —
+  neutral 3rd 350c, blue 5th 570c, septimal 7th 970c on a [0,3,5,6,7,10]
+  skeleton, keys print N3/~5/~7. All tuning shapes now expand from EMU_SCALES
+  (one source of truth — caught a near-miss where the /api/tuning validator
+  would have accepted names nothing loads); slendro+blues join the tuning
+  preset dropdown too. Verified: 32 emu checks + suites, live bundle reply.

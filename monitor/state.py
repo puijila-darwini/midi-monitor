@@ -81,6 +81,12 @@ EMU_SCALES = {
         "labels": {0: "1", 2: "2", 4: "3", 7: "5", 9: "6"},
         "blurb": "Slendro-ish pentatonic: 0·235·475·720·955c",
     },
+    "blues": {
+        "degrees": [0, 3, 5, 6, 7, 10],
+        "cents": {3: 50.0, 6: -30.0, 10: -30.0},
+        "labels": {0: "1", 3: "N3", 5: "4", 6: "~5", 7: "5", 10: "~7"},
+        "blurb": "Blues with blue notes: neutral 3rd 350c, blue 5th 570c, septimal 7th 970c",
+    },
 }
 
 
@@ -99,6 +105,17 @@ def scale_degrees(name):
 # equal = 12-TET (all zero); just = 5-limit just intonation; pythagorean =
 # stacked pure fifths; meantone = quarter-comma (note the wolf C# at -24c —
 # authentic, not a typo).
+def _emu_table(name):
+    """Expand an EMU_SCALES cents map to a 12-slot absolute table."""
+    table = [0.0] * 12
+    for deg, cents in EMU_SCALES[name]["cents"].items():
+        try:
+            table[int(deg) % 12] = max(-100.0, min(100.0, float(cents)))
+        except (TypeError, ValueError):
+            pass
+    return table
+
+
 TUNING_PRESETS = {
     "equal": [0.0] * 12,
     "just": [0.0, 11.7, 3.9, 15.6, -13.7, -2.0, -9.8, 2.0, 13.7, -15.6,
@@ -107,16 +124,14 @@ TUNING_PRESETS = {
                     -3.9, 9.8],
     "meantone": [0.0, -24.0, -6.8, 10.3, -13.7, 3.4, -20.5, -3.4, 13.7,
                  -10.3, 6.8, -17.1],
-    # Arabic quartertone shapes (root-relative: index = semitones above the
-    # root, so pair with follow-tonic; unrooted they sound on C). Rast on C:
-    # E + B half-flat; Bayati shape: the 2nd degree half-flat (tonic D =
-    # Bayati proper, tonic C = Sikah flavour); Saba shape: the 3rd degree
-    # half-flat (tonic C = Saba proper); Segah shape: the root itself
-    # half-flat (tonic E = Segah proper).
-    "rast": [0.0, 0.0, 0.0, 0.0, -50.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -50.0],
-    "bayati": [0.0, 0.0, -50.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-    "saba": [0.0, 0.0, 0.0, 0.0, -50.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-    "sikah": [-50.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+    # Maqam/slendro/blues shapes single-sourced from EMU_SCALES (root shapes;
+    # pair with follow-tonic; unrooted they sound on C).
+    "rast": _emu_table("rast"),
+    "bayati": _emu_table("bayati"),
+    "saba": _emu_table("saba"),
+    "sikah": _emu_table("sikah"),
+    "slendro": _emu_table("slendro"),
+    "blues": _emu_table("blues"),
 }
 
 
