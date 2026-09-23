@@ -336,7 +336,7 @@ button {
   cursor: pointer;
   font-size: 12px;
 }
-button:hover { background: var(--royal); color: #fff; }
+button:hover { background: var(--royal); color: var(--straw); }
 button:active { transform: translateY(1px); }
 .key-reset { font-size: 11px; padding: 3px 8px; }
 
@@ -805,12 +805,57 @@ select option {
 .ctrl-received { align-items: baseline; border-top: 1px dashed var(--straw-gold, rgba(201,168,106,.35)); padding-top: 6px; font-size: 12px; }
 .ctrl-rx-title { color: var(--muted); }
 .ctrl-rx { color: var(--straw-soft, #e8d5a3); font-variant-numeric: tabular-nums; }
+:root { color-scheme: dark; }
 .chain-controls label,
 .op-body label {
   display: flex;
   align-items: center;
   gap: 5px;
   cursor: pointer;
+}
+.op-head label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+.op-head .op-echo {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--muted);
+}
+/* Nilotic tickyboxes: rounded straw-framed chips, straw fill + phthalo tick
+   when on. Replaces the native white boxes in the ops + chain controls. */
+.op-body input[type="checkbox"],
+.op-head input[type="checkbox"],
+.chain-controls input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  border-radius: 5px;
+  border: 1px solid var(--straw-gold);
+  background: rgba(8, 17, 14, 0.8);
+  cursor: pointer;
+  margin: 0;
+  padding: 0;
+}
+.op-body input[type="checkbox"]:checked,
+.op-head input[type="checkbox"]:checked,
+.chain-controls input[type="checkbox"]:checked {
+  background-color: var(--straw);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M3 7.5l2.5 2.5L11 4.5' fill='none' stroke='%230B1F1A' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-size: 11px 11px;
+  background-position: center;
+  background-repeat: no-repeat;
+  box-shadow: 0 0 5px rgba(242, 230, 166, 0.45);
+}
+.op-body input[type="checkbox"]:focus-visible,
+.op-head input[type="checkbox"]:focus-visible,
+.chain-controls input[type="checkbox"]:focus-visible {
+  outline: 1px solid var(--royal-bright);
+  outline-offset: 1px;
 }
 .chain-status {
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
@@ -920,9 +965,32 @@ select option {
 .vel-enable input,
 .humanizer-enable input,
 .op-toggle input,
-.op-echo input { accent-color: var(--royal); }
 .op-auto input { accent-color: var(--straw); }
+/* legacy accent rules above are superseded by the custom tickyboxes; kept
+   for any checkbox outside .op-body/.op-head/.chain-controls */
 .op-pivot select:disabled { opacity: 0.45; cursor: not-allowed; }
+/* tuning module: straw accent like the pitch family + a tightened detune grid */
+.op-tune { border-left-color: var(--straw); }
+.op-tune .op-head::before {
+  background: var(--straw);
+  box-shadow: 0 0 5px rgba(242, 230, 166, 0.6);
+}
+.tune-cents {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 3px 8px;
+}
+.tune-cents label {
+  font-size: 10px;
+  gap: 3px;
+}
+.tune-cents .vel-input { width: 46px; }
+.tune-a4 {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 10.5px;
+  color: var(--straw);
+  white-space: nowrap;
+}
 
 .feed-list {
   list-style: none;

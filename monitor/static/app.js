@@ -1979,6 +1979,31 @@ case "replay":
     onEchoToggle("transpose-echo", "transpose");
     // Ver 95: velocity compressor echo opt-in (applied to each echoed note_on)
     onEchoToggle("velocity-echo", "velocity");
+    // UI polish: one supervening switch for every echo opt-in. If all are
+    // on it turns them off, else it turns them all on (each posts, so the
+    // server stays the source of truth; refreshState converges the boxes).
+    var ECHO_IDS = [
+      ["transpose-echo", "transpose"],
+      ["velocity-echo", "velocity"],
+      ["tuning-echo", "tuning"],
+      ["snap-echo", "snap"],
+      ["invert-echo", "invert"]
+    ];
+    var echoAllBtn = document.getElementById("echo-all");
+    if (echoAllBtn) {
+      echoAllBtn.addEventListener("click", function () {
+        var boxes = ECHO_IDS.map(function (p) {
+          return { el: document.getElementById(p[0]), which: p[1] };
+        }).filter(function (b) { return !!b.el; });
+        if (!boxes.length) return;
+        var target = !boxes.every(function (b) { return b.el.checked; });
+        boxes.forEach(function (b) {
+          b.el.checked = target;
+          postTransform({ op: "echo", which: b.which, enabled: target });
+        });
+        applyLiveColorClasses();
+      });
+    }
     // Ver 95: inversion mode — chromatic (exact semitones) vs diatonic
     // (reflects on the scale ladder, results stay in the key).
     var invModeSel = document.getElementById("invert-mode");

@@ -1643,3 +1643,12 @@ Ver 97 (warnings move to the scale card): the box warnings no longer flash in
   routing + tonic live (select, tonic/scale change, catch, keys-mode flips,
   every refresh pass); server warnings merge in and log to the feed once per
   select. Verified: 6 scale-warn logic checks on the real function.
+
+Ver 97 (transformer UI polish): Nilotic tickyboxes everywhere in the ops
+  (rounded straw-framed chips, straw fill + phthalo tick; color-scheme dark
+  for native spinners), echo opt-ins moved into each op title bar, plus a
+  supervening "echo all" toggle in the transform head (all-on→all-off else
+  all-on, each posts). Detune grid tightened to 6×2 with compact cells; the
+  tuning module gets its straw accent; stale pitch ±24 title fixed. Verified:
+  markup balanced, no dup ids, echo-all posts all five on/off/mixed on the
+  real IIFE.

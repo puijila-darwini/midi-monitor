@@ -251,6 +251,8 @@
             <span class="cartouche-title chain-title">transform</span>
             <div class="cartouche-end">
               <span id="chain-counts" class="chain-counts" title="Raw events in &rarr; transformed MIDI events out"></span>
+              <button id="echo-all" class="listen-btn" type="button"
+                      title="Toggle every echo opt-in at once (transpose / velocity / tuning / snap / invert): if all are on, turn them off, else turn them all on">echo all</button>
               <span class="corner" aria-hidden="true"><svg class="corner-ic"><use href="#ic-sliders"/></svg></span>
             </div>
           </div>
@@ -279,19 +281,19 @@
             </div>
 
             <div class="op op-transpose">
-              <div class="op-head"><span class="op-title">transpose</span></div>
+              <div class="op-head"><span class="op-title">transpose</span><label class="op-echo"><input type="checkbox" id="transpose-echo"
+                       title="Also apply the transpose LIVE to echoed keybed notes (the echo re-route; note_off mirrors automatically)"><span>echo</span></label></div>
               <div class="op-body">
                 <label class="transpose-label"><span>semitones</span>
                   <input type="number" id="transpose-input" class="tempo-input" min="-24" max="24" step="1"
                          value="0" title="Transpose the transformed take by semitones (-24..+24, 0 = off)">
                 </label>
-                <label class="op-echo"><input type="checkbox" id="transpose-echo"
-                       title="Also apply the transpose LIVE to echoed keybed notes (the echo re-route; note_off mirrors automatically)"><span>echo</span></label>
               </div>
             </div>
 
             <div class="op op-vel">
-              <div class="op-head"><span class="op-title">velocity</span></div>
+              <div class="op-head"><span class="op-title">velocity</span><label class="op-echo"><input type="checkbox" id="velocity-echo"
+                       title="Also apply the velocity compressor LIVE to echoed keybed notes (threshold clips to the band; compress rescales the recent window into the band)"><span>echo</span></label></div>
               <div class="op-body">
                 <label class="vel-enable"><input type="checkbox" id="vel-enabled" checked
                        title="Enable/disable the velocity compressor stage"><span>compress</span></label>
@@ -311,18 +313,17 @@
                     <option value="threshold">clip</option>
                   </select>
                 </label>
-                <label class="op-echo"><input type="checkbox" id="velocity-echo"
-                       title="Also apply the velocity compressor LIVE to echoed keybed notes (threshold clips to the band; compress rescales the recent window into the band)"><span>echo</span></label>
               </div>
             </div>
 
             <div class="op op-tune">
-              <div class="op-head"><span class="op-title">tuning</span></div>
+              <div class="op-head"><span class="op-title">tuning</span><label class="op-echo"><input type="checkbox" id="tuning-echo"
+                       title="Also apply the retune LIVE to echoed keybed notes (same mono pre-bend as replay)"><span>echo</span></label></div>
               <div class="op-body">
                 <label class="tune-enable"><input type="checkbox" id="tuning-enabled"
                        title="Retune the keyboard away from 12-TET: replay strikes are pre-bent to their pitch-class offset (check echo to also retune live echoed notes; MONO — one shared bend channel, a chord takes the bass note's detune)"><span>retune</span></label>
                 <label class="tune-preset-label"><span>preset</span>
-                  <select id="tuning-preset" title="Equal = 12-TET (all zero); just = 5-limit just intonation; pythagorean = stacked pure fifths; meantone = quarter-comma (wolf C# at -24c is authentic)">
+                  <select id="tuning-preset" title="Temperament shapes (root-relative — pair with the tonic box); custom = hand-edited cells">
                     <option value="equal" selected>equal</option>
                     <option value="just">just</option>
                     <option value="pythagorean">pythagorean</option>
@@ -354,8 +355,6 @@
                 <div class="tune-cents" title="Cents deviation per pitch class (±100)">
                   <label>C<input type="number" id="tuning-c0" class="vel-input" min="-100" max="100" step="0.1" value="0"></label><label>C#<input type="number" id="tuning-c1" class="vel-input" min="-100" max="100" step="0.1" value="0"></label><label>D<input type="number" id="tuning-c2" class="vel-input" min="-100" max="100" step="0.1" value="0"></label><label>Eb<input type="number" id="tuning-c3" class="vel-input" min="-100" max="100" step="0.1" value="0"></label><label>E<input type="number" id="tuning-c4" class="vel-input" min="-100" max="100" step="0.1" value="0"></label><label>F<input type="number" id="tuning-c5" class="vel-input" min="-100" max="100" step="0.1" value="0"></label><label>F#<input type="number" id="tuning-c6" class="vel-input" min="-100" max="100" step="0.1" value="0"></label><label>G<input type="number" id="tuning-c7" class="vel-input" min="-100" max="100" step="0.1" value="0"></label><label>Ab<input type="number" id="tuning-c8" class="vel-input" min="-100" max="100" step="0.1" value="0"></label><label>A<input type="number" id="tuning-c9" class="vel-input" min="-100" max="100" step="0.1" value="0"></label><label>Bb<input type="number" id="tuning-c10" class="vel-input" min="-100" max="100" step="0.1" value="0"></label><label>B<input type="number" id="tuning-c11" class="vel-input" min="-100" max="100" step="0.1" value="0"></label>
                 </div>
-                <label class="op-echo"><input type="checkbox" id="tuning-echo"
-                       title="Also apply the retune LIVE to echoed keybed notes (same mono pre-bend as replay)"><span>echo</span></label>
               </div>
             </div>
 
@@ -377,7 +376,8 @@
             </div>
 
             <div class="op op-scale">
-              <div class="op-head"><span class="op-title">scale</span></div>
+              <div class="op-head"><span class="op-title">scale</span><label class="op-echo"><input type="checkbox" id="snap-echo"
+                       title="Also snap LIVE echoed keybed notes onto the scale"><span>echo</span></label></div>
               <div class="op-body">
                 <label class="op-toggle"><input type="checkbox" id="snap-enabled"
                        title="Snap every note onto the scale chosen in the tonic&amp;middot;scale card (the guide shading shows the tones). Bias decides how an off-scale note resolves."><span>snap</span></label>
@@ -388,13 +388,12 @@
                     <option value="down">down</option>
                   </select>
                 </label>
-                <label class="op-echo"><input type="checkbox" id="snap-echo"
-                       title="Also snap LIVE echoed keybed notes onto the scale"><span>echo</span></label>
               </div>
             </div>
 
             <div class="op op-invert">
-              <div class="op-head"><span class="op-title">invert</span></div>
+              <div class="op-head"><span class="op-title">invert</span><label class="op-echo"><input type="checkbox" id="invert-echo"
+                       title="Also invert LIVE echoed keybed notes"><span>echo</span></label></div>
               <div class="op-body">
                 <label class="op-toggle"><input type="checkbox" id="invert-enabled"
                        title="Mirror each pitch around the pivot note (melodic inversion — a rising phrase falls, the contour flips about the pivot). Pivot defaults to the key tonic at octave 3, or auto = the pattern's first note."><span>on</span></label>
@@ -436,8 +435,6 @@
                 </label>
                 <label class="op-auto"><input type="checkbox" id="invert-auto"
                        title="Pivot = the pattern's FIRST note (its earliest attack), so the inverted phrase stays in the same register. The note+octave pickers are ignored while this is on and key-following pauses."><span>auto</span></label>
-                <label class="op-echo"><input type="checkbox" id="invert-echo"
-                       title="Also invert LIVE echoed keybed notes"><span>echo</span></label>
               </div>
             </div>
 
@@ -577,7 +574,7 @@
                 <input type="range" id="ctrl-mod" class="ctrl-vrange" min="0" max="127" value="0">
                 <input type="number" id="ctrl-mod-val" class="ctrl-fval" min="0" max="127" step="1" value="0">
               </label>
-              <label class="ctrl-fader" title="Pitch bend in semitones (-24..+24, 0 = center)">
+              <label class="ctrl-fader" title="Pitch bend in semitones (±2, 0 = center)">
                 <span class="ctrl-fader-label">pitch</span>
                 <input type="range" id="ctrl-pitch" class="ctrl-vrange" min="-2" max="2" value="0" step="0.1">
                 <input type="number" id="ctrl-pitch-val" class="ctrl-fval" min="-2" max="2" step="0.1" value="0">
