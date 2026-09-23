@@ -1660,3 +1660,9 @@ Ver 97 (snap silence + box fit): snap bias gains "silent" — off-scale notes
   edge-to-edge with boxes flush right, matching the title bars. Verified:
   15 silence checks + 2196-case JS/Py snap grid identical + suites; API
   round-trip.
+
+Ver 97 (no-grey polish): out·ctrl faders go fully Nilotic (phthalo slot,
+  straw knob — no native white track or grey thumb survives, webkit + moz);
+  detune grid to 3 columns so it fits the tuning box; every #fff text
+  (metronome active, seg active, slot selected, button hover) becomes straw.
+  Grey is not in the palette at any value.
