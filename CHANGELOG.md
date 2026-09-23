@@ -1636,3 +1636,10 @@ Ver 97 (boxing the emulated box): entering emulation stashes the tuning
   when retune is off (display honesty). Verified: 48 emu checks (incl.
   save/restore, warnings, exit flag, flat-hz) + suites; live enter/exit
   round-trip with both warnings firing.
+
+Ver 97 (warnings move to the scale card): the box warnings no longer flash in
+  the chord banner (wrong home — reads as a chord event). New #scale-warn
+  line in the scale card, danger red, evaluated client-side so it tracks
+  routing + tonic live (select, tonic/scale change, catch, keys-mode flips,
+  every refresh pass); server warnings merge in and log to the feed once per
+  select. Verified: 6 scale-warn logic checks on the real function.

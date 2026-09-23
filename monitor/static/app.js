@@ -384,7 +384,43 @@ function buildCatchTooltip() {
     pushScaleContext();
     syncPivotFromKey();
     if (window.__tuneTonicChanged) window.__tuneTonicChanged();
+    if (window.__scaleWarn) window.__scaleWarn();
   }
+
+  // Emulated-scale box warning, evaluated client-side so it tracks routing +
+  // tonic live (not just the select moment): danger-red line in the scale
+  // card (routing/context advice belongs there, not the chord banner).
+  // serverLines (from /api/scale) merge in; logFeed logs once per select.
+  function updateScaleWarn(serverLines, logFeed) {
+    var el = document.getElementById("scale-warn");
+    if (!el) return;
+    var sc = document.getElementById("key-scale");
+    var ton = document.getElementById("key-tonic");
+    var scaleId = sc ? sc.value : "";
+    var def = (typeof SCALES !== "undefined") ? SCALES[scaleId] : null;
+    var lines = [];
+    if (def && def.emu) {
+      var seg = document.getElementById("ctrl-keys-mode");
+      var b = seg ? seg.querySelector("button.active") : null;
+      var m = b ? b.getAttribute("data-mode") : "keys";
+      if (m !== "layer" && m !== "echo") {
+        lines.push("live detune needs echo/layer keys routing — replay still bends");
+      }
+      var tp = ton ? parseInt(ton.value, 10) : NaN;
+      if (isNaN(tp) || tp < 0) {
+        lines.push("no tonic set — pick one for the skeleton to voice onto");
+      }
+    }
+    (serverLines || []).forEach(function (w) {
+      if (lines.indexOf(w) < 0) lines.push(w);
+    });
+    el.textContent = lines.join(" · ");
+    el.classList.toggle("visible", lines.length > 0);
+    if (logFeed && lines.length) {
+      lines.forEach(function (w) { addFeed("WARN &middot; " + w, "warn"); });
+    }
+  }
+  window.__scaleWarn = updateScaleWarn;
 
   // Ver 92: keep the server's key context (scale-snap stage + echo snap) in
   // lockstep with the tonic·scale card, so the transform ops resolve onto the
@@ -401,12 +437,10 @@ function buildCatchTooltip() {
     }).then(function (r) { return r.json(); })
       .then(function (res) {
         // An emulated select voices the tuning table server-side; re-render
-        // so the tuning card shows the applied table + flags at once. The
-        // box warnings (no echo routing / no tonic) flash center-stage.
+        // so the tuning card shows the applied table + flags at once. Box
+        // warnings go to the scale card (danger red), logged once.
         if (res && res.emulated && window.refreshState) window.refreshState();
-        if (res && res.warnings && res.warnings.length && window.__flashWarn) {
-          window.__flashWarn(res.warnings);
-        }
+        if (window.__scaleWarn) window.__scaleWarn(res && res.warnings, true);
         return res;
       })
       .catch(function () { /* ignore transient */ });
@@ -949,14 +983,6 @@ function buildCatchTooltip() {
     void flashEl.offsetWidth;
     flashEl.classList.add("pop");
   }
-  // Box warnings (emulated scale without echo routing / tonic): flash the
-  // first center-stage and log them all on the feed.
-  window.__flashWarn = function (lines) {
-    if (!lines || !lines.length) return;
-    flash(lines[0], "warn");
-    lines.forEach(function (w) { addFeed("WARN &middot; " + w, "warn"); });
-  };
-
   // Last signals seen ARRIVING from the keyboard (wheel -> pb/CC1, panel).
   var ctrlRx = { cc: {}, pb: 0 };
   var CTRL_NAMES = {
@@ -1785,6 +1811,8 @@ case "replay":
         applyPivotMarker();
         // Tuning card follows the tonic when its tonic box is checked.
         if (window.__tuneTonicChanged) window.__tuneTonicChanged();
+        // Box warning tracks tonic/scale live.
+        if (window.__scaleWarn) window.__scaleWarn();
       }
       tonicSel.addEventListener("change", current);
       scaleSel.addEventListener("change", current);
@@ -2370,6 +2398,7 @@ case "replay":
       sendEcho(!!KEYS_MODE_ECHO[mode]);
       flashCtrlStatus("keys: " + mode, false);
       applyLiveColorClasses();  // echo routing gates the inverted piano look
+      if (window.__scaleWarn) window.__scaleWarn();  // box warning tracks routing
     }
     if (keysSeg) {
       keysSeg.addEventListener("click", function (e) {
@@ -2382,6 +2411,7 @@ case "replay":
       var mode = echoOn ? (localOn ? "layer" : "echo") : (localOn ? "keys" : "midi");
       setKeysSeg(mode);
       applyLiveColorClasses();
+      if (window.__scaleWarn) window.__scaleWarn();
     };
     // Changing the OUT voice while echo is on re-applies it to the echo path.
     var rvSel = document.getElementById("replay-voice");
@@ -3041,6 +3071,8 @@ if (typeof s.time_signature === "string" && s.time_signature.indexOf("/") > 0) {
           // Ver 93: on boot the pivot note follows the key tonic (octave 3)
           // unless a custom pivot was restored.
           syncPivotFromKey();
+          // Box warning converges on every pass (pattern loads etc.).
+          if (window.__scaleWarn) window.__scaleWarn();
         }
         // Sync the OUT control surface (last values we sent) + the received
         // watch (signals arriving from the keyboard).
