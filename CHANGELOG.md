@@ -1666,3 +1666,14 @@ Ver 97 (no-grey polish): out·ctrl faders go fully Nilotic (phthalo slot,
   detune grid to 3 columns so it fits the tuning box; every #fff text
   (metronome active, seg active, slot selected, button hover) becomes straw.
   Grey is not in the palette at any value.
+
+Ver 98 (spec mining): the MIDI Reference yields three board tricks. (1) Bend
+  sensitivity is settable 0-24 st via RPN 00 00 (default ±2) — locked to ±2
+  on echo enable (replay.bend_range, NULL-RPN closed), so the ÷2 divisor is
+  now certain by construction. (2) Sustain CC64 is recognized but never
+  transmitted (panel button is internal-only) — new out·ctrl sustain latch.
+  (3) Yamaha Master Tune SysEx is recognized and tunes panel voices too —
+  tuning card "push" sets the board to the hand-entered base (0.1c steps).
+  Also documented: GM-ON = factory defaults (not GM voices), MIDI OUT oFF =
+  silent capture, auto-power sleep, arp on ch+1, CC84 legato (future), cable
+  rules. Verified: RPN/SysEx byte checks + echo-lock/push routes + suites.

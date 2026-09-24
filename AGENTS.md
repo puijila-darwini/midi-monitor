@@ -23,6 +23,20 @@ PSS-A50 USB keyed into this machine.
   controller data (CC6/11/71/72/74/100/101 etc.) and SysEx 120/121/123 aux.
   `capture.py` parses all of it; capture handles note/ctrl/pitch events (see
   the out · ctrl card's "received" readout).
+- MIDI Reference findings (chart + data format, mined 2026-09-24, PDF kept at
+  ~/ai/tmp/manual/pssa50_mr.pdf): bend sensitivity settable 0-24 st via RPN
+  00 00 (default ±2) — we LOCK ±2 via RPN on echo enable so BEND_RANGE_ST is
+  certain by construction, not just ear-calibrated. Sustain CC64 is
+  recognized-but-never-transmitted (panel SUSTAIN is internal-only) → the
+  out·ctrl sustain latch (nothing to forward). Yamaha Master Tune SysEx
+  (F0 43 1n 27 30 00 00 mm ll cc, 0.1c steps, center 08 00) tunes PANEL voices
+  too → tuning card "push" sets the board to the hand-entered base. Master
+  Volume SysEx recognized (unused; CC7 covers). GM System ON restores defaults
+  (not GM voices — the gm-reset button is a factory-defaults button).
+  Portamento Control CC84 recognized-never-transmitted (future legato).
+  Traps: MIDI OUT CHANNEL oFF = silent capture; auto-power-off sleeps the
+  board; arp plays on channel+1 (analysis already sees it); USB cable < 3 m,
+  6 s wait on replug.
 - The PSS-A50 ALSO RECEIVES over the same USB (bidirectional). It plays its
   INTERNAL voices (no softsynth needed): note on/off and full chords sound via
   its own speakers. Send path is the raw device (amidi) because ALSA

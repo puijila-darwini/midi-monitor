@@ -1420,6 +1420,11 @@ select option {
   background: var(--royal);
   color: var(--straw);
 }
+.listen-btn.active {
+  border-color: var(--straw);
+  color: var(--straw);
+  box-shadow: 0 0 6px rgba(242, 230, 166, 0.45);
+}
 .listen-btn:active { transform: translateY(1px); }
 .listen-btn.listening {
   border-color: var(--straw);

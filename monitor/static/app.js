@@ -2395,6 +2395,19 @@ case "replay":
     }
     wireBtn("ctrl-panic", function () { return { action: "panic" }; }, "panic");
     wireBtn("ctrl-gmreset", function () { return { action: "gmreset" }; }, "gm reset");
+    // Sustain latch: the board never transmits CC64 itself (panel SUSTAIN
+    // button is internal-only) but recognizes it — latch for RX voices.
+    (function () {
+      var btn = document.getElementById("ctrl-sustain");
+      if (!btn) return;
+      var latched = false;
+      btn.addEventListener("click", function () {
+        latched = !latched;
+        btn.classList.toggle("active", latched);
+        postCtrl(latched ? "sustain on" : "sustain off",
+                 { cc: 64, value: latched ? 127 : 0 });
+      });
+    })();
     // Keys routing: 'echo' (notes routed back from the app) and 'local'
     // (board sounds its own keys) are two switches with four combined modes.
     // One segmented control sets both so they can't drift apart.
@@ -2708,6 +2721,16 @@ case "replay":
       });
       baseInput.addEventListener("input", function () { updateTuneHz(); });
     }
+    // Push: SET the board's concert pitch via Master Tune SysEx (global —
+    // panel voices too). The board audibly retunes; that confirms it landed.
+    var pushBtn = document.getElementById("tuning-push");
+    if (pushBtn) pushBtn.addEventListener("click", function () {
+      fetch("/api/tuning", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ push_base: true })
+      }).catch(function () { /* ignore transient */ });
+    });
   })();
 
   // Humanizer stage: subtle timing and velocity variation applied at the

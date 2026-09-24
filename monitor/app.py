@@ -15,7 +15,7 @@ from .mididev import device_info
 from .state import State, TUNING_PRESETS
 from .analysis import Analyser
 from .replay import (Replay, plan_from_raw, VOICES, control_change, pitch_bend,
-                     BEND_RANGE_ST,
+                     BEND_RANGE_ST, bend_range, yamaha_master_tuning,
                      gm_system_on, midi_panic, note_on, note_off, program_change)
 from . import midiout
 from . import sinks
@@ -408,6 +408,9 @@ def api_tuning():
                                            readout derives from it
       {"tonic_root": bool}              -> voice the table root-relative on
                                            the key card's tonic (off: on C)
+      {"push_base": true}               -> SET the board's own concert pitch
+                                           to <base> via Yamaha Master Tune
+                                           SysEx (tunes the PANEL voices too)
     The table rides on every echoed note_on + replay strike as a pre-bend.
     """
     if request.method == "GET":
@@ -452,6 +455,14 @@ def api_tuning():
                      master=body.get("master", None),
                      base=body.get("base", None),
                      tonic_root=body.get("tonic_root", None))
+    pushed = False
+    if body.get("push_base"):
+        import math as _math
+        try:
+            cents = 1200.0 * _math.log2(max(1.0, float(state.tuning_base)) / 440.0)
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "base must be a number"}), 400
+        pushed = bool(yamaha_master_tuning(cents))
     if not state.tuning_enabled:
         # Leave no detune behind on the board.
         try:
@@ -464,6 +475,7 @@ def api_tuning():
                     "master": state.tuning_master,
                     "base": state.tuning_base,
                     "tonic_root": state.tuning_tonic_root,
+                    "pushed": pushed,
                     "a4_hz": round(state.tuning_hz(69), 2)})
 
 
@@ -722,6 +734,15 @@ def api_echo():
     body = request.get_json(silent=True) or {}
     enabled = bool(body.get("enabled", True))
     voice_name = body.get("voice", "auto")
+    if enabled:
+        # Lock the bend sensitivity to BEND_RANGE_ST via RPN (chart: settable
+        # 0-24, default ±2) so every echo/replay pre-bend divides correctly
+        # no matter what touched it before. RPN persists; GM reset = ±2 too.
+        for _ch in {0, state.midi_channel}:
+            try:
+                bend_range(int(BEND_RANGE_ST), channel=_ch)
+            except Exception:
+                pass
     if not enabled:
         # Ring off every echoed note still sounding (pressed while echo was
         # live) — otherwise flipping echo off mid-hold strands the board's

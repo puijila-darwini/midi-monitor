@@ -126,6 +126,39 @@ def pitch_bend(semitones, channel=0):
     return ok
 
 
+def bend_range(semitones=2, channel=0):
+    """Lock the board's pitch-bend sensitivity via RPN 00 00 + Data Entry
+    (MIDI Reference: settable 0-24 st, default ±2). Makes BEND_RANGE_ST
+    certain by construction instead of ear-calibrated — call when the echo
+    path goes live (RPN persists until a GM reset, which also defaults ±2).
+    Closes with a NULL RPN so later Data Entry messages can't retune it."""
+    ch = max(0, min(15, int(channel)))
+    v = max(0, min(24, int(semitones)))
+    ok = _send("B%X 65 00" % ch)   # RPN MSB = 0
+    ok = _send("B%X 64 00" % ch) and ok   # RPN LSB = 0 -> bend sensitivity
+    time.sleep(0.01)
+    ok = _send("B%X 06 %02X" % (ch, v)) and ok   # Data Entry MSB = range
+    time.sleep(0.01)
+    ok = _send("B%X 65 7F" % ch) and ok   # NULL RPN (politeness)
+    ok = _send("B%X 64 7F" % ch) and ok
+    time.sleep(0.01)
+    return ok
+
+
+def yamaha_master_tuning(cents, device=0):
+    """Yamaha MIDI Master Tune SysEx (recognized per the MIDI Reference; it
+    tunes the PANEL voices too, not just RX notes). V = (mm<<7)|ll in 0.1c
+    steps, center 08 00 = concert, range ±102.4c. device = device number
+    nibble (any value accepted)."""
+    v = max(0, min(2047, int(round(1024 + float(cents) * 10.0))))
+    mm = (v >> 7) & 0x7F
+    ll = v & 0x7F
+    dev = max(0, min(15, int(device)))
+    ok = _send("F0 43 1%X 27 30 00 00 %02X %02X 00 F7" % (dev, mm, ll))
+    time.sleep(0.02)
+    return ok
+
+
 def note_on(note, velocity, channel=0):
     """Send a note-on (raw path, 9n NN VV) — used by live-echo mode."""
     ch = max(0, min(15, int(channel)))
