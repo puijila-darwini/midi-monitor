@@ -1683,3 +1683,10 @@ Ver 98 revert: Rack 2.6.6 broke MIDI (no ports created without a MIDI-CV module 
 Ver 98 (Rack 2.6.6 MIDI fix): Rack 2.6.6 requires exact ALSA device name in the patch's MIDI module (MIDIToCVInterface). The template had "deviceName": "QWERTY keyboard (US)" which didn't match the actual "Digital Keyboard MIDI 1" — fixed in template.vcv. Rack 2.6.6 now connects to the keyboard and exposes MIDI ports. The 2.2.5 fallback is archived at Rack-prev.
 
 Ver 98 (Rack 2.6.6 MIDI fix): Rack 2.6.6 requires exact ALSA device name in the patch's MIDI module (MIDIToCVInterface). The template had "deviceName": "QWERTY keyboard (US)" which didn't match the actual "Digital Keyboard MIDI 1" — fixed in template.vcv. Rack 2.6.6 now connects to the keyboard and exposes MIDI ports. The 2.2.5 fallback is archived at Rack-prev.
+
+Ver 98 (Rack 2.6.6 MIDI): Rack 2.6.6 works with the MIDIToCVInterface module
+  in the template — the only fix needed was correcting the ALSA device name
+  from "QWERTY keyboard (US)" to "Digital Keyboard MIDI 1" in template.vcv.
+  The 2.6.6 binary runs, exposes MIDI ports, and the patch (MIDI in →
+  MIDIToCVInterface → instrument → Audio 2 out) works end-to-end. The 2.0.6
+  fallback is archived at Rack-prev / RackoLD.
