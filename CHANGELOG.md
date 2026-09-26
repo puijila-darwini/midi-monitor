@@ -1679,3 +1679,7 @@ Ver 98 (spec mining): the MIDI Reference yields three board tricks. (1) Bend
   rules. Verified: RPN/SysEx byte checks + echo-lock/push routes + suites.
 
 Ver 98 revert: Rack 2.6.6 broke MIDI (no ports created without a MIDI-CV module in the patch; template lacks one). Reverted to 2.2.5 which exposes MIDI ports immediately. The 2.6.6 update is parked at /home/pthag/Musica/Rack-new for later when we can bake a MIDI-CV module into the template.
+
+Ver 98 (Rack 2.6.6 MIDI fix): Rack 2.6.6 requires exact ALSA device name in the patch's MIDI module (MIDIToCVInterface). The template had "deviceName": "QWERTY keyboard (US)" which didn't match the actual "Digital Keyboard MIDI 1" — fixed in template.vcv. Rack 2.6.6 now connects to the keyboard and exposes MIDI ports. The 2.2.5 fallback is archived at Rack-prev.
+
+Ver 98 (Rack 2.6.6 MIDI fix): Rack 2.6.6 requires exact ALSA device name in the patch's MIDI module (MIDIToCVInterface). The template had "deviceName": "QWERTY keyboard (US)" which didn't match the actual "Digital Keyboard MIDI 1" — fixed in template.vcv. Rack 2.6.6 now connects to the keyboard and exposes MIDI ports. The 2.2.5 fallback is archived at Rack-prev.
