@@ -1677,3 +1677,5 @@ Ver 98 (spec mining): the MIDI Reference yields three board tricks. (1) Bend
   Also documented: GM-ON = factory defaults (not GM voices), MIDI OUT oFF =
   silent capture, auto-power sleep, arp on ch+1, CC84 legato (future), cable
   rules. Verified: RPN/SysEx byte checks + echo-lock/push routes + suites.
+
+Ver 98 revert: Rack 2.6.6 broke MIDI (no ports created without a MIDI-CV module in the patch; template lacks one). Reverted to 2.2.5 which exposes MIDI ports immediately. The 2.6.6 update is parked at /home/pthag/Musica/Rack-new for later when we can bake a MIDI-CV module into the template.

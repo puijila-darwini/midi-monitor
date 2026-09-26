@@ -31,7 +31,7 @@ LAUNCHABLE = [
     {
         "key": "vcv",
         "name": "VCV Rack",
-        "cmd": "/home/pthag/Musica/Rack/Rack",
+        "cmd": "/home/pthag/Musica/Rack/runrack",
         "detect": ["VCV Rack"],
         "auto_route": True,
     },
