@@ -1292,6 +1292,7 @@ case "replay":
     // Ver 102: keep the last-known keyboard voice for the latched synth
     // readout; if the latch is on, the (closed) synth picker follows live.
     synthFollowedVoice = name || "";
+    synthFollowedProgram = program;
     if (synthLatch) showSynthFollowedVoice();
     var el = document.getElementById("instrument");
     if (el) el.textContent = "instrument: " + name + " (prog " + program + ")";
@@ -1838,47 +1839,52 @@ case "replay":
     var synthBusy = false;
     var synthLatch = false;          // Ver 102: voice follows the keyboard
     var synthFollowedVoice = "";     // last voice the keyboard was put on
+    var synthFollowedProgram = -1;   // its GM program (for the picker highlight)
 
-    // The voice list already lives in the out-card (replay-voice select) —
-    // clone it so there is exactly one source of truth for GM names.
-    (function () {
-      if (!synthEl || !synthEl.voice) return;
-      var rv = document.getElementById("replay-voice");
-      if (!rv) return;
-      for (var i = 0; i < rv.options.length; i++) {
-        if (rv.options[i].value === "auto") continue;
-        var o = document.createElement("option");
-        o.value = rv.options[i].value;
-        o.textContent = rv.options[i].textContent;
-        synthEl.voice.appendChild(o);
-      }
-    })();
-
-    // The soundfont roster (Ver 103) is server-owned: every discovered GM
-    // font on the box + the current pick. Option value = absolute path (the
-    // restart endpoint whitelists exactly these).
+    // Ver 103/104: ONE server response feeds BOTH pickers — the soundfont
+    // list (scanned from the gitignored midi/soundfonts folder — no paths
+    // are hardcoded anywhere) and the ACTIVE font's instrument list (parsed
+    // straight out of the .sf2/.sf3, so the picker reflects exactly what
+    // the current font defines: bank 0 + drum/variation banks, truthful
+    // names). Voice option values are "bank:program" strings.
     var synthFontCurrent = "";
+    var synthPresets = [];           // active font's presets: {value, name, ...}
+    function rebuildPresetList(presets) {
+      synthPresets = presets || [];
+      if (!synthEl || !synthEl.voice) return;
+      synthEl.voice.options.length = 0;
+      synthPresets.forEach(function (p) {
+        var o = document.createElement("option");
+        o.value = p.value;
+        o.textContent = p.name;
+        synthEl.voice.appendChild(o);
+      });
+      // While latched the followed voice needs re-highlighting against the
+      // new list (it may or may not exist in this font).
+      if (synthLatch) showSynthFollowedVoice();
+    }
     (function () {
-      if (!synthEl || !synthEl.font) return;
-      var sel = synthEl.font;
+      if (!synthEl) return;
       fetch("/api/sinks/synth/soundfonts", { cache: "no-store" })
         .then(function (r) { return r.json(); })
         .then(function (res) {
           if (!(res && res.ok)) return;
-          sel.options.length = 0;
-          (res.fonts || []).forEach(function (f) {
-            var o = document.createElement("option");
-            o.value = f.path;
-            o.textContent = f.name;
-            sel.appendChild(o);
-          });
-          if (res.current && res.current.path) {
-            synthFontCurrent = res.current.path;
-            sel.value = res.current.path;
+          if (synthEl.font) {
+            synthEl.font.options.length = 0;
+            (res.fonts || []).forEach(function (f) {
+              var o = document.createElement("option");
+              o.value = f.path;
+              o.textContent = f.name;
+              synthEl.font.appendChild(o);
+            });
+            synthFontCurrent = (res.current && res.current.path) ? res.current.path : "";
+            synthEl.font.value = synthFontCurrent;
+            synthEl.font.disabled = false;
           }
-          sel.disabled = false;
+          rebuildPresetList(res.presets || []);
+          synthEl.voice.disabled = !synthRunning || synthLatch;
         })
-        .catch(function () { /* roster unavailable: picker stays disabled */ });
+        .catch(function () { /* roster unavailable: pickers stay disabled */ });
     })();
 
     function synthRender(s) {
@@ -1926,21 +1932,31 @@ case "replay":
     }
 
     // Point the (closed) picker + readout at the voice the keyboard is on.
+    // The picker's options are the FONT's presets ("bank:program" values),
+    // so match by name first; GM fonts name their presets like the voice
+    // list, and the bank-0 program fallback catches name drift (FluidR3's
+    // "Yamaha Grand Piano" vs plain "Grand Piano"). No preset = blank picker
+    // (the badge stays as the source of truth).
     function showSynthFollowedVoice() {
       if (!synthEl) return;
       var name = synthFollowedVoice || "";
       if (synthEl.followed) synthEl.followed.textContent = name ? ("follows: " + name) : "follows: \u2014";
       if (!synthEl.voice || !name) return;
-      var found = false;
-      for (var i = 0; i < synthEl.voice.options.length; i++) {
-        if (synthEl.voice.options[i].value === name) {
-          synthEl.voice.value = name;   // a named GM voice: show it
-          found = true;
-          break;
-        }
+      var val = "";
+      for (var i = 0; i < synthPresets.length; i++) {
+        if (synthPresets[i].name === name) { val = synthPresets[i].value; break; }
       }
-      if (!found && synthEl.voice.selectedIndex !== -1) {
-        synthEl.voice.selectedIndex = -1;  // outside the GM list (drums etc.): blank
+      if (!val && synthFollowedProgram >= 0 && synthFollowedProgram <= 127) {
+        val = "0:" + synthFollowedProgram;
+        var ok = false;
+        for (var j = 0; j < synthPresets.length; j++) {
+          if (synthPresets[j].value === val) { ok = true; break; }
+        }
+        if (!ok) val = "";
+      }
+      synthEl.voice.value = val || "";
+      if (!val && synthEl.voice.selectedIndex !== -1) {
+        synthEl.voice.selectedIndex = -1;  // not in this font: blank
       }
     }
 
@@ -1985,10 +2001,20 @@ case "replay":
 
     function synthVoiceChange() {
       if (!synthEl || !synthRunning) return;
-      var name = synthEl.voice.value;
-      if (!name) return;
-      synthPost("/api/sinks/synth/voice", { name: name },
-                "voice " + name.toLowerCase());
+      var v = synthEl.voice.value;
+      if (!v) return;
+      // Ver 104: options are the current font's presets — value "bank:program".
+      var parts = v.split(":");
+      var bank = parseInt(parts[0], 10);
+      var program = parseInt(parts[1], 10);
+      if (isNaN(bank) || isNaN(program)) return;
+      var label = v;
+      for (var i = 0; i < synthPresets.length; i++) {
+        if (synthPresets[i].value === v) { label = synthPresets[i].name; break; }
+      }
+      synthPost("/api/sinks/synth/voice",
+                { program: program, bank: bank },
+                "voice " + label.toLowerCase());
     }
 
     function synthVolumeChange(commit) {
@@ -2027,6 +2053,10 @@ case "replay":
           synthFontCurrent = path;
           sel.value = path;
           sel.disabled = false;
+          // Ver 104: the response always carries the new font's instruments —
+          // rebuild the voice picker from them (engine down => the list for
+          // the startup font; engine up => the font we just swapped to).
+          if (res.presets) rebuildPresetList(res.presets);
           if (res.swapped) {
             // The engine restarted under the new client number: re-sync the
             // routing targets + sink status, then note the re-applied voice.

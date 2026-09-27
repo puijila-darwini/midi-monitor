@@ -14,6 +14,7 @@ from .capture import Capture
 from .mididev import device_info
 from .state import State, TUNING_PRESETS
 from .analysis import Analyser
+from . import sf2inspect
 from .replay import (Replay, plan_from_raw, VOICES, control_change, pitch_bend,
                      BEND_RANGE_ST, bend_range, yamaha_master_tuning,
                      gm_system_on, midi_panic, note_on, note_off, program_change)
@@ -141,24 +142,36 @@ def _live_seq_out():
     return _live_seq
 
 
+def _default_soundfont():
+    """First font a fresh box should launch: FluidR3 GM when present (the
+    pre-folder default), else the first font alphabetically."""
+    fonts = sinks.soundfonts()
+    if not fonts:
+        return ""
+    for _n, p in fonts:
+        base = os.path.basename(p).lower()
+        if "fluidr3" in base and "gm" in base:
+            return p
+    return fonts[0][1]
+
+
 def _synth_soundfont_path():
     """The soundfont the synth will next launch with: the user's pick when it
-    is still on the box roster, otherwise the first discovered font."""
+    is still in the midi/soundfonts folder, otherwise the default font."""
     path = state.synth_soundfont
-    if path and sinks.soundfont_name(path) is not None and os.path.isfile(path):
+    if path and sinks.soundfont_name(path) is not None:
         return path
-    fonts = sinks.soundfonts()
-    return fonts[0][1] if fonts else ""
+    return _default_soundfont()
 
 
 def _synth_soundfont_active():
     """The soundfont the Engine actually plays right now: the live active one
     (set on a real swap / launch), falling back to the next-launch pref, then
-    the box default. Tracks reality even when a swap was skipped — and across
+    the default font. Tracks reality even when a swap was skipped — and across
     a server restart, by asking the running engine itself (its cmdline carries
     the font path it was launched with)."""
     for path in (state.synth_soundfont_active, state.synth_soundfont):
-        if path and sinks.soundfont_name(path) is not None and os.path.isfile(path):
+        if path and sinks.soundfont_name(path) is not None:
             return path
     try:
         out = subprocess.run(["ps", "-eo", "cmd"], capture_output=True,
@@ -166,13 +179,24 @@ def _synth_soundfont_active():
         for line in out.splitlines():
             if "fluidsynth" not in line:
                 continue
-            for _, p in sinks.SOUNDFONTS:
+            for _n, p in sinks.soundfonts():
                 if p in line and os.path.isfile(p):
                     return p
     except (OSError, subprocess.SubprocessError):
         pass
-    fonts = sinks.soundfonts()
-    return fonts[0][1] if fonts else ""
+    return _default_soundfont()
+
+
+def _preset_payload(path):
+    """The synth picker's instrument options for a soundfont: every
+    (bank, program, name) the font actually defines, as UI-ready items. A
+    font that can't be parsed yields an empty list (the picker goes blank)."""
+    try:
+        found = sf2inspect.presets(path)
+    except sf2inspect.SoundFontError:
+        return []
+    return [{"bank": b, "program": p, "name": n, "value": "%d:%d" % (b, p)}
+            for b, p, n in found]
 
 
 def _synth_follow_voice(bank, pc):
@@ -1142,30 +1166,36 @@ def api_sinks_synth_follow():
 
 @app.route("/api/sinks/synth/soundfonts", methods=["GET"])
 def api_synth_soundfonts():
-    """The discovered soundfonts (Ver 103) + which one the synth is on.
-    Feeds the AboraSynth card's font picker."""
+    """The soundfonts in the midi/soundfonts folder (Ver 104 — scanned, not
+    hardcoded) + which one the synth is on + the ACTIVE font's instrument
+    list (for the voice picker). Feeds the AboraSynth card."""
     fonts = [{"name": n, "path": p,
               "size_mb": round(os.path.getsize(p) / 1048576.0, 1)}
              for n, p in sinks.soundfonts()]
     cur = _synth_soundfont_active()
     return jsonify({"ok": True, "fonts": fonts,
                     "current": {"name": sinks.soundfont_name(cur)
-                                or os.path.basename(cur), "path": cur}})
+                                or os.path.basename(cur), "path": cur},
+                    "presets": _preset_payload(cur)})
 
 
 @app.route("/api/sinks/synth/soundfont", methods=["POST"])
 def api_synth_soundfont():
-    """Swap the local synth's soundfont (Ver 103). Body: {"path": abs} — only
-    paths on the sinks.SOUNDFONTS roster are accepted (whitelist). Fluidsynth
-    can't swap a font file over MIDI, so if the engine is up it is RESTARTED
-    under the new font (a moment of silence, then the font's version of the
-    same GM programs), and the last voice + CC7 volume are re-applied — the
-    voice latch wins over the remembered voice when it is on."""
+    """Swap the local synth's soundfont (Ver 103/104). Body: {"path": abs} —
+    only files inside the midi/soundfonts folder are accepted (whitelist).
+    Fluidsynth can't swap a font file over MIDI, so if the engine is up it is
+    RESTARTED under the new font (a moment of silence, then the font's
+    version of the same programs), and the last voice + CC7 volume are
+    re-applied — the voice latch wins over the remembered voice when it is
+    on. The response always carries the new font's presets so the card can
+    rebuild its instrument list even when the engine is down (picking a
+    startup font)."""
     body = request.get_json(silent=True) or {}
     path = body.get("path")
     name = sinks.soundfont_name(path) if path else None
-    if name is None or not os.path.isfile(path):
+    if name is None:
         return jsonify({"ok": False, "error": "unknown soundfont path"}), 400
+    new_presets = _preset_payload(path)
     state.synth_soundfont = path          # the next launch uses it
     swapped = False
     with _soundfont_lock:                 # serialize racing clicks / curl swaps
@@ -1208,7 +1238,7 @@ def api_synth_soundfont():
                 except Exception:
                     pass
     return jsonify({"ok": True, "name": name, "path": path,
-                    "swapped": swapped})
+                    "swapped": swapped, "presets": new_presets})
 
 
 # Backward-compatible aliases for the Ver 63 /api/vcv endpoints.

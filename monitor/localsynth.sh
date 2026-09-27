@@ -7,13 +7,17 @@
 # what keeps the synth alive. `sleep infinity |` does exactly that.
 set -e
 
-# Ver 103: the AboraSynth card can pick any discovered soundfont — the chosen
-# absolute path arrives as ABORA_SF2 from the launcher. Unset or missing =
-# fall back to the first GM font found below (FluidR3_GM on this box).
+# Ver 103/104: the AboraSynth card can pick any soundfont in the gitignored
+# midi/soundfonts folder — the chosen absolute path arrives as ABORA_SF2 from
+# the launcher. When unset/missing, mirror the app: first FluidR3_GM.sf2, else
+# the first .sf2/.sf3 in the folder, else the old system paths.
 SF2="${ABORA_SF2:-}"
 if [ -z "$SF2" ] || [ ! -f "$SF2" ]; then
     SF2=""
     for p in \
+        "$(dirname "$0")"/../soundfonts/FluidR3_GM.sf2 \
+        "$(dirname "$0")"/../soundfonts/*.sf2 \
+        "$(dirname "$0")"/../soundfonts/*.sf3 \
         /usr/share/sounds/sf2/FluidR3_GM.sf2 \
         /usr/share/sounds/sf2/default-GM.sf2 \
         /usr/share/soundfonts/FluidR3_GM.sf2; do
@@ -21,7 +25,7 @@ if [ -z "$SF2" ] || [ ! -f "$SF2" ]; then
     done
 fi
 if [ -z "$SF2" ]; then
-    echo "localsynth: no GM soundfont found" >&2
+    echo "localsynth: no soundfont found" >&2
     exit 1
 fi
 

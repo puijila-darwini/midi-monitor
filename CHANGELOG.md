@@ -1863,3 +1863,45 @@ Ver 103 (AboraSynth soundfont picker — every GM font on the box is now
   CONTAINS the pattern — don't run scripts whose own argv embeds
   "monitor/localsynth.sh" or "sleep infinity" while swapping fonts (they get
   SIGTERM'd; twice-proven tonight).
+Ver 104 (soundfonts move into the repo's gitignored folder + the instrument
+  list becomes font-aware): the 8 fonts are now COLLECTED at
+  ~/ai/midi/soundfonts/ (~273MB, copies — the originals stay put, so music/
+  and other apps that read /usr/share etc. keep working; .gitignore has
+  `soundfonts/`). The code depends on NO specific paths anymore:
+  - sinks.SOUNDFONTS (the hardcoded machine-path roster) is DELETED;
+    sinks.soundfonts() now SCANS the folder for *.sf2/*.sf3 (sorted, label =
+    filename minus extension, _ → space). Drop a font in = it appears in the
+    picker. soundfont_name() whitelists by folder containment (realpath +
+    commonpath), so ONLY folder files load — /tmp/evil.sf2 and even
+    /usr/share/sounds/sf2/FluidR3_GM.sf2 both 400 now.
+  - localsynth.sh mirrors the app: ABORA_SF2 → the folder's FluidR3_GM.sf2 →
+    first folder *.sf2/*.sf3 → the old system paths as last resort. The
+    default font prefers "FluidR3 GM" (matches the pre-folder default;
+    caught a real bug live: the check looked for a space in a basename that
+    uses an underscore — "fluidr3_gm" — and silently defaulted to 8bit).
+  - THE VOICE PICKER NOW REFLECTS THE SELECTED FONT: new monitor/sf2inspect.py
+    parses the preset headers straight out of a .sf2/.sf3 — a RIFF walk that
+    seeks PAST sdta (a 142MB font costs a few KB of reads, ~0ms, cached per
+    path+mtime; pure stdlib, no fluidsynth, no pip). GET /soundfonts and the
+    swap POST both carry the font's `presets` (every bank/program/name the
+    font actually defines + a "bank:program" value); JS populates #synth-voice
+    from them and REBUILDS it from the swap response — engine-down picks
+    obviously show the startup font's list. Voice change now POSTs raw
+    {program, bank} (values are "bank:program", not GM names). Latched
+    highlight matches the followed voice by preset NAME, with a "0:program"
+    fallback for name drift (FluidR3's "Yamaha Grand Piano" vs plain "Grand
+    Piano").
+  Truthful counts from the parser: FluidR3_GM 189 (bank 0 + drums 8/9/16/128),
+  SC-55 235, default.sf3 309, TimGM6mb 136, PCLite 141, 8-bit 117, FluidR3_GS
+  just 33 — banks 1-6 ONLY, it's the GS *variations*-only companion font with
+  no bank 0 (picking it alone voices nothing on bank 0; the picker honestly
+  shows only its 33), Grand_Piano exactly 1. The picker never lies.
+  Verified: node harness REWRITTEN for presets-driven populate — 67 assertions
+  (voice list from presets with bank:program values, name→preset highlight +
+  drift fallback + blank-outside-font, swap rebuilds the list, failure leaves
+  it untouched) — ALL PASS; live: roster GET shows all 8 from the folder,
+  restart defaults to FluidR3 GM, swap to the folder SC-55 (swapped:true,
+  response carries its 235 presets), raw voice POST bank0/prog4 ok, whitelist
+  rejects folder-outside paths (400), process tree is exactly 1 wrapper + 1
+  sleep + 1 fluidsynth with the FOLDER path in its cmdline, and "current"
+  survives a server restart via that cmdline fallback.

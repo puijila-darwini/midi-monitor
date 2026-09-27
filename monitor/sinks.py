@@ -53,41 +53,46 @@ LAUNCHABLE = [
     },
 ]
 
-# Ver 103: the GM-capable soundfonts discovered on this box (label, absolute
-# path). The local synth takes the picked one via the ABORA_SF2 env var at
-# launch — localsynth.sh falls back to the system default when unset. Listing
-# here both feeds the AboraSynth card's font picker AND WHITELISTS the restart
-# endpoint: only these exact paths may be loaded onto the synth.
-SOUNDFONTS = [
-    ("FluidR3 GM", "/usr/share/sounds/sf2/FluidR3_GM.sf2"),
-    ("FluidR3 GS", "/usr/share/sounds/sf2/FluidR3_GS.sf2"),
-    ("TimGM6mb", "/usr/share/sounds/sf2/TimGM6mb.sf2"),
-    ("Roland SC-55",
-     "/home/pthag/.steam/debian-installation/steamapps/common/RetroArch/"
-     "system/scummvm/extra/Roland_SC-55.sf2"),
-    ("Grand Piano",
-     "/home/pthag/.Rack/plugins-v1/RJModules/soundfonts/Grand_Piano.sf2"),
-    ("8-bit", "/home/pthag/.Rack/plugins-v1/RJModules/soundfonts/8bit.sf2"),
-    ("PC Lite",
-     "/home/pthag/.steam/debian-installation/steamapps/common/Simutrans/"
-     "music/PCLite.sf2"),
-    ("Simutrans default",
-     "/home/pthag/.steam/debian-installation/steamapps/common/Simutrans/"
-     "music/default.sf3"),
-]
+# Ver 103/104: the GM-capable soundfonts are collected in the gitignored
+# midi/soundfonts folder (the whole point — the code depends on NO specific
+# paths; drop a .sf2/.sf3 in there and it appears in the AboraSynth card).
+# The list below is a live scan, not a roster: soundfont_name() doubles as
+# the whitelist for the swap endpoint (only files inside the folder load).
+_SOUNDFONT_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "soundfonts")
+
+
+def _label(filename):
+    return os.path.splitext(filename)[0].replace("_", " ")
 
 
 def soundfonts():
-    """[(name, path), ...] for the fonts that actually exist on this box."""
-    return [(n, p) for (n, p) in SOUNDFONTS if os.path.isfile(p)]
+    """[(label, path), ...] for every .sf2/.sf3 in the midi/soundfonts folder,
+    sorted by name. Empty folder = no fonts (the picker stays empty)."""
+    try:
+        names = sorted(n for n in os.listdir(_SOUNDFONT_DIR)
+                       if n.lower().endswith((".sf2", ".sf3")))
+    except OSError:
+        return []
+    return [(_label(n), os.path.join(_SOUNDFONT_DIR, n)) for n in names]
 
 
 def soundfont_name(path):
-    """Label for a roster path, or None if it's not one of ours."""
-    for n, p in SOUNDFONTS:
-        if p == path:
-            return n
-    return None
+    """Label for a soundfont PATH if it lives inside the midi/soundfonts
+    folder (and is a real file) — the whitelist the swap endpoint checks —
+    else None."""
+    if not path:
+        return None
+    real = os.path.realpath(path)
+    folder = os.path.realpath(_SOUNDFONT_DIR)
+    try:
+        if os.path.commonpath([real, folder]) != folder or not os.path.isfile(real):
+            return None
+    except (ValueError, OSError):
+        return None
+    if not os.path.basename(real).lower().endswith((".sf2", ".sf3")):
+        return None
+    return _label(os.path.basename(real))
 
 
 def entries():

@@ -846,7 +846,7 @@
               <div class="synth-field">
                 <span class="synth-label">voice</span>
                 <select id="synth-voice" disabled
-                        title="GM instrument the synth plays (sends a program change straight to AboraSynth; the out-card voice picker is for replay, this one is the synth's own)"></select>
+                        title="Instrument the synth plays — every bank/program the CURRENT soundfont defines (parsed straight from the .sf2/.sf3, so it changes with the font). Sends a program change straight to AboraSynth; the out-card voice picker is for replay, this one is the synth's own"></select>
                 <label class="synth-latch"
                        title="Latch the synth voice to the keyboard's: the picker closes and greys out, and AboraSynth copies whatever voice is sent to the board, live. Unlatch for the full instrument list.">
                   <input type="checkbox" id="synth-latch"><span>latch</span>
@@ -856,7 +856,7 @@
               <div class="synth-field">
                 <span class="synth-label">font</span>
                 <select id="synth-font" disabled
-                        title="SoundFont the AboraSynth engine plays (every discovered GM font on the box). Changing it while the engine is up restarts the synth under the new font — a moment of silence — then re-applies the voice + volume; pick before launch to choose the startup font"></select>
+                        title="SoundFont the AboraSynth engine plays — every .sf2/.sf3 in the midi/soundfonts folder (the app scans the folder, no paths are hardcoded). Changing it while the engine is up restarts the synth under the new font — a moment of silence — then re-applies the voice + volume; pick before launch to choose the startup font"></select>
               </div>
               <label class="synth-field synth-vol">
                 <span class="synth-label">volume</span>

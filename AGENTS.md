@@ -186,25 +186,35 @@ folded into a single web app package in `monitor/`:
                           "keys" mode; /api/sinks/synth/follow {"on"} sets it
                           + snaps the current voice; engine-up-while-latched
                           re-pushes; survives reloads via /api/state).
-                          Ver 103: the card gains a SOUNDFONT picker — the GM
-                          fonts discovered on the box (sinks.SOUNDFONTS roster:
-                          FluidR3 GM/GS, TimGM6mb, Roland SC-55, Grand Piano,
-                          8-bit, PC Lite, Simutrans default; list exists → the
-                          picker lists it; only roster paths load, whitelist).
-                          The synth launches under the pick via the ABORA_SF2
-                          env (localsynth.sh honors it over FLuidR3_GM
-                          fallback). An engine-up swap RESTARTS Fluidsynth
-                          under the new font (~0.3 s) and re-applies the last
-                          voice + CC7 volume (latch wins); engine-down pick =
-                          next-launch font. GET "current" tracks the ACTIVE
-                          font (set on real swap/launch), falling back to the
-                          live engine's own cmdline across a server restart —
-                          the picker never lies. Swaps serialize on
-                          _soundfont_lock; the synth's stop patterns now kill
-                          the WHOLE `sleep infinity |` pipeline (was: bare
-                          pkill of fluidsynth leaked a wrapper + sleep pair per
-                          stop/swap — 9 pairs inside 40 s of live font-
-                          clicking).
+                          Ver 103/104: the card gains a SOUNDFONT picker +
+                          a FONT-AWARE instrument picker. All 8 fonts live in
+                          the gitignored ~/ai/midi/soundfonts/ folder (copies;
+                          originals stay put for music/ etc.) — sinks.soundfonts()
+                          SCANS it for *.sf2/*.sf3, no paths hardcoded; drop a
+                          font in = it appears. soundfont_name() whitelists by
+                          folder containment (only folder files load). The
+                          launch env ABORA_SF2 (localsynth.sh honors it, then
+                          the folder's FluidR3_GM, then system fallbacks). An
+                          engine-up font swap RESTARTS Fluidsynth under the new
+                          font (~0.3 s) and re-applies the last voice + CC7
+                          volume (latch wins); engine-down pick = next-launch
+                          font. GET "current" tracks the ACTIVE font (set on
+                          real swap/launch), falling back to the live engine's
+                          own cmdline across a server restart — the picker
+                          never lies. Swaps serialize on _soundfont_lock; the
+                          synth's stop patterns now kill the WHOLE `sleep
+                          infinity |` pipeline (was: bare pkill of fluidsynth
+                          leaked a wrapper + sleep pair per stop/swap — 9 pairs
+                          inside 40 s of live font-clicking). The VOICE picker
+                          reflects the selected font: monitor/sf2inspect.py
+                          parses the preset headers out of the .sf2/.sf3 (RIFF
+                          walk, seeks past sdta, ~0 ms even on 142 MB, cached;
+                          no deps) — GET /soundfonts + the swap POST carry the
+                          font's presets (bank/program/name + "bank:program"
+                          values), JS rebuilds #synth-voice from them, voice
+                          change POSTs raw {program, bank}, and the latched
+                          highlight falls back to "0:program" on name drift
+                          (FluidR3 "Yamaha Grand Piano" vs "Grand Piano").
 - `monitor/midiout.py`   - SeqOut (ALSA seq output client, ctypes, no deps).
                           Ver 99: send_pitch_bend(target, semitones, channel)
                           — 14-bit PITCHBEND mapped via replay.BEND_RANGE_ST

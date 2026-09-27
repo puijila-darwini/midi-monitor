@@ -42,3 +42,6 @@ patterns/
 # Arrangement library + slot assignments (user data, like patterns/)
 arrangements/
 slots.json
+
+# SoundFont library (user data, ~273MB — collected fonts of the box; NOT tracked)
+soundfonts/
