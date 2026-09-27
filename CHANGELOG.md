@@ -1783,3 +1783,39 @@ Ver 101 (AboraSynth gets its own card): the Local Synth sink graduates from
   refreshApps' second fetch settles); 19-assertion node harness driving
   synthRender through running/launching/offline (status, label, glyph, port,
   beacon, disabled states) — all pass.
+
+Ver 102 (AboraSynth gets its own bottom row + a voice LATCH): the synth card
+  leaves the chain-row (it was sandwiched between out·ctrl and the piano roll)
+  and now lives in its own full-width row at the VERY BOTTOM of the page,
+  after the patterns/slots/arrangement row.
+  - Voice latch: a checkbox beside the GM picker. Latched = the picker closes
+    and greys out (opacity 0.4 + grayscale + not-allowed cursor) and the synth
+    "absolutely just copies the voice being sent to the keyboard": every
+    program change the app sends to the board — a panel PC arriving on the
+    capture stream, the echo voice, a replay's chosen voice — is re-sent to
+    the synth port bank+program byte-exact (works even for voices outside the
+    GM list, e.g. bank-127 drum kits). A "follows: <name>" badge shows the
+    live-followed voice and the closed picker mirrors it when it's in the GM
+    list (blank for exotics). Unlatched = the full instrument list is back.
+  - The latch is SERVER-ENFORCED: state.synth_voice_latch gates the push in
+    _synth_follow_voice(), which runs unconditionally (BEFORE the echo-
+    conditional seq mirror), so the latch works in pure "keys" mode too and a
+    raced client can't voice the synth while latched. Latching on applies the
+    keyboard's CURRENT voice to the synth immediately (snap, not wait); if the
+    engine is down when latched, the card re-pushes the current voice the
+    moment the engine comes up (synthRender's running edge). The latch
+    survives page reloads (rides /api/state as synth_voice_latch).
+  Backend: new /api/sinks/synth/follow ({"on": bool}) sets the latch + re-
+  applies the current receive voice on enable; _synth_follow_voice() helper
+  hooks the capture program_change handler, the /api/echo voice path and
+  _play_events' chosen voice. Frontend: setInstrument() now caches the last-
+  known keyboard voice and, when latched, drives the closed picker + badge
+  from every SSE program_change / replay-voice event (the same dynamic source
+  as the header instrument readout — instant, not 10s-poll); refreshState()
+  re-syncs the latch checkbox on load/resync.
+  Verified: curl (latch on → {ok, on, synth_up, voice}; echo voice change
+  while latched → receive_voice tracks it; unlatch restores; /api/state
+  carries synth_voice_latch; echo state preserved around tests) +
+  44-assertion node harness (monitor/../tmp/midi-synth-test.js) driving the
+  latch render, live-follow updates, unknown-voice blanking, the engine-up-
+  while-latched push edge, and handler revert-on-network-failure — all pass.

@@ -751,7 +751,7 @@ select option {
   box-shadow: 0 0 8px rgba(87,176,79,0.7);
 }
 .synth-fields { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 16px; }
-.synth-field { display: flex; align-items: center; gap: 8px; }
+.synth-field { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .synth-label {
   font-size: 10px;
   letter-spacing: 1px;
@@ -759,6 +759,42 @@ select option {
   color: var(--straw-soft);
 }
 .synth-field select { min-width: 170px; }
+.synth-latch {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+  padding: 2px 6px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+}
+.synth-card.synth-latched .synth-latch {
+  color: var(--straw);
+  border-color: var(--royal);
+  background: rgba(107,63,160,0.22);
+}
+.synth-latch input { accent-color: var(--royal); cursor: pointer; }
+.synth-followed {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 10px;
+  color: var(--straw-soft);
+  background: rgba(46,140,90,0.18);
+  border: 1px solid rgba(87,176,79,0.35);
+  border-radius: 2px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+/* Ver 102 latch: picker closed + greyed — the ONLY voice is the keyboard's. */
+.synth-card.synth-latched #synth-voice {
+  opacity: 0.4;
+  filter: grayscale(1);
+  cursor: not-allowed;
+}
 .synth-vol input[type="range"] { width: 120px; accent-color: var(--royal); }
 .synth-vol input[type="range"]:disabled { opacity: 0.45; }
 .synth-volume-val {

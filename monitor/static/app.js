@@ -1289,6 +1289,10 @@ case "replay":
   })();
 
   function setInstrument(program, name) {
+    // Ver 102: keep the last-known keyboard voice for the latched synth
+    // readout; if the latch is on, the (closed) synth picker follows live.
+    synthFollowedVoice = name || "";
+    if (synthLatch) showSynthFollowedVoice();
     var el = document.getElementById("instrument");
     if (el) el.textContent = "instrument: " + name + " (prog " + program + ")";
   }
@@ -1822,6 +1826,8 @@ case "replay":
       status: document.getElementById("synth-status"),
       beacon: document.getElementById("synth-beacon"),
       voice: document.getElementById("synth-voice"),
+      followed: document.getElementById("synth-followed"),
+      latch: document.getElementById("synth-latch"),
       volume: document.getElementById("synth-volume"),
       vval: document.getElementById("synth-volume-val"),
       panic: document.getElementById("synth-panic"),
@@ -1829,6 +1835,8 @@ case "replay":
     } : null;
     var synthRunning = false;
     var synthBusy = false;
+    var synthLatch = false;          // Ver 102: voice follows the keyboard
+    var synthFollowedVoice = "";     // last voice the keyboard was put on
 
     // The voice list already lives in the out-card (replay-voice select) —
     // clone it so there is exactly one source of truth for GM names.
@@ -1847,6 +1855,7 @@ case "replay":
 
     function synthRender(s) {
       if (!synthEl || !synthCard) return;
+      var wasRunning = synthRunning;
       synthRunning = !!s.running;
       synthBusy = !!s.launching;
       synthCard.classList.toggle("synth-up", synthRunning);
@@ -1856,13 +1865,52 @@ case "replay":
       synthEl.toggle.disabled = synthBusy;
       synthEl.glyph.textContent = synthRunning ? "\u2713" : (synthBusy ? "\u2026" : "\u25b6");
       synthEl.label.textContent = synthRunning ? "stop" : (synthBusy ? "launching\u2026" : "launch");
-      synthEl.voice.disabled = !synthRunning;
+      // Latched = the picker is closed too (grey), even while the engine runs.
+      synthEl.voice.disabled = !synthRunning || synthLatch;
       synthEl.volume.disabled = !synthRunning;
       synthEl.panic.disabled = !synthRunning;
       var port = (s.targets && s.targets[0]) || "";
       synthEl.port.textContent = synthRunning
         ? "seq out \u2192 " + port
         : "no synth yet";
+      // Ver 102: if the engine comes up while latched, apply the keyboard's
+      // current voice right away (the snap shouldn't wait for the next PC).
+      if (synthRunning && !wasRunning && synthLatch) {
+        synthPost("/api/sinks/synth/follow", { on: true }, null);
+      }
+    }
+
+    // Ver 102 latch: while on, the synth plays EXACTLY the keyboard's voice —
+    // every program change sent to the board is re-sent to the synth port
+    // (server-side). Here we only mirror the UI: close + grey the picker and
+    // show the followed voice. Unlatching restores full list access.
+    function synthLatchRender(on) {
+      synthLatch = !!on;
+      if (!synthEl || !synthCard) return;
+      synthCard.classList.toggle("synth-latched", synthLatch);
+      if (synthEl.latch) synthEl.latch.checked = synthLatch;
+      synthEl.voice.disabled = !synthRunning || synthLatch;
+      if (synthEl.followed) synthEl.followed.hidden = !synthLatch;
+      showSynthFollowedVoice();
+    }
+
+    // Point the (closed) picker + readout at the voice the keyboard is on.
+    function showSynthFollowedVoice() {
+      if (!synthEl) return;
+      var name = synthFollowedVoice || "";
+      if (synthEl.followed) synthEl.followed.textContent = name ? ("follows: " + name) : "follows: \u2014";
+      if (!synthEl.voice || !name) return;
+      var found = false;
+      for (var i = 0; i < synthEl.voice.options.length; i++) {
+        if (synthEl.voice.options[i].value === name) {
+          synthEl.voice.value = name;   // a named GM voice: show it
+          found = true;
+          break;
+        }
+      }
+      if (!found && synthEl.voice.selectedIndex !== -1) {
+        synthEl.voice.selectedIndex = -1;  // outside the GM list (drums etc.): blank
+      }
     }
 
     function synthFeed(msg) {
@@ -1931,6 +1979,36 @@ case "replay":
       synthEl.volume.addEventListener("input", function () { synthVolumeChange(false); });
       synthEl.volume.addEventListener("change", function () { synthVolumeChange(true); });
       synthEl.panic.addEventListener("click", synthPanic);
+      if (synthEl.latch) {
+        synthEl.latch.addEventListener("change", function () {
+          var on = !!synthEl.latch.checked;
+          synthLatchRender(on);   // optimistic; revert on failure
+          fetch("/api/sinks/synth/follow", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ on: on })
+          })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+              if (!res || !res.ok) {
+                synthLatchRender(!on);
+                synthFeed(res && res.error ? res.error.toUpperCase() : "LATCH FAILED");
+                return;
+              }
+              if (on) {
+                synthFeed("voice latched \u2192 " + (res.voice || "synth"));
+                if (res.synth_up === false) synthFeed("synth down - latch applies when it launches");
+                if (!synthFollowedVoice) refreshState();  // pull the current voice for the readout
+              } else {
+                synthFeed("voice unlatched - full instrument list");
+              }
+            })
+            .catch(function () {
+              synthLatchRender(!on);
+              synthFeed("LATCH REQUEST FAILED");
+            });
+        });
+      }
     }
 
     fetch("/api/sinks", { cache: "no-store" })
@@ -3159,6 +3237,9 @@ case "replay":
       if (typeof s.program !== "undefined") {
         var pname = PSSA50_VOICES[(s.bank || 0) + ":" + s.program] || "Unknown";
         setInstrument(s.program, pname);
+      }
+      if (typeof s.synth_voice_latch !== "undefined") {
+        synthLatchRender(!!s.synth_voice_latch);   // Ver 102: latch survives reloads
       }
       if (typeof s.tempo_bpm !== "undefined" && s.tempo_bpm > 0) {
         tempoBpm = s.tempo_bpm;

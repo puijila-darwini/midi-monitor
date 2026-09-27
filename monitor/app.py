@@ -138,6 +138,25 @@ def _live_seq_out():
     return _live_seq
 
 
+def _synth_follow_voice(bank, pc):
+    """Ver 102 latch: mirror a voice change to the AboraSynth sink so a
+    latched synth plays EXACTLY the keyboard's voice. No-op unless the latch
+    is on AND the synth is up; the synth card greys its picker while latched,
+    so this is the ONLY thing allowed to voice the synth in that mode."""
+    if not state.synth_voice_latch:
+        return False
+    port = sinks.port("synth")
+    if not port:
+        return False
+    try:
+        seq_out = _live_seq_out()
+        seq_out.send_program_change(port, bank, pc, channel=0)
+        seq_out.flush()
+        return True
+    except Exception:
+        return False
+
+
 def _echo_seq_notes(kind, pairs, channel, bend=None):
     """Replicate an echoed note event to every selected seq output. kind is
     "on" | "off"; pairs is [(note, velocity), ...]. An optional pre-bend (in
@@ -248,6 +267,10 @@ def _run_capture(cap):
                          "channel": event["channel"],
                          "name": Capture.VOICE_BY_PROGRAM.get((event.get("bank", 0), event["program"]), "Unknown"),
                          "time": t})
+            # Ver 102 latch: the AboraSynth copies the keyboard's voice,
+            # unconditionally (independent of echo mode / "auto" follow).
+            if state.synth_voice_latch:
+                _synth_follow_voice(state.receive_bank, state.receive_program)
             # Echo follow: with the echo voice on "auto" the echo stream is
             # meant to mirror the panel, but the RX voice is independent of the
             # panel voice - a panel voice change leaves the echoed sound stuck
@@ -839,6 +862,9 @@ def api_echo():
                 seq_out.flush()
             except Exception:
                 pass
+            # Ver 102 latch: the echo voice is sent to the keyboard, so the
+            # latched synth follows it too.
+            _synth_follow_voice(bank, pc)
     resp = {"ok": True, "enabled": enabled, "voice": voice_name,
             "device": bool(device)}
     if not device:
@@ -1043,6 +1069,25 @@ def api_sinks_cc(key):
     return jsonify({"ok": True, "key": key, "port": port})
 
 
+@app.route("/api/sinks/synth/follow", methods=["POST"])
+def api_sinks_synth_follow():
+    """Ver 102 latch: set whether the AboraSynth voice follows the keyboard's.
+    While latched, every voice change sent to the board (panel PC from the
+    capture stream, echo voice, replay voice) is ALSO sent to the synth on
+    its port, and the synth card greys its picker showing the followed voice.
+    Body: {"on": bool}. When latching on, the current keyboard voice is
+    applied to the synth immediately (so the latch snaps, not waits)."""
+    body = request.get_json(silent=True) or {}
+    on = bool(body.get("on"))
+    state.synth_voice_latch = on
+    applied = False
+    if on:
+        applied = _synth_follow_voice(state.receive_bank, state.receive_program)
+    return jsonify({"ok": True, "on": state.synth_voice_latch,
+                    "synth_up": applied or bool(sinks.port("synth")),
+                    "voice": state._get_receive_voice_name()})
+
+
 # Backward-compatible aliases for the Ver 63 /api/vcv endpoints.
 @app.route("/api/vcv", methods=["GET"])
 def api_vcv():
@@ -1133,6 +1178,9 @@ def _play_events(events, body, loop, extra=None):
     if voice is not None:
         state.receive_program = voice[1]
         state.receive_bank = voice[0]
+        # Ver 102 latch: wherever the app voices the keyboard, the latched
+        # synth mirrors it.
+        _synth_follow_voice(state.receive_bank, state.receive_program)
     # Ver 96 mono tuning: the replayer pre-bends each strike batch when on.
     tuning_fn = state.tuning_cents_for if state.tuning_enabled else None
     replayer.play(events, speed=speed, on_event=hub.publish, voice=voice, loop=loop,

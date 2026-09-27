@@ -362,6 +362,11 @@ class State:
         self.echo_enabled = False
         # Voice the echo path plays ("auto" = leave the keyboard as-is).
         self.echo_voice = "auto"
+        # Ver 102: latch the AboraSynth voice to the keyboard's. While on, every
+        # voice change (panel PC from capture, replay/echo voice) is ALSO sent
+        # to the synth port, and the synth card's picker closes + greys out
+        # showing the followed voice.
+        self.synth_voice_latch = False
         # Near-simultaneous window (seconds) for grouping chord members when
         # bypassing (no grid to snap them together). Grouping ALSO requires
         # overlap (next onset lands while the group still sounds) so fast
@@ -2170,6 +2175,7 @@ class State:
             "receive_program": self.receive_program,
             "receive_bank": self.receive_bank,
             "receive_voice": self._get_receive_voice_name(),
+            "synth_voice_latch": self.synth_voice_latch,
             "tempo_bpm": round(self.tempo_bpm, 1) if self.tempo_bpm > 0 else 0,
             "detected_bpm": round(self.detected_bpm, 1) if self.detected_bpm > 0 else 0,
             "user_tempo_bpm": round(self.user_tempo_bpm, 1) if self.user_tempo_bpm > 0 else 0,

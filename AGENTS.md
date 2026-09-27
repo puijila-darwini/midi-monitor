@@ -168,8 +168,7 @@ folded into a single web app package in `monitor/`:
                           Ver 101: sinks.status() carries `targets` (matched
                           seq targets) and sinks.port(key) resolves the
                           running sink's seq target — the AboraSynth card
-                          (own chain-card on the page, between out·ctrl and
-                          the piano roll) uses both: power toggle + beacon +
+                          (chain-card) uses both: power toggle + beacon +
                           port readout, a GM voice picker (program change to
                           the sink port, list cloned from the out-card's
                           replay-voice select), a CC7 volume fader and a
@@ -177,6 +176,16 @@ folded into a single web app package in `monitor/`:
                           ({"name"} or {program,bank}) and /api/sinks/<key>/cc
                           ({"cc",value} or {panic:true}) address the sink port
                           through the persistent live SeqOut, channel 0.
+                          Ver 102: the card moves to its OWN full-width row at
+                          the very bottom of the page, and gains a voice LATCH
+                          — latched, the picker closes+greys and the synth
+                          byte-exact copies the voice being sent to the board
+                          (panel PC from capture, echo voice, replay voice;
+                          state.synth_voice_latch gates the push in app's
+                          _synth_follow_voice, unconditional — works in pure
+                          "keys" mode; /api/sinks/synth/follow {"on"} sets it
+                          + snaps the current voice; engine-up-while-latched
+                          re-pushes; survives reloads via /api/state).
 - `monitor/midiout.py`   - SeqOut (ALSA seq output client, ctypes, no deps).
                           Ver 99: send_pitch_bend(target, semitones, channel)
                           — 14-bit PITCHBEND mapped via replay.BEND_RANGE_ST

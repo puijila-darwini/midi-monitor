@@ -663,43 +663,6 @@
             </div>
           </div>
         </section>
-
-        <section id="synth-card" class="chain-card card synth-card">
-          <div class="cartouche chain-head">
-            <span class="cartouche-title chain-title">AboraSynth &middot; local</span>
-            <div class="cartouche-end">
-              <span id="synth-beacon" class="synth-beacon" title="AboraSynth engine state"></span>
-              <span class="corner" aria-hidden="true"><svg class="corner-ic"><use href="#ic-out"/></svg></span>
-            </div>
-          </div>
-          <div class="chain-controls synth-controls">
-            <div class="synth-power-row">
-              <button id="synth-toggle" class="record-btn synth-toggle" type="button"
-                      title="Launch or stop the local Fluidsynth engine (ALSA-seq client AboraSynth; plays the box speakers)">
-                <span id="synth-toggle-glyph">&#9656;</span><span id="synth-toggle-label">launch</span>
-              </button>
-              <span id="synth-status" class="synth-status">offline</span>
-              <button id="synth-panic" class="mini-btn" type="button" disabled
-                      title="All Sound Off + All Notes Off on the synth (kills stuck notes)">panic</button>
-            </div>
-            <div class="synth-fields">
-              <label class="synth-field">
-                <span class="synth-label">voice</span>
-                <select id="synth-voice" disabled
-                        title="GM instrument the synth plays (sends a program change straight to AboraSynth; the out-card voice picker is for replay, this one is the synth's own)"></select>
-              </label>
-              <label class="synth-field synth-vol">
-                <span class="synth-label">volume</span>
-                <input id="synth-volume" type="range" min="0" max="127" step="1" value="100" disabled
-                       title="AboraSynth channel volume (CC7) - level it against the keyboard for a fair A/B">
-                <span id="synth-volume-val" class="synth-volume-val">100</span>
-              </label>
-            </div>
-            <div class="synth-foot">
-              <span id="synth-port" class="synth-port">no synth yet</span>
-            </div>
-          </div>
-        </section>
       </div>
 
       <section id="roll-wrap" class="roll-wrap card">
@@ -855,6 +818,51 @@
             </div>
             <div id="arrange-status" class="patterns-status"></div>
             <div id="arrange-preview" class="arrange-preview"></div>
+          </div>
+        </section>
+      </div>
+
+      <!-- AboraSynth: its own full-width row at the very bottom of the page. -->
+      <div class="chain-row">
+        <section id="synth-card" class="chain-card card synth-card">
+          <div class="cartouche chain-head">
+            <span class="cartouche-title chain-title">AboraSynth &middot; local</span>
+            <div class="cartouche-end">
+              <span id="synth-beacon" class="synth-beacon" title="AboraSynth engine state"></span>
+              <span class="corner" aria-hidden="true"><svg class="corner-ic"><use href="#ic-out"/></svg></span>
+            </div>
+          </div>
+          <div class="chain-controls synth-controls">
+            <div class="synth-power-row">
+              <button id="synth-toggle" class="record-btn synth-toggle" type="button"
+                      title="Launch or stop the local Fluidsynth engine (ALSA-seq client AboraSynth; plays the box speakers)">
+                <span id="synth-toggle-glyph">&#9656;</span><span id="synth-toggle-label">launch</span>
+              </button>
+              <span id="synth-status" class="synth-status">offline</span>
+              <button id="synth-panic" class="mini-btn" type="button" disabled
+                      title="All Sound Off + All Notes Off on the synth (kills stuck notes)">panic</button>
+            </div>
+            <div class="synth-fields">
+              <div class="synth-field">
+                <span class="synth-label">voice</span>
+                <select id="synth-voice" disabled
+                        title="GM instrument the synth plays (sends a program change straight to AboraSynth; the out-card voice picker is for replay, this one is the synth's own)"></select>
+                <label class="synth-latch"
+                       title="Latch the synth voice to the keyboard's: the picker closes and greys out, and AboraSynth copies whatever voice is sent to the board, live. Unlatch for the full instrument list.">
+                  <input type="checkbox" id="synth-latch"><span>latch</span>
+                </label>
+                <span id="synth-followed" class="synth-followed" hidden></span>
+              </div>
+              <label class="synth-field synth-vol">
+                <span class="synth-label">volume</span>
+                <input id="synth-volume" type="range" min="0" max="127" step="1" value="100" disabled
+                       title="AboraSynth channel volume (CC7) - level it against the keyboard for a fair A/B">
+                <span id="synth-volume-val" class="synth-volume-val">100</span>
+              </label>
+            </div>
+            <div class="synth-foot">
+              <span id="synth-port" class="synth-port">no synth yet</span>
+            </div>
           </div>
         </section>
       </div>
