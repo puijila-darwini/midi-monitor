@@ -46,9 +46,48 @@ LAUNCHABLE = [
         "args": ["/home/pthag/ai/midi/monitor/localsynth.sh"],
         "detect": ["FLUID Synth"],
         "auto_route": True,
-        "stop": ["AboraSynth"],
+        # Kill the WHOLE pipeline, not just the engine: the wrapper's
+        # `sleep infinity |` stdin partner (Ver 99) and the bash wrapper both
+        # outlive a bare pkill of fluidsynth and pile up on every stop/swap.
+        "stop": ["AboraSynth", "monitor/localsynth.sh", "sleep infinity"],
     },
 ]
+
+# Ver 103: the GM-capable soundfonts discovered on this box (label, absolute
+# path). The local synth takes the picked one via the ABORA_SF2 env var at
+# launch — localsynth.sh falls back to the system default when unset. Listing
+# here both feeds the AboraSynth card's font picker AND WHITELISTS the restart
+# endpoint: only these exact paths may be loaded onto the synth.
+SOUNDFONTS = [
+    ("FluidR3 GM", "/usr/share/sounds/sf2/FluidR3_GM.sf2"),
+    ("FluidR3 GS", "/usr/share/sounds/sf2/FluidR3_GS.sf2"),
+    ("TimGM6mb", "/usr/share/sounds/sf2/TimGM6mb.sf2"),
+    ("Roland SC-55",
+     "/home/pthag/.steam/debian-installation/steamapps/common/RetroArch/"
+     "system/scummvm/extra/Roland_SC-55.sf2"),
+    ("Grand Piano",
+     "/home/pthag/.Rack/plugins-v1/RJModules/soundfonts/Grand_Piano.sf2"),
+    ("8-bit", "/home/pthag/.Rack/plugins-v1/RJModules/soundfonts/8bit.sf2"),
+    ("PC Lite",
+     "/home/pthag/.steam/debian-installation/steamapps/common/Simutrans/"
+     "music/PCLite.sf2"),
+    ("Simutrans default",
+     "/home/pthag/.steam/debian-installation/steamapps/common/Simutrans/"
+     "music/default.sf3"),
+]
+
+
+def soundfonts():
+    """[(name, path), ...] for the fonts that actually exist on this box."""
+    return [(n, p) for (n, p) in SOUNDFONTS if os.path.isfile(p)]
+
+
+def soundfont_name(path):
+    """Label for a roster path, or None if it's not one of ours."""
+    for n, p in SOUNDFONTS:
+        if p == path:
+            return n
+    return None
 
 
 def entries():
@@ -99,8 +138,12 @@ _locks = {e["key"]: threading.Lock() for e in LAUNCHABLE}
 _launching = {e["key"]: False for e in LAUNCHABLE}
 
 
-def launch(key):
+def launch(key, env=None):
     """Spawn the app for `key` detached if its binary exists and it isn't up.
+
+    env: optional full environment dict for the child (None = inherit the
+    server's). The AboraSynth card passes {**os.environ, "ABORA_SF2": path}
+    so the synth launches under the user's picked soundfont (Ver 103).
 
     Returns (ok, message, running, launching)."""
     entry = _entries_by_key().get(key)
@@ -121,6 +164,7 @@ def launch(key):
         subprocess.Popen(
             [cmd] + list(entry.get("args", [])),
             cwd=_cwd(entry),
+            env=env,
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,

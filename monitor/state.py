@@ -367,6 +367,16 @@ class State:
         # to the synth port, and the synth card's picker closes + greys out
         # showing the followed voice.
         self.synth_voice_latch = False
+        # Ver 103: the last instrument the synth was told to play ((bank, pc))
+        # and its CC7 volume — re-applied after a soundfont swap restart so the
+        # A/B keeps the same instrument. synth_soundfont = the picked soundfont
+        # path ("" = box default) used for the NEXT launch; synth_soundfont_active
+        # = what the engine actually plays (set on a real swap / launch), so a
+        # swap that was skipped (engine down) doesn't make the picker lie.
+        self.synth_voice = (0, 0)
+        self.synth_volume = 100
+        self.synth_soundfont = ""
+        self.synth_soundfont_active = ""
         # Near-simultaneous window (seconds) for grouping chord members when
         # bypassing (no grid to snap them together). Grouping ALSO requires
         # overlap (next onset lands while the group still sounds) so fast

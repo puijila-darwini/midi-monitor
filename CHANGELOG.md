@@ -1819,3 +1819,47 @@ Ver 102 (AboraSynth gets its own bottom row + a voice LATCH): the synth card
   44-assertion node harness (monitor/../tmp/midi-synth-test.js) driving the
   latch render, live-follow updates, unknown-voice blanking, the engine-up-
   while-latched push edge, and handler revert-on-network-failure — all pass.
+
+Ver 103 (AboraSynth soundfont picker — every GM font on the box is now
+  selectable): the synth card gains a "font" dropdown. The roster is
+  SERVER-OWNED in sinks.SOUNDFONTS — the 8 real SoundFont/Bank files found on
+  this box (FluidR3 GM + GS, TimGM6mb, Roland SC-55 from RetroArch's scummvm
+  extras, Grand Piano + 8-bit from VCV Rack's RJModules, PC Lite + default.sf3
+  from Simutrans; Dungeon Keeper's 396K SFX-only bank and the 32-byte
+  default-GM stub were deliberately skipped) — each with a name + size, served
+  as GET /api/sinks/synth/soundfonts. Picking one POSTs
+  /api/sinks/synth/soundfont {path}: ONLY roster paths are accepted (whitelist;
+  /etc/passwd → 400). Fluidsynth can't swap a font file over MIDI, so with the
+  engine up the swap RESTARTS it under the new font (~0.3s of silence, same GM
+  programs with the font's sounds) and re-applies the last voice + CC7 volume —
+  the voice LATCH wins over the remembered voice when it's on, so a latched
+  A/B keeps following the keyboard. Engine down = the pick just sets the
+  startup font for the next launch (the launch route passes ABORA_SF2 through
+  to localsynth.sh, which honors it over the FluidR3_GM fallback).
+  - FONT-TRUTH TRACKING: the GET "current" reads synth_soundfont_active (set
+    on a real swap / launch), not the next-launch preference — so a swap that
+    was skipped (engine mid-restart from a racing click) can't make the picker
+    lie. Even after a server restart wiped the memory, the GET falls back to
+    reading the running engine's OWN cmdline (ps) to report what it actually
+    plays.
+  - RACE PROOF: swap restarts serialize on a _soundfont_lock — rapid dropdown
+    clicks can't interleave two stop/launch cycles. (The first live session
+    showed exactly this: my curl swap and the user's click raced, producing a
+    "swapped:false" that was mid-restart, not a bug — and revealing the leak
+    below.)
+  - LEAK FIX (found live): pkill -f AboraSynth killed only the fluidsynth
+    process; the wrapper's `sleep infinity |` stdin partner + the bash wrapper
+    outlived it and piled up — 9 leaked pairs inside 40s while font-clicking.
+    stop() now kills the WHOLE pipeline: stop patterns are [AboraSynth,
+    monitor/localsynth.sh, sleep infinity]. Verified: a swap cycle leaves
+    exactly 1 wrapper + 1 sleep + 1 engine.
+  Verified: node harness extended to 55 assertions (font render states:
+    disabled-while-launching / enabled-while-offline-and-running, swap handler
+    success + revert-on-failure) — all pass; live curl: roster GET (8 fonts +
+    sizes), swap to FluidR3 GS then back to Roland SC-55 (swapped:true both,
+    engine pid changes, seq client re-resolves to 129:0), process tree stays
+    single across swaps, current survives a server restart via the ps fallback.
+  Caveat for future agents: pkill -f patterns match any process whose cmdline
+  CONTAINS the pattern — don't run scripts whose own argv embeds
+  "monitor/localsynth.sh" or "sleep infinity" while swapping fonts (they get
+  SIGTERM'd; twice-proven tonight).

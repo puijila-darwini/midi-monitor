@@ -1828,6 +1828,7 @@ case "replay":
       voice: document.getElementById("synth-voice"),
       followed: document.getElementById("synth-followed"),
       latch: document.getElementById("synth-latch"),
+      font: document.getElementById("synth-font"),
       volume: document.getElementById("synth-volume"),
       vval: document.getElementById("synth-volume-val"),
       panic: document.getElementById("synth-panic"),
@@ -1853,6 +1854,33 @@ case "replay":
       }
     })();
 
+    // The soundfont roster (Ver 103) is server-owned: every discovered GM
+    // font on the box + the current pick. Option value = absolute path (the
+    // restart endpoint whitelists exactly these).
+    var synthFontCurrent = "";
+    (function () {
+      if (!synthEl || !synthEl.font) return;
+      var sel = synthEl.font;
+      fetch("/api/sinks/synth/soundfonts", { cache: "no-store" })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (!(res && res.ok)) return;
+          sel.options.length = 0;
+          (res.fonts || []).forEach(function (f) {
+            var o = document.createElement("option");
+            o.value = f.path;
+            o.textContent = f.name;
+            sel.appendChild(o);
+          });
+          if (res.current && res.current.path) {
+            synthFontCurrent = res.current.path;
+            sel.value = res.current.path;
+          }
+          sel.disabled = false;
+        })
+        .catch(function () { /* roster unavailable: picker stays disabled */ });
+    })();
+
     function synthRender(s) {
       if (!synthEl || !synthCard) return;
       var wasRunning = synthRunning;
@@ -1869,6 +1897,9 @@ case "replay":
       synthEl.voice.disabled = !synthRunning || synthLatch;
       synthEl.volume.disabled = !synthRunning;
       synthEl.panic.disabled = !synthRunning;
+      // The font picker stays usable even while the engine is DOWN (pick the
+      // startup font for the next launch); only the busy/swap window disables.
+      synthEl.font.disabled = synthBusy;
       var port = (s.targets && s.targets[0]) || "";
       synthEl.port.textContent = synthRunning
         ? "seq out \u2192 " + port
@@ -1973,9 +2004,43 @@ case "replay":
       synthPost("/api/sinks/synth/cc", { panic: true }, "panic (notes off)");
     }
 
+    // Ver 103: swap the engine's soundfont. If it's up the server restarts
+    // it under the new font (a moment of silence), then re-applies the last
+    // voice + volume — the card just reports + re-syncs routing afterwards.
+    function synthFontChange() {
+      if (!synthEl || !synthEl.font || synthBusy) return;
+      var sel = synthEl.font;
+      var path = sel.value;
+      if (!path) return;
+      var idx = sel.selectedIndex;
+      var label = idx >= 0 && sel.options[idx]
+        ? sel.options[idx].textContent : path;
+      sel.disabled = true;   // block double-clicks while the swap runs
+      synthPost("/api/sinks/synth/soundfont", { path: path },
+                "font \u2192 " + label)
+        .then(function (res) {
+          if (!res || !res.ok) {
+            if (sel.value !== synthFontCurrent) sel.value = synthFontCurrent;
+            sel.disabled = false;
+            return;
+          }
+          synthFontCurrent = path;
+          sel.value = path;
+          sel.disabled = false;
+          if (res.swapped) {
+            // The engine restarted under the new client number: re-sync the
+            // routing targets + sink status, then note the re-applied voice.
+            refreshApps(buttonsByKey());
+            reloadOuts();
+            synthFeed("voice + volume re-applied");
+          }
+        });
+    }
+
     if (synthEl && synthCard) {
       synthEl.toggle.addEventListener("click", synthToggle);
       synthEl.voice.addEventListener("change", synthVoiceChange);
+      synthEl.font.addEventListener("change", synthFontChange);
       synthEl.volume.addEventListener("input", function () { synthVolumeChange(false); });
       synthEl.volume.addEventListener("change", function () { synthVolumeChange(true); });
       synthEl.panic.addEventListener("click", synthPanic);

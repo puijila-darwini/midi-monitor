@@ -186,6 +186,25 @@ folded into a single web app package in `monitor/`:
                           "keys" mode; /api/sinks/synth/follow {"on"} sets it
                           + snaps the current voice; engine-up-while-latched
                           re-pushes; survives reloads via /api/state).
+                          Ver 103: the card gains a SOUNDFONT picker — the GM
+                          fonts discovered on the box (sinks.SOUNDFONTS roster:
+                          FluidR3 GM/GS, TimGM6mb, Roland SC-55, Grand Piano,
+                          8-bit, PC Lite, Simutrans default; list exists → the
+                          picker lists it; only roster paths load, whitelist).
+                          The synth launches under the pick via the ABORA_SF2
+                          env (localsynth.sh honors it over FLuidR3_GM
+                          fallback). An engine-up swap RESTARTS Fluidsynth
+                          under the new font (~0.3 s) and re-applies the last
+                          voice + CC7 volume (latch wins); engine-down pick =
+                          next-launch font. GET "current" tracks the ACTIVE
+                          font (set on real swap/launch), falling back to the
+                          live engine's own cmdline across a server restart —
+                          the picker never lies. Swaps serialize on
+                          _soundfont_lock; the synth's stop patterns now kill
+                          the WHOLE `sleep infinity |` pipeline (was: bare
+                          pkill of fluidsynth leaked a wrapper + sleep pair per
+                          stop/swap — 9 pairs inside 40 s of live font-
+                          clicking).
 - `monitor/midiout.py`   - SeqOut (ALSA seq output client, ctypes, no deps).
                           Ver 99: send_pitch_bend(target, semitones, channel)
                           — 14-bit PITCHBEND mapped via replay.BEND_RANGE_ST

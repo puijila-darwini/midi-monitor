@@ -853,6 +853,11 @@
                 </label>
                 <span id="synth-followed" class="synth-followed" hidden></span>
               </div>
+              <div class="synth-field">
+                <span class="synth-label">font</span>
+                <select id="synth-font" disabled
+                        title="SoundFont the AboraSynth engine plays (every discovered GM font on the box). Changing it while the engine is up restarts the synth under the new font — a moment of silence — then re-applies the voice + volume; pick before launch to choose the startup font"></select>
+              </div>
               <label class="synth-field synth-vol">
                 <span class="synth-label">volume</span>
                 <input id="synth-volume" type="range" min="0" max="127" step="1" value="100" disabled

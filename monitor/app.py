@@ -45,6 +45,9 @@ CAPTURE_BASE_DELAY = 1.0     # seconds before first retry
 CAPTURE_MAX_DELAY = 30.0     # capped backoff between restarts
 
 _capture_lock = threading.Lock()
+# Ver 103: serializes soundfont-swap restarts so racing dropdown clicks can't
+# interleave stop/launch cycles on the same engine.
+_soundfont_lock = threading.Lock()
 _capture_health = {
     "alive": False,
     "error": None,        # last error message (None when healthy/restarting)
@@ -136,6 +139,40 @@ def _live_seq_out():
     if _live_seq is None:
         _live_seq = midiout.SeqOut("Abora Live Out")
     return _live_seq
+
+
+def _synth_soundfont_path():
+    """The soundfont the synth will next launch with: the user's pick when it
+    is still on the box roster, otherwise the first discovered font."""
+    path = state.synth_soundfont
+    if path and sinks.soundfont_name(path) is not None and os.path.isfile(path):
+        return path
+    fonts = sinks.soundfonts()
+    return fonts[0][1] if fonts else ""
+
+
+def _synth_soundfont_active():
+    """The soundfont the Engine actually plays right now: the live active one
+    (set on a real swap / launch), falling back to the next-launch pref, then
+    the box default. Tracks reality even when a swap was skipped — and across
+    a server restart, by asking the running engine itself (its cmdline carries
+    the font path it was launched with)."""
+    for path in (state.synth_soundfont_active, state.synth_soundfont):
+        if path and sinks.soundfont_name(path) is not None and os.path.isfile(path):
+            return path
+    try:
+        out = subprocess.run(["ps", "-eo", "cmd"], capture_output=True,
+                             text=True, timeout=5).stdout
+        for line in out.splitlines():
+            if "fluidsynth" not in line:
+                continue
+            for _, p in sinks.SOUNDFONTS:
+                if p in line and os.path.isfile(p):
+                    return p
+    except (OSError, subprocess.SubprocessError):
+        pass
+    fonts = sinks.soundfonts()
+    return fonts[0][1] if fonts else ""
 
 
 def _synth_follow_voice(bank, pc):
@@ -988,10 +1025,19 @@ def api_sinks():
 def api_sinks_launch(key):
     """Launch destination `key` (from the registry) if it isn't already up.
     Detached, in its own session, so it survives independent of the server."""
-    ok, msg, running, launching = sinks.launch(key)
+    if key == "synth":
+        launch_font = _synth_soundfont_path()
+        env = {**os.environ, "ABORA_SF2": launch_font}
+    else:
+        launch_font, env = None, None
+    ok, msg, running, launching = sinks.launch(key, env=env)
     if not ok:
         return jsonify({"ok": False, "error": msg, "running": running,
                         "launching": launching}), 500
+    # A real (re)launch comes up under launch_font — the already-running
+    # short-circuit (running=True) must NOT re-stamp the active font.
+    if launch_font and not running:
+        state.synth_soundfont_active = launch_font
     return jsonify({"ok": True, "key": key, "message": msg,
                     "running": running, "launching": launching})
 
@@ -1037,6 +1083,9 @@ def api_sinks_voice(key):
         seq_out.flush()
     except Exception as exc:
         return jsonify({"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}), 500
+    # Ver 103: remember the instrument so a soundfont swap can re-apply it.
+    if key == "synth":
+        state.synth_voice = (bank, pc)
     return jsonify({"ok": True, "key": key, "port": port, "bank": bank,
                     "program": pc})
 
@@ -1066,6 +1115,9 @@ def api_sinks_cc(key):
         return jsonify({"ok": False, "error": "cc/value required"}), 400
     except Exception as exc:
         return jsonify({"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}), 500
+    # Ver 103: remember the fader level so a soundfont swap can re-apply it.
+    if key == "synth" and not body.get("panic") and body.get("cc") == 7:
+        state.synth_volume = int(body.get("value", 100))
     return jsonify({"ok": True, "key": key, "port": port})
 
 
@@ -1086,6 +1138,77 @@ def api_sinks_synth_follow():
     return jsonify({"ok": True, "on": state.synth_voice_latch,
                     "synth_up": applied or bool(sinks.port("synth")),
                     "voice": state._get_receive_voice_name()})
+
+
+@app.route("/api/sinks/synth/soundfonts", methods=["GET"])
+def api_synth_soundfonts():
+    """The discovered soundfonts (Ver 103) + which one the synth is on.
+    Feeds the AboraSynth card's font picker."""
+    fonts = [{"name": n, "path": p,
+              "size_mb": round(os.path.getsize(p) / 1048576.0, 1)}
+             for n, p in sinks.soundfonts()]
+    cur = _synth_soundfont_active()
+    return jsonify({"ok": True, "fonts": fonts,
+                    "current": {"name": sinks.soundfont_name(cur)
+                                or os.path.basename(cur), "path": cur}})
+
+
+@app.route("/api/sinks/synth/soundfont", methods=["POST"])
+def api_synth_soundfont():
+    """Swap the local synth's soundfont (Ver 103). Body: {"path": abs} — only
+    paths on the sinks.SOUNDFONTS roster are accepted (whitelist). Fluidsynth
+    can't swap a font file over MIDI, so if the engine is up it is RESTARTED
+    under the new font (a moment of silence, then the font's version of the
+    same GM programs), and the last voice + CC7 volume are re-applied — the
+    voice latch wins over the remembered voice when it is on."""
+    body = request.get_json(silent=True) or {}
+    path = body.get("path")
+    name = sinks.soundfont_name(path) if path else None
+    if name is None or not os.path.isfile(path):
+        return jsonify({"ok": False, "error": "unknown soundfont path"}), 400
+    state.synth_soundfont = path          # the next launch uses it
+    swapped = False
+    with _soundfont_lock:                 # serialize racing clicks / curl swaps
+        if sinks.is_running("synth"):
+            _, _, _ = sinks.stop("synth")
+            for _ in range(30):           # give the old engine a moment to die
+                if not sinks.is_running("synth"):
+                    break
+                time.sleep(0.1)
+            ok, msg, _, launching = sinks.launch(
+                "synth", env={**os.environ, "ABORA_SF2": path})
+            if not ok:
+                return jsonify({"ok": False, "error": msg,
+                                "launching": launching}), 500
+            for _ in range(50):           # wait for the new engine to register
+                if sinks.port("synth"):
+                    break
+                time.sleep(0.1)
+            swapped = True
+            state.synth_soundfont_active = path
+            # Re-apply the instrument: the voice latch wins when it is on.
+            if state.synth_voice_latch:
+                _synth_follow_voice(state.receive_bank, state.receive_program)
+            else:
+                bank, pc = state.synth_voice
+                port = sinks.port("synth")
+                if port:
+                    try:
+                        seq_out = _live_seq_out()
+                        seq_out.send_program_change(port, bank, pc, channel=0)
+                        seq_out.flush()
+                    except Exception:
+                        pass
+            port = sinks.port("synth")
+            if port:
+                try:
+                    seq_out = _live_seq_out()
+                    seq_out.send_cc(port, 7, int(state.synth_volume), channel=0)
+                    seq_out.flush()
+                except Exception:
+                    pass
+    return jsonify({"ok": True, "name": name, "path": path,
+                    "swapped": swapped})
 
 
 # Backward-compatible aliases for the Ver 63 /api/vcv endpoints.
