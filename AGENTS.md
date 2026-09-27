@@ -147,6 +147,17 @@ folded into a single web app package in `monitor/`:
                           auto_route (see ../Musica/Rack pattern); the out box
                           buttons + /api/sinks launch + boot auto-routing all
                           derive from it. Add a DAW = add one dict entry.
+                          Ver 99: a LOCAL SYNTH entry (fluidsynth live via
+                          monitor/localsynth.sh — ALSA-seq client "AboraSynth",
+                          pulseaudio audio) plays the same MIDI on this machine
+                          in parallel to the keyboard for detune A/B.
+                          QUIRK: FluidSynth exits 0 silently if its stdin hits
+                          EOF — the wrapper must `sleep infinity |` into it.
+- `monitor/midiout.py`   - SeqOut (ALSA seq output client, ctypes, no deps).
+                          Ver 99: send_pitch_bend(target, semitones, channel)
+                          — 14-bit PITCHBEND mapped via replay.BEND_RANGE_ST
+                          (±2 st), so detuning reaches seq sinks (VCV Rack,
+                          DAWs, the local synth), not just the raw path.
 - `monitor/patterns.py` - pattern library: save/load named snapshots of the raw
                           (IN) / out (OUT) buffers as JSON in patterns/
                           (gitignored). A pattern = events + transform-chain

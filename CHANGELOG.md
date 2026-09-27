@@ -1690,3 +1690,36 @@ Ver 98 (Rack 2.6.6 MIDI): Rack 2.6.6 works with the MIDIToCVInterface module
   The 2.6.6 binary runs, exposes MIDI ports, and the patch (MIDI in →
   MIDIToCVInterface → instrument → Audio 2 out) works end-to-end. The 2.0.6
   fallback is archived at Rack-prev / RackoLD.
+
+Ver 99 (detune → MIDI out + Local Synth sink): the tuning pre-bend now
+  reaches EVERY output, not just the keyboard's raw path.
+  (1) midiout.SeqOut gained send_pitch_bend(target, semitones, channel):
+      14-bit PITCHBEND (0-16383, center 8192) mapped from semitones via
+      replay.BEND_RANGE_ST=2.0 — +2 st = full up, -2 st = full down,
+      exact for ±0.117 st step detunes (unit-verified: 0→8192, 1→12288,
+      -1→4096, 2→16383, -2→0). replay's "on" tuning block now sends the
+      pre-bend to every seq target through the SHARED seq client (was a
+      per-event throwaway client — see fix below) before _send_batch, so
+      VCV Rack / DAWs / the local synth all get the detune, not just the
+      board. Sinks default to ±2 st bend range (FluidSynth GM, most VSTs),
+      matching BEND_RANGE_ST; no RPN lock sent on seq (raw path still
+      RPN-locks on echo enable).
+  (2) New out-box sink: Local Synth (Fluidsynth) — a live local
+      fluidsynth (`-a pulseaudio -m alsa_seq`, AboraSynth client) that
+      plays the same MIDI on this machine in parallel to the keyboard, for
+      direct detune A/B. Launcher = monitor/localsynth.sh (spawned via
+      /bin/bash from sinks.py to avoid the +x bit). QUIRK mined: FluidSynth
+      exits 0 silently right after the banner if its stdin hits EOF — the
+      wrapper must `sleep infinity |` pipe into it (tested: /dev/null stdin
+      dies, pipe stdin lives). Detect = "FLUID Synth" in aconnect, so the
+      out-box button + boot auto-route work unchanged.
+  (3) FIX: last session's rushed midiout.py edits had mangled the class —
+      a module-level send_pitch_bend swallowed all_notes_off (+ tail) as
+      nested junk and referenced undefined self/ev, so seq pitch bends and
+      all_notes_off silently no-op'd (try/except swallowed). Restored the
+      class structure; all SeqOut methods verified (send_notes/cc/pc/pb/
+      all_notes_off). Detune→midi out is now live-verified: `oii` pattern
+      replayed with just intonation → seq bends hit FLUID Synth 129:0 +
+      raw bends hit the keyboard.
+  Keyboard port note 2026-09-27: currently client 24 / card 2 (post-reboot
+  enumeration moved it again; mididev re-resolution handles it).

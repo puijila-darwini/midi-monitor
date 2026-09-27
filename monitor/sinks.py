@@ -35,6 +35,16 @@ LAUNCHABLE = [
         "detect": ["VCV Rack"],
         "auto_route": True,
     },
+    {
+        "key": "synth",
+        "name": "Local Synth (Fluidsynth)",
+        # Bash running localsynth.sh as an argument, not a +x script: the
+        # wrapper must keep fluidsynth's stdin as a never-closing pipe.
+        "cmd": "/bin/bash",
+        "args": ["/home/pthag/ai/midi/monitor/localsynth.sh"],
+        "detect": ["FLUID Synth"],
+        "auto_route": True,
+    },
 ]
 
 

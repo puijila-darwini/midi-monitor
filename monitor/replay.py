@@ -410,7 +410,7 @@ class Replay:
                             program_change(bank, pc)
                         emit("voice", bank=bank, pc=pc)
                         continue
-                    if kind == "on" and tuning is not None and self.raw_devices and batch:
+                    if kind == "on" and tuning is not None and batch:
                         # Mono pre-bend: the chord shares one channel, so the
                         # bass note's detune wins (documented mono caveat).
                         try:
@@ -418,10 +418,25 @@ class Replay:
                         except (TypeError, ValueError):
                             semis = 0.0
                         if abs(semis - tune_last) > 0.005:
-                            try:
-                                pitch_bend(semis, channel=self.channel)
-                            except Exception:
-                                pass
+                            # Send pitch bend to raw device (keyboard internal voices)
+                            if self.raw_devices:
+                                try:
+                                    pitch_bend(semis, channel=self.channel)
+                                except Exception:
+                                    pass
+                            # Send pitch bend to sequencer targets (VCV Rack, DAWs,
+                            # the local fluidsynth sink) via the shared seq client.
+                            if seq is not None:
+                                for t in self.seq_targets:
+                                    try:
+                                        seq.send_pitch_bend(t, semis,
+                                                            channel=self.channel)
+                                    except Exception:
+                                        pass
+                                try:
+                                    seq.flush()
+                                except Exception:
+                                    pass
                             tune_last = semis
                     self._send_batch(seq, kind, batch)
                     if kind == "on":

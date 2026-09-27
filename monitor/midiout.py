@@ -55,6 +55,7 @@ SND_SEQ_EVENT_CONTROLLER = 10
 SND_SEQ_EVENT_PGMCHANGE = 11
 SND_SEQ_EVENT_NOTEON = 6
 SND_SEQ_EVENT_NOTEOFF = 7
+SND_SEQ_EVENT_PITCHBEND = 12
 
 # MIDI controller numbers
 CC_ALL_SOUND_OFF = 120
@@ -274,6 +275,22 @@ class SeqOut(_SeqOutPort):
         ev.data.control.channel = channel & 0x0F
         ev.data.control.param = 0
         ev.data.control.value = pc
+        self._emit(ev)
+
+    def send_pitch_bend(self, target, semitones, channel=0):
+        """Send a 14-bit pitch bend to a seq target. `semitones` is the bend
+        within the PSS-A50's ±2 st range (replay.BEND_RANGE_ST): +2 st -> full
+        up, -2 st -> full down, 0 -> center (8192)."""
+        from .replay import BEND_RANGE_ST
+        rng = BEND_RANGE_ST
+        dst_c, dst_p = parse_target(target)
+        ev = self._source_event(SND_SEQ_EVENT_PITCHBEND)
+        ev.dest.client = dst_c & 0xFF
+        ev.dest.port = dst_p & 0xFF
+        ev.data.control.channel = channel & 0x0F
+        val = int(round(8192 + max(-rng, min(rng, float(semitones))) / rng * 8192))
+        ev.data.control.param = 0
+        ev.data.control.value = max(0, min(16383, val))
         self._emit(ev)
 
     def all_notes_off(self, targets, channel=0):
