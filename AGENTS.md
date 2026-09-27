@@ -18,11 +18,14 @@ PSS-A50 USB keyed into this machine.
   deep-investigate.
 - The keyboard emits constant `Clock` and `Active Sensing` chatter -
   ALWAYS filter these out. Played notes arrive as `Note on` / `Note off`;
-  the board also TRANSMITS pitch bend + CC1 (mod wheel) and, on a panel/voice
+  the board also TRANSMITS pitch bend + CC1 and, on a panel/voice
   action (e.g. selecting a voice), Program Change + bank CC0/32 + a burst of
   controller data (CC6/11/71/72/74/100/101 etc.) and SysEx 120/121/123 aux.
   `capture.py` parses all of it; capture handles note/ctrl/pitch events (see
-  the out · ctrl card's "received" readout).
+  the out · ctrl card's "received" readout). NOTE (2026-09-27, owner): the
+  board has NO physical pitch/mod wheel to wriggle — the bend/mod data it
+  transmits comes from panel actions, so the practical bend interface is the
+  APP'S pitch fader (the wheel-forwarding mirror leg is dormant on this board).
 - MIDI Reference findings (chart + data format, mined 2026-09-24, PDF kept at
   ~/ai/tmp/manual/pssa50_mr.pdf): bend sensitivity settable 0-24 st via RPN
   00 00 (default ±2) — we LOCK ±2 via RPN on echo enable so BEND_RANGE_ST is
@@ -167,6 +170,35 @@ folded into a single web app package in `monitor/`:
                           CC7 updates state.synth_volume so the synth card's
                           fader never lies; /api/state now carries
                           synth_volume (it was never restored before).
+                          Ver 106: the synth going SILENT with no error, three
+                          silent faults fixed — (a) a ZOMBIE seq client:
+                          snd_seq_open's fd isn't CLOEXEC, so forked children
+                          (the synth's `sleep infinity |` pipeline, aseqdump)
+                          inherited it and the client outlived its owner as a
+                          zombie whose sends all fail ENOENT (check
+                          /proc/asound/seq/clients for a "Client-N" whose pid
+                          is dead); midiout now marks the fd CLOEXEC +
+                          SeqOut gains close()/is_alive() (probe dest must be
+                          255:255 — 0:0 is the kernel Timer and answers -1),
+                          and app._seq_send/_seq_guard/_reset_live_seq rebuild
+                          and retry (heals within one keystroke). (b) a STALE
+                          DESTINATION: a restarted sink answers on a NEW seq
+                          client number and ALSA's buffered send drops events
+                          for a dead port without complaining (drain's rc
+                          answers -ENOENT even when healthy), so app._live_outs
+                          /_reachable re-resolve the destination list on a 2 s
+                          TTL (the mididev reflex) and only live ports get
+                          sent to; a route that pointed at a port the synth
+                          USED to answer on is re-pointed, a merely-down sink
+                          is skipped but never de-selected. (c) MUTE AFTER
+                          SWAP: the re-apply pushed the remembered voice, which
+                          a single-instrument font (Grand_Piano.sf2 = 0:0
+                          only) doesn't carry, so the channel was silent on a
+                          "successful" swap — app._font_has_voice /
+                          _fallback_preset clamp to the font's first preset
+                          (sf2inspect, mtime-cached) and the swap response now
+                          carries the "voice" actually applied. Harness:
+                          ~/ai/tmp/seqheal-test.py.
 - `monitor/sinks.py`    - DATA-DRIVEN registry of launchable MIDI destinations
                           (VCV Rack, DAWs). Each entry declares cmd/detect/
                           auto_route (see ../Musica/Rack pattern); the out box
@@ -236,6 +268,13 @@ folded into a single web app package in `monitor/`:
                           — 14-bit PITCHBEND mapped via replay.BEND_RANGE_ST
                           (±2 st), so detuning reaches seq sinks (VCV Rack,
                           DAWs, the local synth), not just the raw path.
+                          Ver 106: the seq fd is marked FD_CLOEXEC (forked
+                          children inheriting it is what zombie'd the client),
+                          plus close() and is_alive() (liveness probe = a CC
+                          addressed to 255:255; 0:0 exists — the kernel Timer
+                          — so it is useless as a probe). _emit/flush refuse a
+                          released handle: snd_seq_drain_output assert()s on a
+                          null handle and would abort the whole process.
 - `monitor/patterns.py` - pattern library: save/load named snapshots of the raw
                           (IN) / out (OUT) buffers as JSON in patterns/
                           (gitignored). A pattern = events + transform-chain

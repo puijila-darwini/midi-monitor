@@ -12,11 +12,13 @@ set the event's dest field and snd_seq_event_output_direct delivers it.
 """
 import ctypes
 import ctypes.util
+import fcntl
 import re
 import subprocess
 
 SND_SEQ_OPEN_OUTPUT = 1
 SND_SEQ_QUEUE_DIRECT = 253  # direct/bounced events, no real queue
+POLLOUT = 0x10
 
 # Port capabilities (seqmid.h)
 SND_SEQ_PORT_CAP_READ = 0x01      # readable input
@@ -34,6 +36,15 @@ class _SeqOutPort:
                                SND_SEQ_OPEN_OUTPUT, 0)
         if rc != 0:
             raise RuntimeError("snd_seq_open failed (rc=%d)" % rc)
+        # Ver 106: the seq fd is NOT close-on-exec by default, so every child
+        # this process forks (the synth's `sleep infinity |` pipeline, aseqdump,
+        # amidi) inherits a copy. If one of those children outlives the rest of
+        # the process, the seq client survives as a ZOMBIE with a dead owner —
+        # any send from the app then fails ENOENT and the synth goes silent
+        # with no error surfaced. Mark the fd CLOEXEC so only this process ever
+        # holds it (the app-side recreate-on-failure in app._seq_send heals any
+        # zombie that predates this fix).
+        _mark_seq_fd_cloexec(self.handle)
         rc = _LIB.snd_seq_set_client_pool_output(self.handle, 2048)
         if rc != 0:
             _LIB.snd_seq_close(self.handle)
@@ -49,6 +60,43 @@ class _SeqOutPort:
             _LIB.snd_seq_close(self.handle)
             raise RuntimeError("snd_seq_create_simple_port failed (rc=%d)" % self.port_id)
         self.client_id = _LIB.snd_seq_client_id(self.handle)
+
+    def close(self):
+        """Close the seq client, releasing the fd. Safe to call twice; sends
+        after close raise instead of touching a freed handle."""
+        if self.handle:
+            h = self.handle
+            self.handle = None
+            try:
+                _LIB.snd_seq_close(h)
+            except Exception:
+                pass
+
+
+class _PollFD(ctypes.Structure):
+    _fields_ = [("fd", ctypes.c_int), ("events", ctypes.c_short),
+                ("revents", ctypes.c_short)]
+
+
+def _mark_seq_fd_cloexec(handle):
+    """Set FD_CLOEXEC on the fd(s) behind an opened snd_seq handle, so forked
+    children (synth pipeline, aseqdump, amidi) never inherit a copy of the
+    seq client (see the Ver 106 note in _SeqOutPort). Best-effort: the seq fd
+    lives inside libasound's opaque snd_seq_t; snd_seq_poll_descriptors is the
+    public way to hand it back out."""
+    try:
+        n = _LIB.snd_seq_poll_descriptors_count(handle, POLLOUT)
+        if n <= 0:
+            return
+        pfds = (_PollFD * n)()
+        done = _LIB.snd_seq_poll_descriptors(handle, pfds, n, POLLOUT)
+        for i in range(done):
+            fd = pfds[i].fd
+            if fd > 0:
+                flags = fcntl.fcntl(fd, fcntl.F_GETFD)
+                fcntl.fcntl(fd, fcntl.F_SETFD, flags | fcntl.FD_CLOEXEC)
+    except Exception:
+        pass  # best-effort hardening only
 
 # Event types (seq_event.h)
 SND_SEQ_EVENT_CONTROLLER = 10
@@ -141,6 +189,10 @@ def _load():
     f.restype = ctypes.c_int
     f.argtypes = [ctypes.c_void_p, ctypes.POINTER(_SeqEvent)]
 
+    f = lib.snd_seq_event_output_direct
+    f.restype = ctypes.c_int
+    f.argtypes = [ctypes.c_void_p, ctypes.POINTER(_SeqEvent)]
+
     f = lib.snd_seq_drain_output
     f.restype = ctypes.c_int
     f.argtypes = [ctypes.c_void_p]
@@ -152,6 +204,15 @@ def _load():
     f = lib.snd_seq_set_client_pool_output_room
     f.restype = ctypes.c_int
     f.argtypes = [ctypes.c_void_p, ctypes.c_size_t]
+
+    f = lib.snd_seq_poll_descriptors_count
+    f.restype = ctypes.c_int
+    f.argtypes = [ctypes.c_void_p, ctypes.c_ushort]
+
+    f = lib.snd_seq_poll_descriptors
+    f.restype = ctypes.c_int
+    f.argtypes = [ctypes.c_void_p, ctypes.POINTER(_PollFD), ctypes.c_int,
+                  ctypes.c_ushort]
     return lib
 
 
@@ -233,12 +294,50 @@ class SeqOut(_SeqOutPort):
         return ev
 
     def _emit(self, ev):
+        if not self.handle:
+            raise RuntimeError("seq client is closed")
         rc = _LIB.snd_seq_event_output(self.handle, ctypes.byref(ev))
         if rc < 0:
             raise RuntimeError("snd_seq_event_output failed (rc=%d)" % rc)
 
+    def is_alive(self):
+        """True when this seq client can still output. A zombie's fd lingers
+        but the client behind it is gone, and every send answers ENOENT;
+        app._seq_guard checks this before routing so a dead client is rebuilt
+        instead of silently swallowing every future event."""
+        h = self.handle
+        if not h:
+            return False
+        try:
+            if _LIB.snd_seq_client_id(h) < 0:
+                return False
+        except Exception:
+            return False
+        try:
+            ev = self._source_event(SND_SEQ_EVENT_CONTROLLER)
+            ev.dest.client = 255   # never a real seq client -> always ENOENT
+            ev.dest.port = 255
+            ev.data.control.channel = 0
+            ev.data.control.param = 0
+            ev.data.control.value = 0
+            # A direct output reports the delivery result without queueing: a
+            # LIVE client answers -ENOENT for the missing destination (verified
+            # on a live client, and -1 for dest 0:0, which is the kernel Timer
+            # and therefore useless as a probe).
+            rc = _LIB.snd_seq_event_output_direct(h, ctypes.byref(ev))
+            return rc == -2
+        except Exception:
+            return False
+
     def flush(self):
-        _LIB.snd_seq_drain_output(self.handle)
+        # Ver 106: never call into libasound with a released handle — the
+        # assert() in snd_seq_drain_output would abort the whole process.
+        if not self.handle:
+            return
+        try:
+            _LIB.snd_seq_drain_output(self.handle)
+        except Exception:
+            pass
 
     def send_notes(self, target, kind, pairs, channel=0):
         """Send note on/off for [(note, velocity), ...] to one seq target."""

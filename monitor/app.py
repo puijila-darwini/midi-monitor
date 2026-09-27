@@ -134,12 +134,105 @@ def _note_name(n):
 # capture thread, created lazily and reused for the process lifetime.
 _live_seq = None
 
+# Ver 106: TTL cache of the seq destination listing (see _live_outs), plus
+# every port the AboraSynth has answered on this session — a stale route
+# pointing at one of those is a restarted synth, not a dead stranger.
+_outs_cache = (0.0, [], None)
+_seen_synth_ports = set()
+
 
 def _live_seq_out():
     global _live_seq
     if _live_seq is None:
         _live_seq = midiout.SeqOut("Abora Live Out")
     return _live_seq
+
+
+def _reset_live_seq():
+    """Drop the persistent SeqOut so the next call builds a fresh one. Ver 106:
+    the app's seq client can die out from under us (a zombie client with a
+    dead owner, from fds inherited across fork before the CLOEXEC fix) and
+    every send then fails ENOENT — the synth goes silent with no error shown."""
+    global _live_seq
+    old, _live_seq = _live_seq, None
+    if old is not None:
+        try:
+            old.close()
+        except Exception:
+            pass
+
+
+def _seq_guard():
+    """Cheap liveness check before routing: rebuild the SeqOut when its client
+    is dead. Called from the live note path (cheap early-out while healthy) so
+    silence heals within one keystroke instead of at a restart."""
+    try:
+        sq = _live_seq_out()
+        if not sq.is_alive():
+            _reset_live_seq()
+    except Exception:
+        _reset_live_seq()
+
+
+def _seq_send(fn):
+    """Run fn(seq_out) with Ver 106 self-healing: on any send failure, rebuild
+    the dead seq client and retry exactly once. Returns True on delivery."""
+    for attempt in (0, 1):
+        try:
+            fn(_live_seq_out())
+            return True
+        except Exception:
+            _reset_live_seq()
+    return False
+
+
+def _live_outs(max_age=2.0):
+    """Ver 106 seq destination health. ALSA's buffered send accepts events for
+    a destination that no longer exists and never complains (and
+    snd_seq_drain_output's rc is useless — it answers -ENOENT even for a
+    healthy port), so a sink that RESTARTED under a new seq client number
+    leaves the app silent rather than loud. The cure is the reflex mididev
+    already has for the keyboard's card/client numbers: re-resolve the
+    endpoints, on a short TTL so the live note path never forks aconnect.
+    Returns (outs listing, live AboraSynth port or None)."""
+    global _outs_cache
+    when, outs, synth_port = _outs_cache
+    now = time.time()
+    if not outs or now - when >= max_age:
+        fresh = midiout.list_outs()
+        # An EMPTY read means aconnect itself failed, not that every sink died —
+        # keep the last good listing rather than muting the synth for 2 s.
+        if fresh:
+            outs = fresh
+            synth_port = sinks.port("synth", fresh)
+            _outs_cache = (now, outs, synth_port)
+        else:
+            _outs_cache = (now, outs, synth_port)
+    if synth_port:
+        _seen_synth_ports.add(synth_port)
+    return outs, synth_port
+
+
+def _reachable(targets):
+    """The subset of `targets` that still exists right now. A restarted
+    AboraSynth is re-pointed at its new port (and state.seq_outs updated, so
+    the out box tells the truth instead of naming a dead client). Anything
+    else that died is just skipped for now — the stored route is the user's
+    intent and is never silently rewritten, so the sink rejoins by itself
+    when it comes back."""
+    _outs, synth_port = _live_outs()
+    live = {o.get("target") for o in _outs}
+    if synth_port:
+        live.add(synth_port)
+    out = []
+    for t in targets:
+        if t in live:
+            out.append(t)
+        elif synth_port and t in _seen_synth_ports:
+            state.seq_outs = [synth_port if x == t else x
+                              for x in state.seq_outs]
+            out.append(synth_port)
+    return out
 
 
 def _default_soundfont():
@@ -199,6 +292,27 @@ def _preset_payload(path):
             for b, p, n in found]
 
 
+def _font_has_voice(presets, bank, pc):
+    """Ver 106: does this font carry the (bank, program) we're about to voice?
+    A soundfont can be a single-instrument file (Grand_Piano.sf2 has just
+    bank 0 program 0), so a remembered GM program selects nothing and the
+    synth goes mute after a swap. An unparsed font answers True — don't
+    second-guess what we can't read."""
+    if not presets:
+        return True
+    return any(p.get("bank") == bank and p.get("program") == pc
+               for p in presets)
+
+
+def _fallback_preset(presets):
+    """The (bank, program) to voice a font with when the wanted instrument is
+    missing: its first preset, else the GM default (0, 0)."""
+    if presets:
+        first = presets[0]
+        return int(first.get("bank", 0)), int(first.get("program", 0))
+    return 0, 0
+
+
 def _synth_follow_voice(bank, pc):
     """Ver 102 latch: mirror a voice change to the AboraSynth sink so a
     latched synth plays EXACTLY the keyboard's voice. No-op unless the latch
@@ -209,34 +323,48 @@ def _synth_follow_voice(bank, pc):
     port = sinks.port("synth")
     if not port:
         return False
-    try:
-        seq_out = _live_seq_out()
-        seq_out.send_program_change(port, bank, pc, channel=0)
-        seq_out.flush()
-        return True
-    except Exception:
-        return False
+    # Ver 106: byte-exact only where the font allows it — a panel program the
+    # active font doesn't carry would leave the channel mute, so fall back to
+    # that font's first preset instead.
+    font_presets = _preset_payload(_synth_soundfont_active())
+    if not _font_has_voice(font_presets, bank, pc):
+        bank, pc = _fallback_preset(font_presets)
+    # Ver 106: the send self-heals a dead seq client (rebuild + retry once).
+    return _seq_send(lambda sq: (sq.send_program_change(port, bank, pc,
+                                                        channel=0),
+                                 sq.flush()))
 
 
 def _echo_seq_notes(kind, pairs, channel, bend=None):
     """Replicate an echoed note event to every selected seq output. kind is
     "on" | "off"; pairs is [(note, velocity), ...]. An optional pre-bend (in
     semitones) rides before note_ons, mirroring the raw path."""
-    targets = list(state.seq_outs)
+    # Ver 106: only ever send to ports that still exist (a restarted sink
+    # comes back on a new client number, and ALSA drops those events silently).
+    targets = _reachable(state.seq_outs)
     if not targets:
         return
-    seq_out = _live_seq_out()
-    for t in targets:
-        try:
-            if kind == "on" and bend is not None:
-                seq_out.send_pitch_bend(t, bend, channel=channel)
-            seq_out.send_notes(t, kind, pairs, channel=channel)
-        except Exception:
-            pass
-    try:
+    # Ver 106: self-heal a zombied seq client BEFORE the live note path tries
+    # to use it, so a single keystroke restores the synth after a swap.
+    _seq_guard()
+    for attempt in (0, 1):
+        seq_out = _live_seq_out()
+        failed = []
+        for t in targets:
+            try:
+                if kind == "on" and bend is not None:
+                    seq_out.send_pitch_bend(t, bend, channel=channel)
+                seq_out.send_notes(t, kind, pairs, channel=channel)
+            except Exception:
+                failed.append(t)
         seq_out.flush()
-    except Exception:
-        pass
+        if not failed:
+            return
+        if attempt:
+            return
+        # Ver 106: our own client died (the send raised) — rebuild it and
+        # replay the note once.
+        _reset_live_seq()
 
 
 def _ctrl_seq_send(kind, **kw):
@@ -249,29 +377,39 @@ def _ctrl_seq_send(kind, **kw):
     number of destinations it went to."""
     if not state.ctrl_seq_mirror:
         return 0
-    targets = list(state.seq_outs)
+    # Ver 106: only send to ports that still exist (a restarted sink answers on
+    # a new seq client number; ALSA drops events to the old one silently).
+    targets = _reachable(state.seq_outs)
     if not targets:
         return 0
-    seq_out = _live_seq_out()
     ch = kw.get("channel", 0)
-    if kind == "panic":
-        seq_out.all_notes_off(targets, channel=ch)
-        return len(targets)
-    for t in targets:
-        try:
-            if kind == "cc":
-                seq_out.send_cc(t, kw["cc"], kw["value"], channel=ch)
-                if kw["cc"] == 7 and sinks.port("synth") == t:
-                    state.synth_volume = int(kw["value"])
-            elif kind == "pitch":
-                seq_out.send_pitch_bend(t, kw["semitones"], channel=ch)
-        except Exception:
-            pass
-    try:
+    for attempt in (0, 1):
+        _seq_guard()
+        seq_out = _live_seq_out()
+        failed = []
+        if kind == "panic":
+            try:
+                seq_out.all_notes_off(targets, channel=ch)
+            except Exception:
+                failed.append("panic")
+        for t in targets:
+            try:
+                if kind == "cc":
+                    seq_out.send_cc(t, kw["cc"], kw["value"], channel=ch)
+                    if kw["cc"] == 7 and sinks.port("synth") == t:
+                        state.synth_volume = int(kw["value"])
+                elif kind == "pitch":
+                    seq_out.send_pitch_bend(t, kw["semitones"], channel=ch)
+            except Exception:
+                failed.append(t)
         seq_out.flush()
-    except Exception:
-        pass
-    return len(targets)
+        if not failed:
+            return len(targets)
+        if attempt:
+            return 0
+        # Ver 106: our own seq client died — rebuild it and replay once.
+        _reset_live_seq()
+    return 0
 
 
 def _run_capture(cap):
@@ -377,18 +515,11 @@ def _run_capture(cap):
                 state.receive_program = event["program"]
                 program_change(state.receive_bank, state.receive_program)
                 # Ver 99: follow the panel voice on seq outputs too (same pipe).
-                seq_out = _live_seq_out()
+                # Ver 106: _seq_send rebuilds a dead seq client and retries once.
                 for t in list(state.seq_outs):
-                    try:
-                        seq_out.send_program_change(t, state.receive_bank,
-                                                    state.receive_program,
-                                                    channel=0)
-                    except Exception:
-                        pass
-                try:
-                    seq_out.flush()
-                except Exception:
-                    pass
+                    _seq_send(lambda sq, t=t: sq.send_program_change(
+                        t, state.receive_bank, state.receive_program,
+                        channel=0))
         elif etype == "control_change":
             # Watch CCs arriving FROM the keyboard (wheel, aux resets). The
             # state always tracks them; the SSE feed is throttled to ~4/s per
@@ -983,17 +1114,11 @@ def api_echo():
             state.receive_program = pc
             state.receive_bank = bank
             device = program_change(bank, pc)
-            # Same pipe: put the echo voice on the seq outputs too.
-            seq_out = _live_seq_out()
+            # Same pipe: put the echo voice on the seq outputs too. Ver 106:
+            # self-healing send (a dead seq client is rebuilt + retried).
             for t in list(state.seq_outs):
-                try:
-                    seq_out.send_program_change(t, bank, pc, channel=0)
-                except Exception:
-                    pass
-            try:
-                seq_out.flush()
-            except Exception:
-                pass
+                _seq_send(lambda sq, t=t: sq.send_program_change(
+                    t, bank, pc, channel=0))
             # Ver 102 latch: the echo voice is sent to the keyboard, so the
             # latched synth follows it too.
             _synth_follow_voice(bank, pc)
@@ -1172,12 +1297,9 @@ def api_sinks_voice(key):
     port = sinks.port(key)
     if not port:
         return jsonify({"ok": False, "error": "%s is not running" % key}), 409
-    seq_out = _live_seq_out()
-    try:
-        seq_out.send_program_change(port, bank, pc, channel=0)
-        seq_out.flush()
-    except Exception as exc:
-        return jsonify({"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}), 500
+    if not _seq_send(lambda sq: (sq.send_program_change(port, bank, pc, channel=0),
+                                 sq.flush())):
+        return jsonify({"ok": False, "error": "seq send failed (client rebuilt?)"}), 500
     # Ver 103: remember the instrument so a soundfont swap can re-apply it.
     if key == "synth":
         state.synth_voice = (bank, pc)
@@ -1194,22 +1316,30 @@ def api_sinks_cc(key):
     port = sinks.port(key)
     if not port:
         return jsonify({"ok": False, "error": "%s is not running" % key}), 409
-    seq_out = _live_seq_out()
-    try:
-        if body.get("panic"):
-            for c in (120, 123):
-                seq_out.send_cc(port, c, 0, channel=0)
-        else:
+    # Ver 106: parse/validate first, then send through the self-healing helper
+    # (a dead seq client is rebuilt + retried rather than 500-ing the card).
+    if body.get("panic"):
+        cc_arg = None
+    else:
+        try:
             cc = int(body.get("cc"))
             value = int(body.get("value"))
-            if not (0 <= cc <= 127 and 0 <= value <= 127):
-                return jsonify({"ok": False, "error": "cc/value out of range"}), 400
-            seq_out.send_cc(port, cc, value, channel=0)
-        seq_out.flush()
-    except (TypeError, ValueError):
-        return jsonify({"ok": False, "error": "cc/value required"}), 400
-    except Exception as exc:
-        return jsonify({"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}), 500
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "cc/value required"}), 400
+        if not (0 <= cc <= 127 and 0 <= value <= 127):
+            return jsonify({"ok": False, "error": "cc/value out of range"}), 400
+        cc_arg = (cc, value)
+
+    def _do(sq):
+        if cc_arg is None:
+            for c in (120, 123):
+                sq.send_cc(port, c, 0, channel=0)
+        else:
+            sq.send_cc(port, cc_arg[0], cc_arg[1], channel=0)
+        sq.flush()
+
+    if not _seq_send(_do):
+        return jsonify({"ok": False, "error": "seq send failed (client rebuilt?)"}), 500
     # Ver 103: remember the fader level so a soundfont swap can re-apply it.
     if key == "synth" and not body.get("panic") and body.get("cc") == 7:
         state.synth_volume = int(body.get("value", 100))
@@ -1269,6 +1399,7 @@ def api_synth_soundfont():
     new_presets = _preset_payload(path)
     state.synth_soundfont = path          # the next launch uses it
     swapped = False
+    old_port = sinks.port("synth")     # the engine's port before the restart
     with _soundfont_lock:                 # serialize racing clicks / curl swaps
         if sinks.is_running("synth"):
             _, _, _ = sinks.stop("synth")
@@ -1287,29 +1418,49 @@ def api_synth_soundfont():
                 time.sleep(0.1)
             swapped = True
             state.synth_soundfont_active = path
+            # Ver 106: a restarted engine may take a different seq client
+            # number, which would leave the live route pointing at a dead
+            # port (silent synth). Re-point it at the new one.
+            new_port = sinks.port("synth")
+            if new_port and old_port and new_port != old_port:
+                state.seq_outs = [new_port if t == old_port else t
+                                  for t in state.seq_outs]
             # Re-apply the instrument: the voice latch wins when it is on.
+            # Ver 106: both legs self-heal — a swap restart used to re-apply
+            # through a stale seq client, and the silent failure left the new
+            # font's channel on a program it does not carry (dead synth).
             if state.synth_voice_latch:
                 _synth_follow_voice(state.receive_bank, state.receive_program)
             else:
                 bank, pc = state.synth_voice
                 port = sinks.port("synth")
                 if port:
-                    try:
-                        seq_out = _live_seq_out()
-                        seq_out.send_program_change(port, bank, pc, channel=0)
-                        seq_out.flush()
-                    except Exception:
-                        pass
+                    # Ver 106: if the remembered voice isn't in the new font,
+                    # land on its first preset — a swap must never leave the
+                    # synth mute on a program the font doesn't carry.
+                    if not _font_has_voice(new_presets, bank, pc):
+                        bank, pc = _fallback_preset(new_presets)
+                        state.synth_voice = (bank, pc)
+                    _seq_send(lambda sq: sq.send_program_change(
+                        port, bank, pc, channel=0))
             port = sinks.port("synth")
             if port:
-                try:
-                    seq_out = _live_seq_out()
-                    seq_out.send_cc(port, 7, int(state.synth_volume), channel=0)
-                    seq_out.flush()
-                except Exception:
-                    pass
+                _seq_send(lambda sq: sq.send_cc(port, 7,
+                                                int(state.synth_volume),
+                                                channel=0))
+    # Ver 106: report the instrument the engine is ACTUALLY on after the swap
+    # (it can differ from the remembered voice when the new font doesn't carry
+    # it), so the card never shows a program the engine is not playing.
+    applied = None
+    if swapped:
+        b, p = state.synth_voice
+        match = next((q for q in new_presets
+                      if q.get("bank") == b and q.get("program") == p), None)
+        applied = {"bank": b, "program": p, "value": "%d:%d" % (b, p),
+                   "name": match.get("name") if match else None}
     return jsonify({"ok": True, "name": name, "path": path,
-                    "swapped": swapped, "presets": new_presets})
+                    "swapped": swapped, "presets": new_presets,
+                    "voice": applied})
 
 
 # Backward-compatible aliases for the Ver 63 /api/vcv endpoints.

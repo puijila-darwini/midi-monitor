@@ -1949,3 +1949,51 @@ Ver 105 (out·ctrl → synth mirror — "as many of the out·ctrl controls to
   panic CC123+CC120; mirror OFF → mirrored:false and the probe stays silent.
   Routing restored (seq_outs ['129:0']), synth volume put back to 100, probe
   killed. 67-assertion synth harness still ALL PASS after the change.
+- Ver 106: fixed "the synth goes silent and nothing says why" — the flapping
+  silence after a soundfont swap. Three separate faults, all silent:
+  1. ZOMBIE SOURCE CLIENT. snd_seq_open's fd is NOT close-on-exec, so every
+     child the app forks (the synth's `sleep infinity |` pipeline, aseqdump,
+     amidi) inherits a copy; when one of them was killed by the swap's
+     pipeline-pkill, the seq client outlived its owner as a zombie and EVERY
+     send from the app then failed ENOENT — notes, bends, program changes,
+     all swallowed by the hot paths' `except: pass`. Found live in
+     /proc/asound/seq/clients: client 131 "Abora Live Out" owned by a DEAD pid
+     while the running app held only a dup of its fd; POST /api/sinks/synth/
+     voice answered `snd_seq_event_output failed (rc=-2)`.
+     Fixes: midiout marks the seq fd(s) FD_CLOEXEC via snd_seq_poll_
+     descriptors (verified: a spawned child now holds 0 seq fds); SeqOut
+     gains close() and is_alive() (a live client answers -ENOENT for a probe
+     addressed to 255:255; dest 0:0 is the kernel Timer and answers -1, so it
+     must NOT be the probe); _emit/flush refuse a released handle instead of
+     tripping the assert() in snd_seq_drain_output (which ABORTS the process);
+     app._reset_live_seq + _seq_send rebuild the client and retry once, and
+     _seq_guard heals it from the live note path within one keystroke.
+  2. STALE DESTINATION. A restarted sink takes a NEW seq client number, and
+     ALSA's BUFFERED send accepts events for a dead destination without
+     complaint (snd_seq_drain_output's rc is useless — it answers -ENOENT even
+     for a healthy port), so a route captured before a swap was mute, not
+     loud. Fix: _live_outs/_reachable re-resolve the destination list on a 2 s
+     TTL — the same reflex mididev has for the keyboard's card/client numbers
+     — and the live note + mirror paths only ever send to ports that exist; a
+     route pointing at a port the synth USED to answer on is re-pointed at the
+     current one (and state.seq_outs updated, so the out box stops naming a
+     dead client). A sink that is simply down is skipped, never de-selected:
+     the stored route is the user's intent, so it rejoins by itself. The swap
+     endpoint also re-points the route deterministically.
+  3. MUTE AFTER SWAP. The re-apply pushed the REMEMBERED voice, and a font can
+     be a single-instrument file (Grand_Piano.sf2 carries only 0:0), so the
+     channel landed on a program the new font does not have = no sound, with
+     the card reporting a happy swap. Fix: _font_has_voice / _fallback_preset
+     check the new font's preset list (sf2inspect, mtime-cached) and fall back
+     to its first preset; the latch leg clamps the same way (byte-exact only
+     where the font allows it). The swap response now carries the "voice" it
+     actually applied, so the card can never show a program the engine isn't
+     playing.
+  Verified LIVE end-to-end: baseline note reached the synth; swap to
+  Grand_Piano.sf2 (engine restarted, new pid) → note + PITCHBEND still
+  delivered, swap response reported voice 0:0 "Grand Piano" (not the
+  remembered FluidR3 prog 2) → swap back to FluidR3_GM (189 presets, voice
+  0:0 "Yamaha Grand Piano"). New harness ~/ai/tmp/seqheal-test.py: zombie
+  simulated by closing the handle behind the app's back (note + mirror +
+  program change all recover on a rebuilt client), dead target skipped, stale
+  synth route re-pointed. 67-assertion synth harness still ALL PASS.

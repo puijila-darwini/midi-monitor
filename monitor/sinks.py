@@ -128,13 +128,15 @@ def is_running(key, outs=None):
     return bool(_matches(entry, outs if outs is not None else list_outs()))
 
 
-def port(key):
+def port(key, outs=None):
     """Seq target (e.g. '129:0') of a running sink's port, or None. Used by
-    the AboraSynth card to address program changes / CC directly."""
+    the AboraSynth card to address program changes / CC directly, and by
+    app._live_outs to resolve the synth out of a CACHED aconnect listing
+    (Ver 106) instead of forking aconnect again."""
     entry = _entries_by_key().get(key)
     if entry is None:
         return None
-    hits = _matches(entry, list_outs())
+    hits = _matches(entry, outs if outs is not None else list_outs())
     return hits[0] if hits else None
 
 
