@@ -1905,3 +1905,47 @@ Ver 104 (soundfonts move into the repo's gitignored folder + the instrument
   rejects folder-outside paths (400), process tree is exactly 1 wrapper + 1
   sleep + 1 fluidsynth with the FOLDER path in its cmdline, and "current"
   survives a server restart via that cmdline fallback.
+
+Ver 105 (out·ctrl → synth mirror — "as many of the out·ctrl controls to
+  AboraSynth, especially the pitch bend"): a `→ synth` toggle in the out·ctrl
+  card's controllers strip mirrors the WHOLE card to every selected seq sink
+  (AboraSynth + whatever else is checked in the out box), and hooks the
+  keyboard's OWN performance wheels into the same pipe:
+  - Server: new POST /api/ctrl/mirror {"enabled"} + state.ctrl_seq_mirror
+    (in-memory like the voice latch, surfaced via /api/state + GET /api/ctrl,
+    so the button's lit state survives reloads). NEW _ctrl_seq_send(kind,...)
+    helper: while the toggle is ON, EVERY /api/ctrl POST (faders incl.
+    pitch bend, motion ramps, defaults, panic, sustain — the single chokepoint
+    the whole card funnels through) also goes out the persistent SeqOut to
+    state.seq_outs; responses carry "mirrored": the seq leg is INDEPENDENT of
+    the board, so AboraSynth still feels a fader move while the keyboard is
+    offline (only the board leg warns "dropped"). Panic mirrors too —
+    All Notes Off + All Sound Off to the sinks, so one button clears stuck
+    notes everywhere.
+  - Received leg: the keyboard's own bend wheel + mod wheel (CC1) arriving
+    from capture are forwarded to the seq sinks under the same toggle —
+    UNTHROTTLED (the ~4/s throttle stays on the SSE feed only; state now
+    also tracks every event, not just throttled ones). The voice-select
+    aux bursts (CC6/11/71/72/74/100/101 + bank CC0/32) deliberately stay
+    board-side: they're half a program change and would desync a sink's bank.
+  - Volume truth: a mirrored CC7 IS the synth's channel volume — _ctrl_seq_send
+    updates state.synth_volume when it hits the synth target, and /api/state
+    now carries synth_volume so the synth card's fader restores to reality
+    (it was never restored before; font-swap re-applies and mirror moves both
+    drifted it).
+  - Received pitch is echoed AS the keyboard's own bend (raw 14-bit → ±2
+    semis via the shared BEND_RANGE_ST mapping), spring-back included; on the
+    board this mirrored stream co-exists with the Ver 96 tuning pre-bends the
+    same way the raw path already does (last writer wins, same quirk).
+  - UI: `→ synth` mini-btn in the controllers strip (straw-lit when active,
+    new .ctrl-rack-strip .mini-btn.active rule), feed line "SENT → x · synth"
+    when a send mirrored, MIRROR feed + status flash on toggle, boot restore
+    of the lit state from /api/state.
+  Verified LIVE with a throwaway duplex seq-input probe registered as a real
+  destination (aseqdump can't subscribe to sink ports; INPUT-only seq open
+  asserts in this alsa build — DUPLEX works, caps must include DUPLEX for
+  aconnect -o to list the port): mirror ON → probe RX CC1=64 · PITCHBEND
+  13312 (= +1.25 st at ±2 — EXACT) · CC7=88 (state.synth_volume followed) ·
+  panic CC123+CC120; mirror OFF → mirrored:false and the probe stays silent.
+  Routing restored (seq_outs ['129:0']), synth volume put back to 100, probe
+  killed. 67-assertion synth harness still ALL PASS after the change.

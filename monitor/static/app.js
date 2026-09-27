@@ -2435,7 +2435,8 @@ case "replay":
         .then(function (res) {
           if (res && res.ok) {
             if (!quiet) {
-              addFeed('SENT \u2192 ' + label + (res.device === false ? " (board offline)" : ""), "ctrl_out");
+              addFeed('SENT \u2192 ' + label + (res.device === false ? " (board offline)" : "")
+                + (res.mirrored ? " \u00b7 synth" : ""), "ctrl_out");
               if (res.warning) flashCtrlStatus("keyboard offline \u2014 " + label + " dropped", true);
               else flashCtrlStatus(label + " sent", false);
             }
@@ -2540,6 +2541,30 @@ case "replay":
     }
     var sfxBtn = document.getElementById("ctrl-sfx-defaults");
     if (sfxBtn) sfxBtn.addEventListener("click", resetSoundFx);
+    // Ver 105: the out·ctrl -> seq-sinks mirror toggle. While lit, every
+    // fader/motion/defaults/panic POST from this card ALSO goes to the routed
+    // seq outputs (AboraSynth + whatever else is checked in the out box), and
+    // the keyboard's own wheel + mod wheel (captured by the server) join in.
+    var ctrlMirrorBtn = document.getElementById("ctrl-mirror");
+    if (ctrlMirrorBtn) {
+      ctrlMirrorBtn.addEventListener("click", function () {
+        var on = !ctrlMirrorBtn.classList.contains("active");
+        fetch("/api/ctrl/mirror", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ enabled: on })
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (res) {
+            if (res && res.ok) {
+              ctrlMirrorBtn.classList.toggle("active", on);
+              flashCtrlStatus(on ? "ctrl mirror \u2192 synth on" : "ctrl mirror off", false);
+              addFeed("MIRROR \u2192 " + (on ? "out\u00b7ctrl + wheel to seq sinks" : "board only"), "ctrl_out");
+            } else flashCtrlStatus("mirror toggle failed", true);
+          })
+          .catch(function () { flashCtrlStatus("mirror toggle failed", true); });
+      });
+    }
     // TODO(dejank): Ver 83 motion patterns work but are janky in known ways.
     //   1. Ramps are approximated by a client-side 25ms setInterval ticking:
     //      steps bunch/stall under browser tab throttling and drift from the
@@ -3336,6 +3361,15 @@ case "replay":
       if (typeof s.synth_voice_latch !== "undefined") {
         synthLatchRender(!!s.synth_voice_latch);   // Ver 102: latch survives reloads
       }
+      if (typeof s.synth_volume !== "undefined") {
+        // Ver 105: the synth card's volume fader may have been moved by the
+        // out·ctrl mirror (CC7) or re-applied after a font swap — restore it
+        // so the card never lies about the channel volume.
+        var svEl = document.getElementById("synth-volume");
+        var svvEl = document.getElementById("synth-volume-val");
+        if (svEl && document.activeElement !== svEl) svEl.value = String(s.synth_volume);
+        if (svvEl) svvEl.textContent = String(s.synth_volume);
+      }
       if (typeof s.tempo_bpm !== "undefined" && s.tempo_bpm > 0) {
         tempoBpm = s.tempo_bpm;
         window.tempoBpm = s.tempo_bpm;
@@ -3538,6 +3572,10 @@ if (typeof s.time_signature === "string" && s.time_signature.indexOf("/") > 0) {
         setRange("ctrl-expression", typeof cv[11] === "number" ? cv[11] : 127);
         setRange("ctrl-mod", typeof cv[1] === "number" ? cv[1] : 0);
         setRange("ctrl-pitch", typeof s.control_pitch_bend === "number" ? s.control_pitch_bend : 0);
+        var ctrlMirrorEl = document.getElementById("ctrl-mirror");
+        if (ctrlMirrorEl && typeof s.ctrl_seq_mirror !== "undefined") {
+          ctrlMirrorEl.classList.toggle("active", !!s.ctrl_seq_mirror);
+        }
         ctrlRx.cc = s.received_ctrl || {};
         ctrlRx.pb = s.received_pitch_bend || 0;
         setReceivedReadout();

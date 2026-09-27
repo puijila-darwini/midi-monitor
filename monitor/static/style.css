@@ -825,6 +825,11 @@ select option {
   padding: 1px 6px;
   line-height: 1.5;
 }
+.ctrl-rack-strip .mini-btn.active {
+  border-color: var(--straw, #C9A86A);
+  color: var(--straw, #C9A86A);
+  box-shadow: 0 0 6px rgba(201, 168, 106, 0.45);
+}
 .ctrl-rack .ctrl-seg button {
   font-size: 9px;
   padding: 1px 6px;

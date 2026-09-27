@@ -239,6 +239,41 @@ def _echo_seq_notes(kind, pairs, channel, bend=None):
         pass
 
 
+def _ctrl_seq_send(kind, **kw):
+    """Ver 105: mirror ONE out·ctrl event to every selected seq output
+    (AboraSynth, VCV Rack, DAWs) so the synth feels the board's controls.
+    kind: "cc" | "pitch" | "panic". No-op unless the out·ctrl mirror toggle
+    is on AND a destination is routed. A mirrored CC7 IS the synth's channel
+    volume, so it also updates state.synth_volume (keeps the synth card's
+    fader truthful; re-applied on soundfont-swap restarts). Returns the
+    number of destinations it went to."""
+    if not state.ctrl_seq_mirror:
+        return 0
+    targets = list(state.seq_outs)
+    if not targets:
+        return 0
+    seq_out = _live_seq_out()
+    ch = kw.get("channel", 0)
+    if kind == "panic":
+        seq_out.all_notes_off(targets, channel=ch)
+        return len(targets)
+    for t in targets:
+        try:
+            if kind == "cc":
+                seq_out.send_cc(t, kw["cc"], kw["value"], channel=ch)
+                if kw["cc"] == 7 and sinks.port("synth") == t:
+                    state.synth_volume = int(kw["value"])
+            elif kind == "pitch":
+                seq_out.send_pitch_bend(t, kw["semitones"], channel=ch)
+        except Exception:
+            pass
+    try:
+        seq_out.flush()
+    except Exception:
+        pass
+    return len(targets)
+
+
 def _run_capture(cap):
     """Background: read MIDI (from the given Capture), update state + analyser,
     publish to hub. Guarded by the supervisor so any crash self-heals."""
@@ -355,23 +390,39 @@ def _run_capture(cap):
                 except Exception:
                     pass
         elif etype == "control_change":
-            # Watch CCs arriving FROM the keyboard (wheel, aux resets). Throttle
-            # to ~4/s per controller so a wiggled wheel can't flood the feed.
+            # Watch CCs arriving FROM the keyboard (wheel, aux resets). The
+            # state always tracks them; the SSE feed is throttled to ~4/s per
+            # controller so a wiggled wheel can't flood it.
             controller = event["controller"]
+            state.handle(event)
+            # Ver 105: with the ctrl mirror on, the board's OWN mod wheel
+            # (CC1) reaches the seq sinks too — every event, unthrottled —
+            # so AboraSynth modulates in lockstep with the board. (The
+            # voice-select aux bursts CC6/11/71/72/74/100/101 + bank CC0/32
+            # stay board-side: without the matching program change they'd
+            # desync a sink's bank.)
+            if state.ctrl_seq_mirror and controller == 1:
+                _ctrl_seq_send("cc", cc=controller, value=event["value"],
+                               channel=event.get("channel", 0))
             now_ms = time.time() * 1000.0
             if now_ms - _ctrl_log_time.get(controller, 0.0) >= 250:
                 _ctrl_log_time[controller] = now_ms
-                state.handle(event)
                 hub.publish({"type": "ctrl", "controller": controller,
                              "value": event["value"], "channel": event["channel"],
                              "name": Capture.CC_NAMES.get(controller, "CC%d" % controller),
                              "time": t})
         elif etype == "pitch_bend":
+            # Ver 105: mirror the board's OWN wheel to the seq sinks when the
+            # ctrl mirror toggle is on — every value, unthrottled — so the
+            # synth bends exactly with the board (spring-back included).
+            prev = state.received_pitch_bend
+            state.handle(event)
+            if state.ctrl_seq_mirror:
+                _ctrl_seq_send("pitch", semitones=state.received_pitch_bend,
+                               channel=event.get("channel", 0))
             now_ms = time.time() * 1000.0
             if now_ms - _ctrl_log_time.get("pb", 0.0) >= 250:
                 _ctrl_log_time["pb"] = now_ms
-                prev = state.received_pitch_bend
-                state.handle(event)
                 hub.publish({"type": "pitch", "semitones": state.received_pitch_bend,
                              "value": event["value"], "time": t,
                              "down": state.received_pitch_bend - prev})
@@ -810,12 +861,14 @@ def api_ctrl():
             "out": dict(state.control_values),
             "out_pitch_bend": state.control_pitch_bend,
             "local_control": state.local_control,
+            "ctrl_mirror": state.ctrl_seq_mirror,
             "received": dict(state.received_ctrl),
             "received_pitch_bend": state.received_pitch_bend,
         })
     body = request.get_json(silent=True) or {}
     ch = state.midi_channel
     sent = False
+    mirrored = 0
     try:
         if "cc" in body:
             cc = int(body["cc"])
@@ -823,6 +876,7 @@ def api_ctrl():
             if not (0 <= cc <= 127 and 0 <= value <= 127):
                 return jsonify({"ok": False, "error": "cc/value must be 0-127"}), 400
             sent = control_change(cc, value, channel=ch)
+            mirrored = _ctrl_seq_send("cc", cc=cc, value=value, channel=ch)
             state.control_values[cc] = value
             if cc == 122:
                 state.local_control = value
@@ -832,6 +886,7 @@ def api_ctrl():
             if not (-BEND_RANGE_ST <= semi <= BEND_RANGE_ST):
                 return jsonify({"ok": False, "error": "pitch must be ±%.1f" % BEND_RANGE_ST}), 400
             sent = pitch_bend(semi, channel=ch)
+            mirrored = _ctrl_seq_send("pitch", semitones=semi, channel=ch)
             state.control_pitch_bend = round(semi, 2)
             # The tuning skip-record must track EVERY bend on the channel
             # (slider, motion ramps, defaults all land here) or the next
@@ -845,6 +900,7 @@ def api_ctrl():
                 # Reset All Controllers re-centers the board's bend; drop the
                 # tuning skip-record with it (same for GM reset below).
                 state._tuning_last_bend = {}
+                mirrored = _ctrl_seq_send("panic", channel=ch)
                 extra = {"action": "panic"}
             elif action == "gmreset":
                 sent = gm_system_on()
@@ -854,18 +910,33 @@ def api_ctrl():
             elif action == "local":
                 value = int(body.get("value", 0))
                 sent = control_change(122, value, channel=ch)
+                mirrored = _ctrl_seq_send("cc", cc=122, value=value, channel=ch)
                 state.local_control = value
                 extra = {"local_control": value}
             else:
                 return jsonify({"ok": False, "error": "nothing to do"}), 400
     except ValueError:
         return jsonify({"ok": False, "error": "bad numeric field"}), 400
-    resp = {"ok": True, "device": bool(sent), **extra}
+    resp = {"ok": True, "device": bool(sent), "mirrored": mirrored > 0, **extra}
     if not sent:
         # Keyboard detached (NORMAL): the intent is recorded anyway, but the
-        # UI should know the line stayed silent.
+        # UI should know the line stayed silent. (The seq mirror has no such
+        # dependency — AboraSynth hears it even with the board absent.)
         resp["warning"] = "keyboard offline - send dropped"
     return jsonify(resp)
+
+
+@app.route("/api/ctrl/mirror", methods=["POST"])
+def api_ctrl_mirror():
+    """Ver 105: toggle the out·ctrl -> seq-sinks mirror. While ON, everything
+    the out·ctrl card does (faders incl. pitch bend, motion ramps, defaults,
+    panic) AND the keyboard's OWN pitch bend + mod wheel (CC1) as they arrive
+    from capture are ALSO sent to every selected seq output — most usefully
+    AboraSynth, so the synth bends/modulates exactly like the board. Only
+    reaches destinations checked in the out box. Body: {"enabled": bool}."""
+    body = request.get_json(silent=True) or {}
+    state.ctrl_seq_mirror = bool(body.get("enabled"))
+    return jsonify({"ok": True, "enabled": state.ctrl_seq_mirror})
 
 
 @app.route("/api/echo", methods=["POST"])

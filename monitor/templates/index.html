@@ -568,6 +568,8 @@
             <div class="ctrl-rack">
               <div class="ctrl-rack-strip">
                 <span class="ctrl-seg-label" title="All controllers the board receives - one fader bank. Volume/mod/pitch are the performance controls; behind them the sound&fx family: portamento (CC65/5, 0 = off), expression (CC11), the filter/resonance/attack/release motion-effect family (71-74) and the reverb/chorus depths (91/93). Grab a fader, double-click to snap it to default, or click the value and type a number.">controllers</span>
+                <button id="ctrl-mirror" class="mini-btn" type="button"
+                        title="Mirror this whole out&middot;ctrl surface to the routed seq sinks (AboraSynth + any other destination checked in the out box): every fader incl. pitch bend, motion ramps, defaults and panic, PLUS the keyboard's own bend wheel + mod wheel as they arrive from capture &mdash; so the synth bends/modulates/filters exactly like the board. Only reaches sinks checked in the out box. Click to toggle.">&rarr; synth</button>
                 <button id="ctrl-sfx-defaults" class="mini-btn" type="button"
                         title="Restore every fader to its default/off value (incl. volume 100, pitch center) and send them to the keyboard in one go">defaults</button>
               </div>

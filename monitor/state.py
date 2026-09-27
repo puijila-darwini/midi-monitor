@@ -367,6 +367,12 @@ class State:
         # to the synth port, and the synth card's picker closes + greys out
         # showing the followed voice.
         self.synth_voice_latch = False
+        # Ver 105: mirror the out·ctrl surface to the routed seq sinks
+        # (AboraSynth + any checked 'out'). While on, every fader/motion/
+        # panic POST AND the keyboard's own pitch bend + mod wheel (CC1) are
+        # ALSO sent to the seq outputs, so the synth bends/modulates with the
+        # board. In-memory like the voice latch (resets on server restart).
+        self.ctrl_seq_mirror = False
         # Ver 103: the last instrument the synth was told to play ((bank, pc))
         # and its CC7 volume — re-applied after a soundfont swap restart so the
         # A/B keeps the same instrument. synth_soundfont = the picked soundfont
@@ -2186,6 +2192,8 @@ class State:
             "receive_bank": self.receive_bank,
             "receive_voice": self._get_receive_voice_name(),
             "synth_voice_latch": self.synth_voice_latch,
+            "synth_volume": self.synth_volume,
+            "ctrl_seq_mirror": self.ctrl_seq_mirror,
             "tempo_bpm": round(self.tempo_bpm, 1) if self.tempo_bpm > 0 else 0,
             "detected_bpm": round(self.detected_bpm, 1) if self.detected_bpm > 0 else 0,
             "user_tempo_bpm": round(self.user_tempo_bpm, 1) if self.user_tempo_bpm > 0 else 0,

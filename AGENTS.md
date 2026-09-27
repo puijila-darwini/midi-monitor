@@ -151,6 +151,22 @@ folded into a single web app package in `monitor/`:
                           off, echo off) routes the same stream there too
                           (gate: echo_enabled or local_control == 0, raw leg
                           echo-only), pure "keys" mode stays silent.
+                          Ver 105: the out·ctrl card gains a "→ synth" mirror
+                          toggle (POST /api/ctrl/mirror; state.ctrl_seq_mirror,
+                          in /api/state + GET /api/ctrl). While ON, EVERY
+                          /api/ctrl POST (faders incl. pitch bend, motion
+                          ramps, defaults, sustain, panic) also goes to every
+                          selected seq sink via app._ctrl_seq_send (the synth
+                          leg works even with the board offline — only the
+                          board leg warns "dropped"; responses carry
+                          "mirrored"), and the keyboard's OWN bend wheel +
+                          mod wheel (CC1) are forwarded from capture
+                          unthrottled (voice-select bursts CC6/11/71/72/74/
+                          100/101 + CC0/32 stay board-side — half a program
+                          change, would desync a sink's bank). Mirroring a
+                          CC7 updates state.synth_volume so the synth card's
+                          fader never lies; /api/state now carries
+                          synth_volume (it was never restored before).
 - `monitor/sinks.py`    - DATA-DRIVEN registry of launchable MIDI destinations
                           (VCV Rack, DAWs). Each entry declares cmd/detect/
                           auto_route (see ../Musica/Rack pattern); the out box
