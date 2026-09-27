@@ -719,6 +719,58 @@ select option {
 }
 .out-controls { margin-top: 4px; }
 
+/* ---- AboraSynth card (Ver 101): the local synth's own device card ---- */
+.synth-controls { margin-top: 4px; display: flex; flex-direction: column; gap: 8px; }
+.synth-power-row { display: flex; align-items: center; gap: 8px; }
+.synth-toggle { min-width: 84px; }
+.synth-status {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 2px;
+  background: rgba(180,40,40,0.22);
+  color: #ffcccc;
+  min-width: 96px;
+  text-align: center;
+}
+.synth-card.synth-up .synth-status {
+  background: rgba(46,140,90,0.22);
+  color: #9fe3b9;
+}
+.synth-beacon {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1px solid var(--royal);
+  background: #3a2323;
+  box-shadow: inset 0 0 4px rgba(0,0,0,0.6);
+  transition: background 0.25s, box-shadow 0.25s;
+}
+.synth-beacon.on {
+  background: radial-gradient(circle at 40% 35%, #d8f5b3, #57b04f 70%);
+  border-color: var(--straw-gold);
+  box-shadow: 0 0 8px rgba(87,176,79,0.7);
+}
+.synth-fields { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 16px; }
+.synth-field { display: flex; align-items: center; gap: 8px; }
+.synth-label {
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--straw-soft);
+}
+.synth-field select { min-width: 170px; }
+.synth-vol input[type="range"] { width: 120px; accent-color: var(--royal); }
+.synth-vol input[type="range"]:disabled { opacity: 0.45; }
+.synth-volume-val {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 11px;
+  color: var(--straw-soft);
+  min-width: 24px;
+  text-align: right;
+}
+.synth-foot { font-family: ui-monospace, Menlo, monospace; font-size: 10px; }
+.synth-port { color: var(--straw-soft); }
+
 /* ---- out · ctrl: control surface to/from the keyboard ---- */
 .ctrl-controls { margin-top: 4px; display: flex; flex-direction: column; gap: 8px; }
 .ctrl-status { font-size: 12px; padding: 2px 8px; border-radius: 2px; background: rgba(59,110,165,0.18); color: var(--straw-soft, #e8d5a3); }

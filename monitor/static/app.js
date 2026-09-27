@@ -1663,6 +1663,7 @@ case "replay":
         .then(function (res) {
           if (!res || !res.ok || !res.sinks) return;
           res.sinks.forEach(function (s) {
+            if (s.key === "synth") synthRender(s);   // Ver 101: drive the AboraSynth card
             var ref = buttons[s.key];
             if (!ref) return;
             var poll = polls[s.key];
@@ -1806,6 +1807,130 @@ case "replay":
         }
       }
       return out;
+    }
+
+    // ---- AboraSynth card (Ver 101) -----------------------------------------
+    // A dedicated device card for the Local Synth sink: power toggle, GM
+    // voice picker (program change), CC7 volume fader and a stuck-note panic.
+    // State comes from the same /api/sinks feed the out-box buttons use
+    // (refreshApps drives synthRender every 10s + on every toggle action).
+    var synthCard = document.getElementById("synth-card");
+    var synthEl = synthCard ? {
+      toggle: document.getElementById("synth-toggle"),
+      glyph: document.getElementById("synth-toggle-glyph"),
+      label: document.getElementById("synth-toggle-label"),
+      status: document.getElementById("synth-status"),
+      beacon: document.getElementById("synth-beacon"),
+      voice: document.getElementById("synth-voice"),
+      volume: document.getElementById("synth-volume"),
+      vval: document.getElementById("synth-volume-val"),
+      panic: document.getElementById("synth-panic"),
+      port: document.getElementById("synth-port")
+    } : null;
+    var synthRunning = false;
+    var synthBusy = false;
+
+    // The voice list already lives in the out-card (replay-voice select) —
+    // clone it so there is exactly one source of truth for GM names.
+    (function () {
+      if (!synthEl || !synthEl.voice) return;
+      var rv = document.getElementById("replay-voice");
+      if (!rv) return;
+      for (var i = 0; i < rv.options.length; i++) {
+        if (rv.options[i].value === "auto") continue;
+        var o = document.createElement("option");
+        o.value = rv.options[i].value;
+        o.textContent = rv.options[i].textContent;
+        synthEl.voice.appendChild(o);
+      }
+    })();
+
+    function synthRender(s) {
+      if (!synthEl || !synthCard) return;
+      synthRunning = !!s.running;
+      synthBusy = !!s.launching;
+      synthCard.classList.toggle("synth-up", synthRunning);
+      synthEl.beacon.classList.toggle("on", synthRunning);
+      synthEl.status.textContent = synthRunning
+        ? "engine up" : (synthBusy ? "launching\u2026" : "offline");
+      synthEl.toggle.disabled = synthBusy;
+      synthEl.glyph.textContent = synthRunning ? "\u2713" : (synthBusy ? "\u2026" : "\u25b6");
+      synthEl.label.textContent = synthRunning ? "stop" : (synthBusy ? "launching\u2026" : "launch");
+      synthEl.voice.disabled = !synthRunning;
+      synthEl.volume.disabled = !synthRunning;
+      synthEl.panic.disabled = !synthRunning;
+      var port = (s.targets && s.targets[0]) || "";
+      synthEl.port.textContent = synthRunning
+        ? "seq out \u2192 " + port
+        : "no synth yet";
+    }
+
+    function synthFeed(msg) {
+      if (msg) addFeed("SYNTH  " + msg, "replay");
+    }
+
+    function synthPost(path, body, feed) {
+      return fetch(path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body || {})
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (res && res.ok) {
+            if (feed) synthFeed(feed + (res.port ? " \u2192 " + res.port : ""));
+          } else if (res && res.error) {
+            synthFeed((res.error || "failed").toUpperCase());
+          }
+          return res;
+        })
+        .catch(function () { synthFeed("REQUEST FAILED"); return null; });
+    }
+
+    function synthToggle() {
+      if (!synthEl || synthBusy) return;
+      var action = synthRunning ? "stop" : "launch";
+      synthPost("/api/sinks/synth/" + action, {}, null).then(function () {
+        refreshApps(buttonsByKey());
+        reloadOuts();
+        // Poll briefly: the engine takes a moment to appear/disappear.
+        var tries = 0;
+        var timer = setInterval(function () {
+          tries += 1;
+          refreshApps(buttonsByKey());
+          reloadOuts();
+          if (tries >= 12) clearInterval(timer);
+        }, 1000);
+      });
+    }
+
+    function synthVoiceChange() {
+      if (!synthEl || !synthRunning) return;
+      var name = synthEl.voice.value;
+      if (!name) return;
+      synthPost("/api/sinks/synth/voice", { name: name },
+                "voice " + name.toLowerCase());
+    }
+
+    function synthVolumeChange(commit) {
+      if (!synthEl || !synthRunning) return;
+      var v = parseInt(synthEl.volume.value, 10);
+      if (isNaN(v)) return;
+      synthEl.vval.textContent = v;
+      if (commit) synthPost("/api/sinks/synth/cc", { cc: 7, value: v }, "vol " + v);
+    }
+
+    function synthPanic() {
+      if (!synthEl || !synthRunning) return;
+      synthPost("/api/sinks/synth/cc", { panic: true }, "panic (notes off)");
+    }
+
+    if (synthEl && synthCard) {
+      synthEl.toggle.addEventListener("click", synthToggle);
+      synthEl.voice.addEventListener("change", synthVoiceChange);
+      synthEl.volume.addEventListener("input", function () { synthVolumeChange(false); });
+      synthEl.volume.addEventListener("change", function () { synthVolumeChange(true); });
+      synthEl.panic.addEventListener("click", synthPanic);
     }
 
     fetch("/api/sinks", { cache: "no-store" })

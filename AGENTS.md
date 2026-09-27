@@ -165,6 +165,18 @@ folded into a single web app package in `monitor/`:
                           Ver 100: entries may declare `stop: [pkill patterns]`
                           (synth = "AboraSynth") — the out-box button toggles
                           launch/stop; /api/sinks/<key>/stop exists.
+                          Ver 101: sinks.status() carries `targets` (matched
+                          seq targets) and sinks.port(key) resolves the
+                          running sink's seq target — the AboraSynth card
+                          (own chain-card on the page, between out·ctrl and
+                          the piano roll) uses both: power toggle + beacon +
+                          port readout, a GM voice picker (program change to
+                          the sink port, list cloned from the out-card's
+                          replay-voice select), a CC7 volume fader and a
+                          stuck-note panic. Routes /api/sinks/<key>/voice
+                          ({"name"} or {program,bank}) and /api/sinks/<key>/cc
+                          ({"cc",value} or {panic:true}) address the sink port
+                          through the persistent live SeqOut, channel 0.
 - `monitor/midiout.py`   - SeqOut (ALSA seq output client, ctypes, no deps).
                           Ver 99: send_pitch_bend(target, semitones, channel)
                           — 14-bit PITCHBEND mapped via replay.BEND_RANGE_ST

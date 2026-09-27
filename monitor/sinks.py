@@ -84,6 +84,16 @@ def is_running(key, outs=None):
     return bool(_matches(entry, outs if outs is not None else list_outs()))
 
 
+def port(key):
+    """Seq target (e.g. '129:0') of a running sink's port, or None. Used by
+    the AboraSynth card to address program changes / CC directly."""
+    entry = _entries_by_key().get(key)
+    if entry is None:
+        return None
+    hits = _matches(entry, list_outs())
+    return hits[0] if hits else None
+
+
 # Per-key guard so two clicks can't double-spawn an app while it boots.
 _locks = {e["key"]: threading.Lock() for e in LAUNCHABLE}
 _launching = {e["key"]: False for e in LAUNCHABLE}
@@ -138,6 +148,7 @@ def status():
             "running": bool(_matches(e, outs)),
             "launching": bool(_launching.get(e["key"])),
             "stoppable": bool(e.get("stop")),
+            "targets": _matches(e, outs),
         })
     return {"ok": True, "sinks": out}
 

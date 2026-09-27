@@ -1752,3 +1752,34 @@ Ver 100 (live play = same pipe + sink stop): three gaps closed.
   Verified: stop→running false, launch→fresh fluidsynth 129:0; live seq
   send smoke test (bends + on/off, ch0 + ch4) clean through the app helpers;
   midi-mode (local 0, echo 0) legs + detuned pre-bend verified clean.
+
+Ver 101 (AboraSynth gets its own card): the Local Synth sink graduates from
+  a plain out-box button to a first-class device card on the page (chain-card
+  between out·ctrl and the piano roll). The card owns the whole synth:
+  - Power: launch/stop toggle (same /api/sinks/synth/launch|stop machinery),
+    a status line + green/red beacon pill (engine up / launching… / offline)
+    and a live port readout ("seq out → 129:0") fed by the aconnect match.
+  - GM voice picker: sends a program change straight to the synth's port
+    (route channel 0) so A/B can match or contrast the keyboard's voice. The
+    option list is CLONED from the out-card's replay-voice select at init —
+    one source of truth, zero duplication. Controls are disabled while the
+    engine is down.
+  - CC7 volume fader (0-127, live value badge) to level the synth against
+    the keyboard for a fair detune A/B, plus a stuck-note panic button
+    (All Sound Off + All Notes Off).
+  Backend: sinks.status() now carries `targets` (the matched seq targets,
+  e.g. ["129:0"]); new sinks.port(key) helper resolves a running sink's seq
+  target; two new routes — /api/sinks/<key>/voice ({"name"} resolved through
+  _voice_to_bank_pc, or {program, bank} raw; 409 if the sink is down) and
+  /api/sinks/<key>/cc ({"cc", "value"} or {"panic": true}). Both address the
+  sink port through the persistent "Abora Live Out" SeqOut, channel 0.
+  Frontend drives the card from the SAME /api/sinks feed the out-box uses
+  (refreshApps → synthRender, 10s honesty interval + every toggle action);
+  the out-box button and the card stay in sync by construction.
+  Verified: endpoints curl-clean (voice by name → program 0 / Sawtooth Lead →
+  81, unknown name → 400, cc 7 value 82, panic, vcv-down → 409 "not running");
+  browser smoke (card renders, voice list cloned 42 names, zero console
+  errors — the load-time snapshots only catch the async gap before
+  refreshApps' second fetch settles); 19-assertion node harness driving
+  synthRender through running/launching/offline (status, label, glyph, port,
+  beacon, disabled states) — all pass.

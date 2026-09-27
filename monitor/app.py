@@ -982,6 +982,67 @@ def api_sinks_stop(key):
                     "running": running})
 
 
+@app.route("/api/sinks/<key>/voice", methods=["POST"])
+def api_sinks_voice(key):
+    """Set a running sink's GM voice: sends a program change to its seq port
+    (Ver 101 — the AboraSynth card's voice picker). Body: {"name": voice} or
+    {"program": pc, "bank": bank}. Channel 0 = the route channel."""
+    body = request.get_json(silent=True) or {}
+    name = body.get("name")
+    if name:
+        bc = _voice_to_bank_pc(name)
+        if bc is None:
+            return jsonify({"ok": False, "error": "unknown voice: %s" % name}), 400
+        bank, pc = bc
+    else:
+        try:
+            pc = int(body.get("program", 0))
+            bank = int(body.get("bank", 0))
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "program/bank must be ints"}), 400
+        if not (0 <= pc <= 127 and 0 <= bank <= 127):
+            return jsonify({"ok": False, "error": "program/bank out of range"}), 400
+    port = sinks.port(key)
+    if not port:
+        return jsonify({"ok": False, "error": "%s is not running" % key}), 409
+    seq_out = _live_seq_out()
+    try:
+        seq_out.send_program_change(port, bank, pc, channel=0)
+        seq_out.flush()
+    except Exception as exc:
+        return jsonify({"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}), 500
+    return jsonify({"ok": True, "key": key, "port": port, "bank": bank,
+                    "program": pc})
+
+
+@app.route("/api/sinks/<key>/cc", methods=["POST"])
+def api_sinks_cc(key):
+    """Send a controller change to a running sink's seq port — the AboraSynth
+    volume fader is CC7. Body {"panic": true} sends All Sound Off + All Notes
+    Off on the route channel instead (stuck-note killer)."""
+    body = request.get_json(silent=True) or {}
+    port = sinks.port(key)
+    if not port:
+        return jsonify({"ok": False, "error": "%s is not running" % key}), 409
+    seq_out = _live_seq_out()
+    try:
+        if body.get("panic"):
+            for c in (120, 123):
+                seq_out.send_cc(port, c, 0, channel=0)
+        else:
+            cc = int(body.get("cc"))
+            value = int(body.get("value"))
+            if not (0 <= cc <= 127 and 0 <= value <= 127):
+                return jsonify({"ok": False, "error": "cc/value out of range"}), 400
+            seq_out.send_cc(port, cc, value, channel=0)
+        seq_out.flush()
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "cc/value required"}), 400
+    except Exception as exc:
+        return jsonify({"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}), 500
+    return jsonify({"ok": True, "key": key, "port": port})
+
+
 # Backward-compatible aliases for the Ver 63 /api/vcv endpoints.
 @app.route("/api/vcv", methods=["GET"])
 def api_vcv():
