@@ -1646,8 +1646,10 @@ case "replay":
         label.className = "app-launch-label";
         btn.appendChild(glyph);
         btn.appendChild(label);
-        btn.title = "Launch " + s.name + " if it isn't already running (needs its MIDI input module for the loop to reach it)";
-        btn.addEventListener("click", function () { launchApp(s.key); });
+        btn.title = s.running
+          ? "Stop " + s.name
+          : "Launch " + s.name + " if it isn't already running (needs its MIDI input module for the loop to reach it)";
+        btn.addEventListener("click", function () { toggleApp(s.key); });
         buttons[s.key] = { btn: btn, glyph: glyph, label: label };
         appsEl.appendChild(btn);
       });
@@ -1670,23 +1672,88 @@ case "replay":
             ref.btn.disabled = busy && !s.running;
             ref.glyph.textContent = s.running ? "\u2713" : (busy ? "\u2026" : "\u25b6");
             ref.label.textContent = s.running
-              ? s.name.toLowerCase() + " is up"
+              ? (s.stoppable ? "stop " + (s.name || s.key).toLowerCase() : s.name.toLowerCase() + " is up")
               : (busy ? "launching\u2026" : "launch " + (s.name || s.key).toLowerCase());
             // Just came up while we were polling it -> refresh the sink list.
             if (poll && poll.tries && s.running && !poll.lastRunning) reloadOuts();
+            // Just went down while we were polling it (stop) -> same refresh.
+            if (poll && poll.tries && !s.running && poll.lastRunning) reloadOuts();
             if (poll) poll.lastRunning = !!s.running;
           });
         })
         .catch(function () { /* transient */ });
     }
 
-    function paintBusy(ref) {
+    function paintBusy(ref, label) {
       if (!ref) return;
       ref.classList.remove("running");
       ref.classList.add("busy");
       ref.disabled = true;
       ref.children[0].textContent = "\u2026";
-      ref.children[1].textContent = "launching\u2026";
+      ref.children[1].textContent = label || "launching\u2026";
+    }
+
+    function toggleApp(key) {
+      var ref = null;
+      if (appsEl) {
+        for (var i = 0; i < appsEl.children.length; i++) {
+          if (appsEl.children[i].dataset.key === key) { ref = appsEl.children[i]; break; }
+        }
+      }
+      if (!ref || ref.classList.contains("busy")) return;
+      if (ref.classList.contains("running")) {
+        stopApp(key);
+      } else {
+        launchApp(key);
+      }
+    }
+
+    function stopApp(key) {
+      var ref = null;
+      if (appsEl) {
+        for (var i = 0; i < appsEl.children.length; i++) {
+          if (appsEl.children[i].dataset.key === key) { ref = appsEl.children[i]; break; }
+        }
+      }
+      if (!ref || !ref.classList.contains("running") || ref.classList.contains("busy")) return;
+      var poll = polls[key] || (polls[key] = { tries: 0, lastRunning: false });
+      poll.tries = 1;
+      poll.lastRunning = true;
+      paintBusy(ref, "stopping\u2026");
+      fetch("/api/sinks/" + encodeURIComponent(key) + "/stop", { method: "POST" })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (res && res.ok) addFeed((res.message || "stopping"), "replay");
+          else if (res && res.error) addFeed("STOP  " + res.error, "replay");
+          if (poll.timer) clearInterval(poll.timer);
+          poll.timer = setInterval(function () {
+            poll.tries += 1;
+            fetch("/api/sinks", { cache: "no-store" })
+              .then(function (r) { return r.json(); })
+              .then(function (res2) {
+                if (!res2 || !res2.ok) return;
+                var s = null;
+                res2.sinks.forEach(function (x) { if (x.key === key) s = x; });
+                if (!s || !s.running) {
+                  clearInterval(poll.timer);
+                  poll.tries = 0;
+                  poll.lastRunning = false;
+                  refreshApps(buttonsByKey());
+                  reloadOuts();
+                } else if (poll.tries >= 10) {
+                  clearInterval(poll.timer);
+                  poll.tries = 0;
+                  refreshApps(buttonsByKey());
+                }
+              })
+              .catch(function () { /* transient */ });
+          }, 800);
+        })
+        .catch(function () {
+          poll.tries = 0;
+          poll.lastRunning = false;
+          refreshApps(buttonsByKey());
+        });
     }
 
     function launchApp(key) {

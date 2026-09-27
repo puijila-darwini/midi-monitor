@@ -1723,3 +1723,25 @@ Ver 99 (detune → MIDI out + Local Synth sink): the tuning pre-bend now
       raw bends hit the keyboard.
   Keyboard port note 2026-09-27: currently client 24 / card 2 (post-reboot
   enumeration moved it again; mididev re-resolution handles it).
+
+Ver 100 (live play = same pipe + sink stop): two gaps closed.
+  (1) The LIVE echo stream now goes out the same pipe as replay. When keys
+      routing is echo/layer (echo on), each echoed note_on/note_off now
+      replicates to EVERY seq output (state.seq_outs — VCV Rack, the Local
+      Synth, DAWs) through a persistent "Abora Live Out" SeqOut (app.py
+      _echo_seq_notes; lazy single client for the capture thread), with the
+      SAME mapped note, mapped velocity, RPN-consistent pre-bend (− same
+      skip-if-unchanged gate as raw), and the "auto" voice-follow program
+      change — so live playing sounds detuned on AboraSynth exactly like it
+      does on the board. Echo-off disable rings the note_offs out to seq
+      too. NOTE: "keys" mode (local on, echo off) still intentionally sends
+      nothing (echo IS the live-out master; that's the UI's keys routing).
+  (2) The out-box app buttons are now toggles that can also DEACTIVATE:
+      sink entries can declare `stop: [pkill patterns]` (Local Synth kills
+      "AboraSynth"); /api/sinks/<key>/stop; sink status carries `stoppable`;
+      the button flips to "stop local synth (fluidsynth)" while running and
+      clicking it pkills + polls down (reloads the route list so the routing
+      checkbox drops). VCV Rack has no stop action yet (its kill path is
+      fiddly) — stays launch-only.
+  Verified: stop→running false, launch→fresh fluidsynth 129:0; live seq
+  send smoke test (bends + on/off, ch0 + ch4) clean through the app helpers.

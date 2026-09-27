@@ -123,6 +123,42 @@ def _note_name(n):
     return chords.nm(n)
 
 
+# Ver 99: the live echo stream is replicated to the seq outputs (the same
+# destinations replay uses — VCV Rack, the Local Synth, DAWs), so live play
+# goes out the same pipe as recorded playback: same mapped notes, same mapped
+# velocity, same pre-bend, same voice follow. One persistent SeqOut for the
+# capture thread, created lazily and reused for the process lifetime.
+_live_seq = None
+
+
+def _live_seq_out():
+    global _live_seq
+    if _live_seq is None:
+        _live_seq = midiout.SeqOut("Abora Live Out")
+    return _live_seq
+
+
+def _echo_seq_notes(kind, pairs, channel, bend=None):
+    """Replicate an echoed note event to every selected seq output. kind is
+    "on" | "off"; pairs is [(note, velocity), ...]. An optional pre-bend (in
+    semitones) rides before note_ons, mirroring the raw path."""
+    targets = list(state.seq_outs)
+    if not targets:
+        return
+    seq_out = _live_seq_out()
+    for t in targets:
+        try:
+            if kind == "on" and bend is not None:
+                seq_out.send_pitch_bend(t, bend, channel=channel)
+            seq_out.send_notes(t, kind, pairs, channel=channel)
+        except Exception:
+            pass
+    try:
+        seq_out.flush()
+    except Exception:
+        pass
+
+
 def _run_capture(cap):
     """Background: read MIDI (from the given Capture), update state + analyser,
     publish to hub. Guarded by the supervisor so any crash self-heals."""
@@ -157,6 +193,10 @@ def _run_capture(cap):
                         pitch_bend(bend, channel=event.get("channel", 0))
                     note_on(mapped, vel,
                             channel=event.get("channel", 0))
+                    # Ver 99: same pipe as replay — the echoed note (and its
+                    # pre-bend) also goes to every selected seq output.
+                    _echo_seq_notes("on", [(mapped, vel)],
+                                    channel=event.get("channel", 0), bend=bend)
             analyser.on_note(t, event["note"])
             hub.publish({"type": "note", "note": event["note"],
                          "name": _note_name(event["note"]),
@@ -184,6 +224,9 @@ def _run_capture(cap):
             released = state.echo_release(event["note"])
             if released:
                 note_off(released["mapped"], channel=released["channel"])
+                # Ver 99: mirror the note_off out to the seq outputs too.
+                _echo_seq_notes("off", [(released["mapped"], 0)],
+                                channel=released["channel"])
             hub.publish({"type": "noteoff", "note": event["note"],
                          "name": _note_name(event["note"]),
                          "time": t, "held": sorted(state.held)})
@@ -203,6 +246,19 @@ def _run_capture(cap):
                 state.receive_bank = event.get("bank", 0)
                 state.receive_program = event["program"]
                 program_change(state.receive_bank, state.receive_program)
+                # Ver 99: follow the panel voice on seq outputs too (same pipe).
+                seq_out = _live_seq_out()
+                for t in list(state.seq_outs):
+                    try:
+                        seq_out.send_program_change(t, state.receive_bank,
+                                                    state.receive_program,
+                                                    channel=0)
+                    except Exception:
+                        pass
+                try:
+                    seq_out.flush()
+                except Exception:
+                    pass
         elif etype == "control_change":
             # Watch CCs arriving FROM the keyboard (wheel, aux resets). Throttle
             # to ~4/s per controller so a wiggled wheel can't flood the feed.
@@ -746,9 +802,11 @@ def api_echo():
     if not enabled:
         # Ring off every echoed note still sounding (pressed while echo was
         # live) — otherwise flipping echo off mid-hold strands the board's
-        # RX voice until a panic.
+        # RX voice until a panic. Mirror the note_offs out to seq outputs.
         for rel in state.echo_release_all():
             note_off(rel["mapped"], channel=rel["channel"])
+            _echo_seq_notes("off", [(rel["mapped"], 0)],
+                            channel=rel["channel"])
     state.echo_enabled = enabled
     state.echo_voice = voice_name
     device = True
@@ -759,6 +817,17 @@ def api_echo():
             state.receive_program = pc
             state.receive_bank = bank
             device = program_change(bank, pc)
+            # Same pipe: put the echo voice on the seq outputs too.
+            seq_out = _live_seq_out()
+            for t in list(state.seq_outs):
+                try:
+                    seq_out.send_program_change(t, bank, pc, channel=0)
+                except Exception:
+                    pass
+            try:
+                seq_out.flush()
+            except Exception:
+                pass
     resp = {"ok": True, "enabled": enabled, "voice": voice_name,
             "device": bool(device)}
     if not device:
@@ -888,6 +957,18 @@ def api_sinks_launch(key):
                         "launching": launching}), 500
     return jsonify({"ok": True, "key": key, "message": msg,
                     "running": running, "launching": launching})
+
+
+@app.route("/api/sinks/<key>/stop", methods=["POST"])
+def api_sinks_stop(key):
+    """Deactivate destination `key` (pkill its processes, Ver 99). Entries
+    without a stop action 409. Running flag stays live so the UI can poll
+    until the sink actually disappears."""
+    ok, msg, running = sinks.stop(key)
+    if not ok:
+        return jsonify({"ok": False, "error": msg, "running": running}), 500
+    return jsonify({"ok": True, "key": key, "message": msg,
+                    "running": running})
 
 
 # Backward-compatible aliases for the Ver 63 /api/vcv endpoints.

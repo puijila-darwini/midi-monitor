@@ -24,9 +24,11 @@ RAW_DEVICE = "hw:2,0,0"
 #   name       display name (button label, "… is up")
 #   cmd        executable to spawn when launching
 #   cwd        optional working directory (default: dirname of cmd)
+#   args       optional extra argv (e.g. a script path for /bin/bash)
 #   detect     seq-out client names marking the app as "running" when its
 #              sink appears in aconnect -o (case-insensitive substring).
 #   auto_route if True, its present sinks are ticked in the default routing.
+#   stop       optional pkill -f patterns to deactivate the app (Ver 99).
 LAUNCHABLE = [
     {
         "key": "vcv",
@@ -44,6 +46,7 @@ LAUNCHABLE = [
         "args": ["/home/pthag/ai/midi/monitor/localsynth.sh"],
         "detect": ["FLUID Synth"],
         "auto_route": True,
+        "stop": ["AboraSynth"],
     },
 ]
 
@@ -134,8 +137,33 @@ def status():
             "auto_route": bool(e.get("auto_route")),
             "running": bool(_matches(e, outs)),
             "launching": bool(_launching.get(e["key"])),
+            "stoppable": bool(e.get("stop")),
         })
     return {"ok": True, "sinks": out}
+
+
+def stop(key):
+    """Deactivate a launchable app via its pkill patterns. The local synth
+    (and any entry with a `stop` list) can be turned off from the out box;
+    entries without a stop action are left alone. Returns (ok, message,
+    running_now)."""
+    entry = _entries_by_key().get(key)
+    if entry is None:
+        return False, "unknown app: %s" % key, False
+    patterns = entry.get("stop") or []
+    if not patterns:
+        return False, "%s has no stop action" % entry["name"], bool(_matches(entry, list_outs()))
+    outs = list_outs()
+    if not _matches(entry, outs):
+        return True, "%s already stopped" % entry["name"], False
+    for pat in patterns:
+        try:
+            subprocess.run(["pkill", "-f", pat], timeout=5,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception:
+            pass
+    # May take a moment to die; the UI polls until running flips False.
+    return True, "stopping %s" % entry["name"], bool(_matches(entry, list_outs()))
 
 
 def default_routing(outs=None):

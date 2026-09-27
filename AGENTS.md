@@ -142,6 +142,12 @@ folded into a single web app package in `monitor/`:
                           Replay entry points (/api/replay, /api/replay/loop,
                           /api/patterns/<slug>/play) share the
                           _replay_start_guard()/_play_events() helpers.
+                          Ver 100: the LIVE echo stream replicates to every
+                          seq output (app._echo_seq_notes, persistent "Abora
+                          Live Out" SeqOut) — same mapped note/velocity/
+                          pre-bend/voice as the board, so keys in echo/layer
+                          mode sound detuned on seq sinks (AboraSynth, VCV)
+                          exactly like replay does.
 - `monitor/sinks.py`    - DATA-DRIVEN registry of launchable MIDI destinations
                           (VCV Rack, DAWs). Each entry declares cmd/detect/
                           auto_route (see ../Musica/Rack pattern); the out box
@@ -153,6 +159,9 @@ folded into a single web app package in `monitor/`:
                           in parallel to the keyboard for detune A/B.
                           QUIRK: FluidSynth exits 0 silently if its stdin hits
                           EOF — the wrapper must `sleep infinity |` into it.
+                          Ver 100: entries may declare `stop: [pkill patterns]`
+                          (synth = "AboraSynth") — the out-box button toggles
+                          launch/stop; /api/sinks/<key>/stop exists.
 - `monitor/midiout.py`   - SeqOut (ALSA seq output client, ctypes, no deps).
                           Ver 99: send_pitch_bend(target, semitones, channel)
                           — 14-bit PITCHBEND mapped via replay.BEND_RANGE_ST
