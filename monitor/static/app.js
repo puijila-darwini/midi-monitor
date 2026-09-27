@@ -403,8 +403,8 @@ function buildCatchTooltip() {
       var seg = document.getElementById("ctrl-keys-mode");
       var b = seg ? seg.querySelector("button.active") : null;
       var m = b ? b.getAttribute("data-mode") : "keys";
-      if (m !== "layer" && m !== "echo") {
-        lines.push("live detune needs echo/layer keys routing — replay still bends");
+      if (m === "keys") {
+        lines.push("live detune needs echo/layer/midi keys routing \u2014 replay still bends");
       }
       var tp = ton ? parseInt(ton.value, 10) : NaN;
       if (isNaN(tp) || tp < 0) {

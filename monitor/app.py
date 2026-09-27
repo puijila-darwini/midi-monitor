@@ -167,11 +167,14 @@ def _run_capture(cap):
         t = event["time"]
         if etype == "note_on":
             state.handle(event)
-            if state.echo_enabled:
-                # Route the keyed note back to the board as an RX note so the
-                # controls that only bind to received notes (program, sustain,
-                # CC, pitch) apply to live playing. With local on this layers
-                # against the panel voice; local off leaves the echo alone.
+            # Live out: the keyed note goes out whenever the keys are routed
+            # through the app — echo/layer (echo on; the board RX leg) AND
+            # "midi" mode (local off + echo off — keys make no sound, the
+            # routed seq sinks play them). Pure "keys" mode (local on, echo
+            # off) stays silent: the board sounds itself, nothing routes
+            # through the app. Ver 100: hitting the local-off check is what
+            # makes "midi" mode feed the local synth / VCV like replay does.
+            if state.echo_enabled or state.local_control == 0:
                 # Ver 94: the press-time mapping is FROZEN (echo_hold) — a
                 # mid-hold transform change can no longer make note_off
                 # release a different pitch (stuck-note jank). Refcounted per
@@ -189,12 +192,16 @@ def _run_capture(cap):
                     # unchanged — skips the extra amidi hop).
                     bend = state.tuning_strike_bend(mapped, event.get("channel", 0)) \
                         if state.echo_tuning else None
-                    if bend is not None:
-                        pitch_bend(bend, channel=event.get("channel", 0))
-                    note_on(mapped, vel,
-                            channel=event.get("channel", 0))
-                    # Ver 99: same pipe as replay — the echoed note (and its
-                    # pre-bend) also goes to every selected seq output.
+                    if state.echo_enabled:
+                        # Raw leg (board RX voice): echo/layer modes only —
+                        # midi mode deliberately leaves the board silent.
+                        if bend is not None:
+                            pitch_bend(bend, channel=event.get("channel", 0))
+                        note_on(mapped, vel,
+                                channel=event.get("channel", 0))
+                    # Seq leg (Ver 99/100): same pipe as replay — the live
+                    # note (and its pre-bend) goes to every selected seq
+                    # output in all three app-routed modes.
                     _echo_seq_notes("on", [(mapped, vel)],
                                     channel=event.get("channel", 0), bend=bend)
             analyser.on_note(t, event["note"])
@@ -223,8 +230,12 @@ def _run_capture(cap):
             # also None when the press was never echoed at all.
             released = state.echo_release(event["note"])
             if released:
-                note_off(released["mapped"], channel=released["channel"])
-                # Ver 99: mirror the note_off out to the seq outputs too.
+                if state.echo_enabled:
+                    note_off(released["mapped"], channel=released["channel"])
+                # Ver 99/100: mirror the note_off out to the seq outputs too.
+                # Unconditional on mode — a note_off for a tone that never
+                # rang is harmless (synths ignore it), so a mid-hold mode
+                # flip can't strand the synth on a stuck note.
                 _echo_seq_notes("off", [(released["mapped"], 0)],
                                 channel=released["channel"])
             hub.publish({"type": "noteoff", "note": event["note"],

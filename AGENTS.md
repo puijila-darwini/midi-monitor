@@ -142,12 +142,15 @@ folded into a single web app package in `monitor/`:
                           Replay entry points (/api/replay, /api/replay/loop,
                           /api/patterns/<slug>/play) share the
                           _replay_start_guard()/_play_events() helpers.
-                          Ver 100: the LIVE echo stream replicates to every
+                          Ver 100: the LIVE stream replicates to every
                           seq output (app._echo_seq_notes, persistent "Abora
                           Live Out" SeqOut) — same mapped note/velocity/
                           pre-bend/voice as the board, so keys in echo/layer
                           mode sound detuned on seq sinks (AboraSynth, VCV)
-                          exactly like replay does.
+                          exactly like replay does; "midi" keys mode (local
+                          off, echo off) routes the same stream there too
+                          (gate: echo_enabled or local_control == 0, raw leg
+                          echo-only), pure "keys" mode stays silent.
 - `monitor/sinks.py`    - DATA-DRIVEN registry of launchable MIDI destinations
                           (VCV Rack, DAWs). Each entry declares cmd/detect/
                           auto_route (see ../Musica/Rack pattern); the out box
