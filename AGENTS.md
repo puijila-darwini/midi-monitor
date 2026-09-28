@@ -160,6 +160,31 @@ folded into a single web app package in `monitor/`:
   488.1 = +180c on A4; -8192 -> 197.9 / 391.9). FluidSynth hard-codes +/-2 st
   (no bend-sensitivity setting in 2.3.4). replay.pitch_bend is CORRECT as-is
   (raw amidi wire bytes = unsigned). (c) portamento is GONE, not future.
+  Ver 108: the VOICES CARD is the one place instruments are chosen — a
+  full-width row of one-per-destination rows (keyboard·panel read-out /
+  keyboard·received / app·replay OUT / AboraSynth font+instrument+latch,
+  the last MOVED out of the synth card with its ids intact). The
+  keyboard-side lists are filled from the single PSSA50_VOICES map in
+  app.js, not hardcoded options; the arranger's slot picker still clones
+  #replay-voice. Choices are SERVER state, not DOM: state.panel_bank /
+  panel_program (written ONLY by state.handle on a capture program change —
+  receive_program/receive_bank is written by five things and cannot answer
+  "what is the board on") + state.replay_voice, all in /api/state, set via
+  POST /api/voice {target: echo|replay}; _play_events defaults its voice to
+  state.replay_voice so a pattern/arrangement play uses the card's pick.
+  TRAPS that bit: ranking a <select>'s options by innerHTML-rebuild silently
+  CHANGES the selection (browsers auto-select the first appended option) —
+  save and restore the value across the rebuild; and a helper that both
+  ranks and "follows" the board will stomp a user's pick every refresh,
+  which is why the rank step is now selection-neutral and the value comes
+  from the server. Also: only call showSynthFollowedVoice() while the latch
+  is ON, or the free picker follows the keyboard (a pre-existing bug the
+  Ver 106 harness caught once its fake <select> was made faithful). NOT
+  persisted across restarts (in-memory, like the ctrl mirror flag). New
+  harnesses: tmp/fstest/voices_picker_test.js (drives the real functions out
+  of app.js against a fake <select>), voices_server_test.py,
+  id_crosscheck.py (every getElementById target exists in the template —
+  the trap a moved control falls into without a sound).
 - `monitor/app.py`      - Flask on :5050. Routes: `/`, `/events` (SSE),
                           `/api/state`. Background capture thread -> hub pub/sub.
                           Replay entry points (/api/replay, /api/replay/loop,
