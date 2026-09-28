@@ -103,7 +103,12 @@ SND_SEQ_EVENT_CONTROLLER = 10
 SND_SEQ_EVENT_PGMCHANGE = 11
 SND_SEQ_EVENT_NOTEON = 6
 SND_SEQ_EVENT_NOTEOFF = 7
-SND_SEQ_EVENT_PITCHBEND = 12
+# Ver 107: this was 12, which is SNDRV_SEQ_EVENT_CHANPRESS — every pitch bend
+# the app ever sent was delivered as channel pressure, which is why the bend
+# fader did nothing to any sink. The uapi header (include/uapi/sound/
+# asequencer.h) is unambiguous: 10 CONTROLLER, 11 PGMCHANGE, 12 CHANPRESS,
+# 13 PITCHBEND ("from -8192 to 8191").
+SND_SEQ_EVENT_PITCHBEND = 13
 
 # MIDI controller numbers
 CC_ALL_SOUND_OFF = 120
@@ -294,11 +299,23 @@ class SeqOut(_SeqOutPort):
         return ev
 
     def _emit(self, ev):
+        """Queue one event, then DRAIN it.
+
+        Ver 107: snd_seq_event_output with queue=SND_SEQ_QUEUE_DIRECT only
+        *queues* the event; it does not hand it to the ring buffer until
+        snd_seq_drain_output runs. Every send method here used to rely on the
+        caller remembering flush(), so any caller that didn't silently sent
+        nothing at all (measured: destination input-pool counter frozen, zero
+        audio, no error anywhere). Draining per event is the ALSA-idiomatic
+        form and makes a send self-contained; flush() stays for callers that
+        want to batch.
+        """
         if not self.handle:
             raise RuntimeError("seq client is closed")
         rc = _LIB.snd_seq_event_output(self.handle, ctypes.byref(ev))
         if rc < 0:
             raise RuntimeError("snd_seq_event_output failed (rc=%d)" % rc)
+        self.flush()
 
     def is_alive(self):
         """True when this seq client can still output. A zombie's fd lingers
@@ -379,7 +396,15 @@ class SeqOut(_SeqOutPort):
     def send_pitch_bend(self, target, semitones, channel=0):
         """Send a 14-bit pitch bend to a seq target. `semitones` is the bend
         within the PSS-A50's ±2 st range (replay.BEND_RANGE_ST): +2 st -> full
-        up, -2 st -> full down, 0 -> center (8192)."""
+        up, -2 st -> full down, 0 -> center.
+
+        Ver 107: the seq event value is SIGNED 14-bit (-8192..8191, zero =
+        centre), exactly as the uapi header states. It used to be built as
+        unsigned 0..16383 (the alsa-lib convenience form), which a seq
+        consumer reads as 16383 = -1 cent: measured on AboraSynth, a "full up"
+        bend landed dead centre while full down worked — so only half the
+        fader did anything.
+        """
         from .replay import BEND_RANGE_ST
         rng = BEND_RANGE_ST
         dst_c, dst_p = parse_target(target)
@@ -387,9 +412,10 @@ class SeqOut(_SeqOutPort):
         ev.dest.client = dst_c & 0xFF
         ev.dest.port = dst_p & 0xFF
         ev.data.control.channel = channel & 0x0F
-        val = int(round(8192 + max(-rng, min(rng, float(semitones))) / rng * 8192))
+        frac = max(-rng, min(rng, float(semitones))) / rng   # -1.0 .. +1.0
+        val = int(round(frac * 8192))                        # -8192 .. 8191
         ev.data.control.param = 0
-        ev.data.control.value = max(0, min(16383, val))
+        ev.data.control.value = max(-8192, min(8191, val))
         self._emit(ev)
 
     def all_notes_off(self, targets, channel=0):

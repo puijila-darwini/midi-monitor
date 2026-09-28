@@ -1997,3 +1997,57 @@ Ver 105 (out·ctrl → synth mirror — "as many of the out·ctrl controls to
   simulated by closing the handle behind the app's back (note + mirror +
   program change all recover on a rebuilt client), dead target skipped, stale
   synth route re-pointed. 67-assertion synth harness still ALL PASS.
+- Ver 107: the out·ctrl pitch fader actually bends a sink, and the live
+  transforms render in "midi" mode. Three real defects, all found by
+  measuring what AboraSynth HEARD (not by re-reading the sender):
+  1. WRONG EVENT TYPE. midiout.SND_SEQ_EVENT_PITCHBEND was 12, which is
+     SNDRV_SEQ_EVENT_CHANPRESS — every pitch bend the app ever sent was
+     delivered as channel pressure, so the fader did nothing to any sink.
+     include/uapi/sound/asequencer.h is unambiguous: 10 CONTROLLER,
+     11 PGMCHANGE, 12 CHANPRESS, 13 PITCHBEND ("from -8192 to 8191").
+     replay.pitch_bend is untouched — it builds raw amidi wire bytes
+     (E{ch} lo hi), where the unsigned 0..16383 form IS correct.
+  2. WRONG VALUE ENCODING. The seq event value is SIGNED 14-bit
+     (-8192..8191, zero = centre). It was built unsigned 0..16383 (the
+     alsa-lib convenience form), which a seq consumer reads as -1 cent.
+     Measured with only the type fixed: "-2 st" worked, "+2 st" was dead.
+     Now frac = semitones/BEND_RANGE_ST, val = round(frac*8192).
+  3. QUEUE WITHOUT DRAIN. _emit called snd_seq_event_output (queue =
+     SND_SEQ_QUEUE_DIRECT) and never drained, so events sat in the
+     client's direct queue until someone called flush(). The app flushes
+     at all five of its call sites, which is why the app's own path was
+     audible — but ANY other caller sent nothing at all, silently (no
+     error, destination input-pool counter frozen, zero audio). _emit now
+     drains per event, so a send is self-contained.
+  MEASURED after the fix (direct ALSA to AboraSynth, FFT pitch read on a
+  held note; signed 14-bit): value 0 -> 221.8 Hz (centre); +8191 ->
+  248.0 Hz on A3 = +207 cents, 488.1 Hz on A4 = +180; -4096 -> 209.9 Hz
+  (-82); -8192 -> 197.9 Hz (-184) and 391.9 Hz on A4 (-200). Bend range
+  is FluidSynth's own +/-2 st (2.3.4 exposes no bend-sensitivity setting).
+  NOT re-verified through the app's HTTP fader path after the change — see
+  the open item below.
+  4. NO PORTAMENTO, CLAIMED ORBUILT. The glide fader (CC65 switch + CC5
+  time) is gone: the PSS-A50 recognizes both but never transmits them, so
+  the control could not be honest. Removed the fader, its wiring, its
+  SFX_DEFAULTS entry, its refreshState restore, and every mention in the
+  card tooltips. AGENTS.md now records it as removed, not future.
+  5. LIVE TRANSFORMS NOW RENDER IN "midi" MODE. The transform chain
+  (transpose/snap/invert/velocity/tuning) always applied to the seq leg in
+  midi mode — the AUDIO was right — but every visual was gated on
+  echoIsOn(), which returned true only for layer/echo, so in midi mode the
+  piano showed no inverted colours, no ghost landing notes, no pivot
+  marker: it read as "the transform doesn't work here". Verified the audio
+  first (struck 60 -> synth sounded 65.0 Hz, struck 72 -> 32.5 Hz, i.e.
+  correctly inverted to 36/24), then renamed the gate liveIsOn() and
+  included "midi". Pure "keys" (local on + echo off) stays excluded: there
+  nothing passes through the app, so a ghost key would be a lie.
+  The opt-in checkboxes are relabelled "echo" -> "live" (ids unchanged),
+  the card button "echo all" -> "live all", and every tooltip now names
+  the modes that apply (echo / layer / midi). Verified in a real browser
+  on the live page: keys mode midi, invert + live opt-in, holding C4
+  ghosts key 36 (2*48-60) with the pivot marker on 48, and the ghost
+  clears on release. Zero console errors.
+  OPEN: the out·ctrl faders still have no end-to-end proof through the
+  app's own HTTP path since the fix (the /api/ctrl/mirror toggle answered
+  enabled:false after a restart, so that run recorded silence — the mirror
+  flag is in-memory and resets on restart, which is a UX wart of its own).

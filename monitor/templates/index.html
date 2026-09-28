@@ -252,7 +252,7 @@
             <div class="cartouche-end">
               <span id="chain-counts" class="chain-counts" title="Raw events in &rarr; transformed MIDI events out"></span>
               <button id="echo-all" class="listen-btn" type="button"
-                      title="Toggle every echo opt-in at once (transpose / velocity / tuning / snap / invert): if all are on, turn them off, else turn them all on">echo all</button>
+                      title="Toggle every live opt-in at once (transpose / velocity / tuning / snap / invert): if all are on, turn them off, else turn them all on. A live opt-in applies the op to what you are playing right now, in every routed keys mode (echo / layer / midi).">live all</button>
               <span class="corner" aria-hidden="true"><svg class="corner-ic"><use href="#ic-sliders"/></svg></span>
             </div>
           </div>
@@ -282,7 +282,7 @@
 
             <div class="op op-transpose">
               <div class="op-head"><span class="op-title">transpose</span><label class="op-echo"><input type="checkbox" id="transpose-echo"
-                       title="Also apply the transpose LIVE to echoed keybed notes (the echo re-route; note_off mirrors automatically)"><span>echo</span></label></div>
+                       title="Also apply the transpose LIVE as you play - in every routed keys mode (echo / layer / midi). The live note is mapped at press time, so note_off mirrors it exactly."><span>live</span></label></div>
               <div class="op-body">
                 <label class="transpose-label"><span>semitones</span>
                   <input type="number" id="transpose-input" class="tempo-input" min="-24" max="24" step="1"
@@ -293,7 +293,7 @@
 
             <div class="op op-vel">
               <div class="op-head"><span class="op-title">velocity</span><label class="op-echo"><input type="checkbox" id="velocity-echo"
-                       title="Also apply the velocity compressor LIVE to echoed keybed notes (threshold clips to the band; compress rescales the recent window into the band)"><span>echo</span></label></div>
+                       title="Also apply the velocity compressor LIVE as you play (echo / layer / midi). Threshold clips to the band; compress rescales the recent window into the band."><span>live</span></label></div>
               <div class="op-body">
                 <label class="vel-enable"><input type="checkbox" id="vel-enabled" checked
                        title="Enable/disable the velocity compressor stage"><span>compress</span></label>
@@ -318,10 +318,10 @@
 
             <div class="op op-tune">
               <div class="op-head"><span class="op-title">tuning</span><label class="op-echo"><input type="checkbox" id="tuning-echo"
-                       title="Also apply the retune LIVE to echoed keybed notes (same mono pre-bend as replay)"><span>echo</span></label></div>
+                       title="Also apply the retune LIVE as you play (echo / layer / midi) - same mono pre-bend as replay, so a sink detunes too."><span>live</span></label></div>
               <div class="op-body">
                 <label class="tune-enable"><input type="checkbox" id="tuning-enabled"
-                       title="Retune the keyboard away from 12-TET: replay strikes are pre-bent to their pitch-class offset (check echo to also retune live echoed notes; MONO — one shared bend channel, a chord takes the bass note's detune)"><span>retune</span></label>
+                       title="Retune the keyboard away from 12-TET: replay strikes are pre-bent to their pitch-class offset (check live to also retune notes as you play; MONO — one shared bend channel, a chord takes the bass note's detune)"><span>retune</span></label>
                 <label class="tune-preset-label"><span>preset</span>
                   <select id="tuning-preset" title="Temperament shapes (root-relative — pair with the tonic box); custom = hand-edited cells">
                     <option value="equal" selected>equal</option>
@@ -379,7 +379,7 @@
 
             <div class="op op-scale">
               <div class="op-head"><span class="op-title">scale</span><label class="op-echo"><input type="checkbox" id="snap-echo"
-                       title="Also snap LIVE echoed keybed notes onto the scale"><span>echo</span></label></div>
+                       title="Also snap LIVE keybed notes onto the scale as you play (echo / layer / midi). Off-scale keys get the red strip and their landing note is ghosted on the piano."><span>live</span></label></div>
               <div class="op-body">
                 <label class="op-toggle"><input type="checkbox" id="snap-enabled"
                        title="Snap every note onto the scale chosen in the tonic&amp;middot;scale card (the guide shading shows the tones). Bias decides how an off-scale note resolves."><span>snap</span></label>
@@ -396,7 +396,7 @@
 
             <div class="op op-invert">
               <div class="op-head"><span class="op-title">invert</span><label class="op-echo"><input type="checkbox" id="invert-echo"
-                       title="Also invert LIVE echoed keybed notes"><span>echo</span></label></div>
+                       title="Also invert LIVE keybed notes as you play (echo / layer / midi). The piano inverts its colours and ghosts each key's landing note around the pivot."><span>live</span></label></div>
               <div class="op-body">
                 <label class="op-toggle"><input type="checkbox" id="invert-enabled"
                        title="Mirror each pitch around the pivot note (melodic inversion — a rising phrase falls, the contour flips about the pivot). Pivot defaults to the key tonic at octave 3, or auto = the pattern's first note."><span>on</span></label>
@@ -553,7 +553,7 @@
               </button>
             </div>
             <div class="ctrl-grid ctrl-keys-grid">
-              <span class="ctrl-seg-label" title="How the keybed is routed. echo routes the keyed notes back through the app as received notes, so program/voice, sustain, portamento, mod and pitch bend audibly apply to live playing (they only bind to received notes); local lets the board sound its own keys.">keys</span>
+              <span class="ctrl-seg-label" title="How the keybed is routed. echo routes the keyed notes back through the app as received notes, so program/voice, sustain, mod and pitch bend audibly apply to live playing (they only bind to received notes); local lets the board sound its own keys.">keys</span>
               <div class="ctrl-seg" id="ctrl-keys-mode" role="group" aria-label="keys routing">
                 <button type="button" data-mode="keys" class="active"
                         title="local on, echo off - normal: keys sound the panel voice directly">keys</button>
@@ -567,7 +567,7 @@
             </div>
             <div class="ctrl-rack">
               <div class="ctrl-rack-strip">
-                <span class="ctrl-seg-label" title="All controllers the board receives - one fader bank. Volume/mod/pitch are the performance controls; behind them the sound&fx family: portamento (CC65/5, 0 = off), expression (CC11), the filter/resonance/attack/release motion-effect family (71-74) and the reverb/chorus depths (91/93). Grab a fader, double-click to snap it to default, or click the value and type a number.">controllers</span>
+                <span class="ctrl-seg-label" title="All controllers the board receives - one fader bank. Volume/mod/pitch are the performance controls; behind them the sound&fx family: expression (CC11), the filter/resonance/attack/release motion-effect family (71-74) and the reverb/chorus depths (91/93). Grab a fader, double-click to snap it to default, or click the value and type a number.">controllers</span>
                 <button id="ctrl-mirror" class="mini-btn" type="button"
                         title="Mirror this whole out&middot;ctrl surface to the routed seq sinks (AboraSynth + any other destination checked in the out box): every fader incl. pitch bend, motion ramps, defaults and panic, PLUS the keyboard's own bend wheel + mod wheel as they arrive from capture &mdash; so the synth bends/modulates/filters exactly like the board. Only reaches sinks checked in the out box. Click to toggle.">&rarr; synth</button>
                 <button id="ctrl-sfx-defaults" class="mini-btn" type="button"
@@ -587,11 +587,6 @@
                 <span class="ctrl-fader-label">pitch</span>
                 <input type="range" id="ctrl-pitch" class="ctrl-vrange" min="-2" max="2" value="0" step="0.1">
                 <input type="number" id="ctrl-pitch-val" class="ctrl-fval" min="-2" max="2" step="0.1" value="0">
-              </label>
-              <label class="ctrl-fader" title="Glide time (0 = off). 0 sends CC65 portamento switch OFF; above 0 the switch is ON (CC65) with this glide time (CC5).">
-                <span class="ctrl-fader-label">porta</span>
-                <input type="range" id="ctrl-porta" class="ctrl-vrange" min="0" max="127" value="0">
-                <input type="number" id="ctrl-porta-val" class="ctrl-fval" min="0" max="127" step="1" value="0">
               </label>
               <label class="ctrl-fader" title="CC11 expression - performance swell layered over channel volume (the slices pattern gates this)">
                 <span class="ctrl-fader-label">expr</span>

@@ -491,19 +491,24 @@ function buildCatchTooltip() {
   // Ver 94: live-transform visual language on the piano. When live-stream
   // invert is on — and only then — the colours INVERT (cream <-> dark green
   // key bodies; the in-scale green shading becomes purple, the pressed purple
-  // becomes green). The coloured inversion only makes sense in the echo world,
-  // so it needs the keys routing on echo (layer/echo) AND the invert + its
-  // echo opt-in checked; otherwise the piano reads normal. When snap is on,
-  // every key LIABLE to be snapped (out-of-scale) carries the quaternary red
-  // marker + its landing-note readout. Driven from the controls directly, so
-  // the class flips the instant you toggle; boot restores re-apply via
-  // refreshState / syncKeysMode.
-  function echoIsOn() {
+  // becomes green). When snap is on, every key LIABLE to be snapped
+  // (out-of-scale) carries the quaternary red marker + its landing-note
+  // readout. Driven from the controls directly, so the class flips the instant
+  // you toggle; boot restores re-apply via refreshState / syncKeysMode.
+  //
+  // Ver 107: this is the LIVE STREAM gate, not an "echo" gate. The keyed note
+  // runs the transform chain (state.echo_transform) in every mode the app
+  // routes the keybed: layer, echo AND midi — the transform was always applied
+  // to the seq leg in midi mode (verified: 60 inverts to 36), it just didn't
+  // DRAW. Only pure "keys" (local on + echo off, the board sounds itself and
+  // nothing passes through the app) is excluded, because there a ghost key
+  // would be a lie — no mapped note is ever sent.
+  function liveIsOn() {
     var seg = document.getElementById("ctrl-keys-mode");
     if (!seg) return false;
     var b = seg.querySelector("button.active");
     var m = b ? b.getAttribute("data-mode") : "keys";
-    return m === "layer" || m === "echo";
+    return m === "layer" || m === "echo" || m === "midi";
   }
   function applyLiveColorClasses() {
     var p = document.getElementById("piano");
@@ -511,7 +516,7 @@ function buildCatchTooltip() {
     var invEn = document.getElementById("invert-enabled");
     var invEc = document.getElementById("invert-echo");
     var snEn = document.getElementById("snap-enabled");
-    var inv = echoIsOn() && !!(invEn && invEn.checked) && !!(invEc && invEc.checked);
+    var inv = liveIsOn() && !!(invEn && invEn.checked) && !!(invEc && invEc.checked);
     p.classList.toggle("echo-invert", inv);
     p.classList.toggle("snap-armed", !!(snEn && snEn.checked));
     applySnapLabels();
@@ -841,7 +846,7 @@ function buildCatchTooltip() {
   }
   var _pivotEffective = 48;  // the pivot actually in force (auto or manual)
   function echoMap(note) {
-    if (!echoIsOn()) return note;
+    if (!liveIsOn()) return note;
     var ec = echoSettings(), fl = transformFlags();
     var n = note;
     if (ec.transpose) {
@@ -868,14 +873,14 @@ function buildCatchTooltip() {
     return Math.max(0, Math.min(127, n));
   }
   function ghostFor(raw) {
-    if (!echoIsOn()) return;
+    if (!liveIsOn()) return;
     var m = echoMap(raw);
     if (m === null || m === raw) return;
     var g = keyEls[m];
     if (g) g.classList.add("ghost");
   }
   function unghost(raw) {
-    if (!echoIsOn()) return;
+    if (!liveIsOn()) return;
     var m = echoMap(raw);
     if (m === null || m === raw) return;
     var g = keyEls[m];
@@ -901,13 +906,13 @@ function buildCatchTooltip() {
       if (k) k.classList.remove("pivot");
     }
   }
-  // The pivot marker lives in the inverted world (echo on + invert + its echo
-  // opt-in). Auto mode resolves the pivot server-side (the take's first note),
+  // The pivot marker lives in the inverted world (live routing on + invert + its
+  // live opt-in). Auto mode resolves the pivot server-side (the take's first note),
   // so the marker refreshes from /api/state to track requantized takes live.
   function applyPivotMarker() {
     var invEn = document.getElementById("invert-enabled");
     var invEc = document.getElementById("invert-echo");
-    if (!(echoIsOn() && invEn && invEn.checked && invEc && invEc.checked)) {
+    if (!(liveIsOn() && invEn && invEn.checked && invEc && invEc.checked)) {
       clearPivotMarker();
       return;
     }
@@ -2515,8 +2520,7 @@ case "replay":
       { id: "ctrl-release", cc: 72, label: "release" },
       { id: "ctrl-reverb", cc: 91, label: "reverb" },
       { id: "ctrl-chorus", cc: 93, label: "chorus" },
-      { id: "ctrl-expression", cc: 11, label: "expression" },
-      { id: "ctrl-porta", cc: 65, label: "portamento" }
+      { id: "ctrl-expression", cc: 11, label: "expression" }
     ];
     function resetSoundFx() {
       var parts = [];
@@ -2526,7 +2530,6 @@ case "replay":
         if (!el) return;
         var def = parseInt(el.defaultValue, 10);
         setFader(f.id, def);
-        if (f.id === "ctrl-porta") el._lastVal = def;
         parts.push(f.label + " " + def);
         var body = f.pitch !== undefined ? { pitch: def } : { cc: f.cc, value: def };
         posts.push(postCtrl(f.label + " " + def, body, true));
@@ -2733,52 +2736,6 @@ case "replay":
         postCtrl("pitch 0", { pitch: 0 });
       });
     })();
-    function wireCheck(id, cc, label) {
-      var el = document.getElementById(id);
-      if (!el) return;
-      el.addEventListener("change", function () {
-        var v = el.checked ? 127 : 0;
-        if (cc) postCtrl(label + " " + (el.checked ? "on" : "off"), { cc: cc, value: v });
-        else postCtrl(label + " " + (el.checked ? "on" : "off"), { action: "local", value: v });
-      });
-    }
-    wireCheck("ctrl-porta", 65, "portamento");
-    // Portamento collapsed into one slider: 0 = off (CC65 switch 0), >0 =
-    // glide time (CC5) with the switch (CC65 127) flipped on at the boundary.
-    (function () {
-      var el = document.getElementById("ctrl-porta");
-      if (!el) return;
-      var val = document.getElementById("ctrl-porta-val");
-      el._lastVal = parseInt(el.value, 10) > 0 ? 1 : 0;
-      function apply(v) {
-        v = Math.max(0, Math.min(127, Math.round(v)));
-        el.value = String(v);
-        if (val) val.value = String(v);
-        var prev = el._lastVal;
-        el._lastVal = v;
-        if (v > 0 && prev <= 0) postCtrl("portamento on", { cc: 65, value: 127 });
-        if (v <= 0 && prev > 0) postCtrl("portamento off", { cc: 65, value: 0 });
-        postCtrl("porta time " + v, { cc: 5, value: v });
-      }
-      el.addEventListener("input", function () { apply(parseInt(el.value, 10)); });
-      // Double-click: back to 0 (off) - switch CC65 off and reset the glide.
-      el.addEventListener("dblclick", function () {
-        var prev = el._lastVal;
-        el.value = "0";
-        if (val) val.value = "0";
-        el._lastVal = 0;
-        if (prev > 0) postCtrl("portamento off", { cc: 65, value: 0 });
-        postCtrl("porta time 0", { cc: 5, value: 0 });
-      });
-      // Editable value box drives the same apply() path.
-      if (val) {
-        val.addEventListener("change", function () {
-          var v = parseInt(val.value, 10);
-          if (isNaN(v)) v = 0;
-          apply(v);
-        });
-      }
-    })();
     function wireBtn(id, bodyFn, label) {
       var el = document.getElementById(id);
       if (el) el.addEventListener("click", function () { postCtrl(label, bodyFn()); });
@@ -2850,7 +2807,7 @@ case "replay":
                { action: "local", value: localOn ? 127 : 0 });
       sendEcho(!!KEYS_MODE_ECHO[mode]);
       flashCtrlStatus("keys: " + mode, false);
-      applyLiveColorClasses();  // echo routing gates the inverted piano look
+      applyLiveColorClasses();  // live routing gates the inverted piano look
       if (window.__scaleWarn) window.__scaleWarn();  // box warning tracks routing
     }
     if (keysSeg) {
@@ -3566,8 +3523,6 @@ if (typeof s.time_signature === "string" && s.time_signature.indexOf("/") > 0) {
         if (window.syncKeysMode) {
           window.syncKeysMode(s.local_control !== 0, !!s.echo_enabled);
         }
-        // Unified porta slider: switch on (CC65) -> show its CC5 time; else 0 (off).
-        setRange("ctrl-porta", cv[65] ? (typeof cv[5] === "number" ? cv[5] : 8) : 0);
         setRange("ctrl-volume", typeof cv[7] === "number" ? cv[7] : 100);
         setRange("ctrl-expression", typeof cv[11] === "number" ? cv[11] : 127);
         setRange("ctrl-mod", typeof cv[1] === "number" ? cv[1] : 0);

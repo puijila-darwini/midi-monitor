@@ -36,7 +36,11 @@ PSS-A50 USB keyed into this machine.
   too → tuning card "push" sets the board to the hand-entered base. Master
   Volume SysEx recognized (unused; CC7 covers). GM System ON restores defaults
   (not GM voices — the gm-reset button is a factory-defaults button).
-  Portamento Control CC84 recognized-never-transmitted (future legato).
+  Portamento (CC65/CC5 time, CC84 Portamento Control) is
+  recognized-never-transmitted — the board's own glide is not MIDI-drivable, and
+  the out·ctrl glide fader was REMOVED (Ver 107) rather than left claiming a
+  feature the hardware cannot do. Do not re-add it; the app's pitch fader is the
+  practical glide.
   Traps: MIDI OUT CHANNEL oFF = silent capture; auto-power-off sleeps the
   board; arp plays on channel+1 (analysis already sees it); USB cable < 3 m,
   6 s wait on replug.
