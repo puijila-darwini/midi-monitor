@@ -144,6 +144,22 @@ folded into a single web app package in `monitor/`:
   re-centered); routing/tonic warnings flash on select; Hz flat when off.
   Warnings live in the scale card (danger red #scale-warn), re-evaluated on
   routing/tonic/scale change, not the chord banner.
+  Ver 107: (a) the live opt-ins are "LIVE" not "echo" — the chain applies in
+  every app-routed keys mode INCLUDING midi (the seq leg always did; only the
+  drawing was gated, and echoIsOn() excluded midi, so midi mode showed no
+  inverted colours / ghosts / pivot marker). Gate is now liveIsOn() =
+  layer|echo|midi; pure "keys" stays excluded (nothing passes through the app,
+  so a ghost would lie). Checkbox labels read "live", button "live all", ids
+  unchanged. (b) THE PITCH FADER WAS SENDING CHANNEL PRESSURE:
+  midiout.SND_SEQ_EVENT_PITCHBEND was 12 (12 = CHANPRESS, 13 = PITCHBEND in
+  include/uapi/sound/asequencer.h) AND the value was built unsigned 0..16383
+  when the seq event is SIGNED 14-bit (-8192..8191, zero = centre; a consumer
+  reads 16383 as -1 cent, so only the DOWN half worked). _emit also queued
+  without draining, so a caller that forgot flush() sent nothing, silently.
+  All three fixed + measured (centre 221.8 Hz; +8191 -> 248.0 = +207c on A3,
+  488.1 = +180c on A4; -8192 -> 197.9 / 391.9). FluidSynth hard-codes +/-2 st
+  (no bend-sensitivity setting in 2.3.4). replay.pitch_bend is CORRECT as-is
+  (raw amidi wire bytes = unsigned). (c) portamento is GONE, not future.
 - `monitor/app.py`      - Flask on :5050. Routes: `/`, `/events` (SSE),
                           `/api/state`. Background capture thread -> hub pub/sub.
                           Replay entry points (/api/replay, /api/replay/loop,
