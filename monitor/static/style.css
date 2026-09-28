@@ -773,10 +773,18 @@ select option {
   border: 1px solid transparent;
   border-radius: 2px;
 }
-.synth-card.synth-latched .synth-latch {
+/* Ver 102 latch: picker closed + greyed — the ONLY voice is the keyboard's.
+   Ver 108: both the picker and the latch chip live in the voices card now, so
+   the ancestor is #voices-card. */
+.voices-card.latched .synth-latch {
   color: var(--straw);
   border-color: var(--royal);
   background: rgba(107,63,160,0.22);
+}
+.voices-card.latched #synth-voice {
+  opacity: 0.4;
+  filter: grayscale(1);
+  cursor: not-allowed;
 }
 .synth-latch input { accent-color: var(--royal); cursor: pointer; }
 .synth-followed {
@@ -790,12 +798,80 @@ select option {
   white-space: nowrap;
 }
 /* Ver 102 latch: picker closed + greyed — the ONLY voice is the keyboard's. */
-.synth-card.synth-latched #synth-voice {
-  opacity: 0.4;
-  filter: grayscale(1);
-  cursor: not-allowed;
-}
 .synth-vol input[type="range"] { width: 120px; accent-color: var(--royal); }
+
+/* ---- voices card (Ver 108): one row per destination, so every instrument in
+   the rig is a single glance and a single place to change. ---- */
+.voices-card { margin-top: 10px; padding: 10px 12px; }
+.voices-hint {
+  font-size: 10px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--straw-soft);
+  opacity: 0.8;
+}
+.voice-rows { display: flex; flex-direction: column; gap: 4px; }
+.voice-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 5px 6px;
+  border-bottom: 1px solid rgba(242,230,166,0.08);
+}
+.voice-row:last-child { border-bottom: none; }
+.voice-where {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 340px;
+  min-width: 0;
+}
+.voice-dest {
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--straw);
+}
+.voice-note {
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--muted);
+  opacity: 0.85;
+}
+.voice-readout {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+  color: #9fe3b9;
+  background: rgba(46,140,90,0.16);
+  border: 1px solid rgba(87,176,79,0.32);
+  border-radius: 2px;
+  padding: 4px 10px;
+  white-space: nowrap;
+}
+.voice-readout-unknown {
+  color: var(--muted);
+  background: rgba(120,120,120,0.10);
+  border-color: rgba(150,150,150,0.22);
+}
+.voice-pickers {
+  display: flex;
+  align-items: center;
+  gap: 8px 14px;
+  flex-wrap: wrap;
+}
+.voice-picker { display: inline-flex; align-items: center; gap: 7px; }
+.voice-plabel {
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--straw-soft);
+}
+.voice-picker select {
+  min-width: 190px;
+  max-width: 320px;
+}
+.voice-picker-font select { min-width: 150px; max-width: 220px; }
 .synth-vol input[type="range"]:disabled { opacity: 0.45; }
 .synth-volume-val {
   font-family: ui-monospace, Menlo, monospace;
@@ -804,8 +880,15 @@ select option {
   min-width: 24px;
   text-align: right;
 }
-.synth-foot { font-family: ui-monospace, Menlo, monospace; font-size: 10px; }
+.synth-foot {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 10px;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
 .synth-port { color: var(--straw-soft); }
+.synth-voice-note { color: #9fe3b9; }
 
 /* ---- out · ctrl: control surface to/from the keyboard ---- */
 .ctrl-controls { margin-top: 4px; display: flex; flex-direction: column; gap: 8px; }

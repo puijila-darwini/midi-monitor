@@ -197,6 +197,17 @@ class State:
         # separate from the panel voice (used for keys pressed on the keyboard).
         self.receive_program = 0  # current receive MIDI program (0-127)
         self.receive_bank = 0     # current receive bank select MSB
+        # Ver 108: the BOARD's own voice, learned only from a program change
+        # arriving over capture. receive_* is a different thing — the app
+        # overwrites it when the replay/echo voice is chosen, so it could not
+        # be used to answer "what is the keyboard on right now" (the voices
+        # card's keyboard·panel row reads this instead).
+        self.panel_program = 0
+        self.panel_bank = 0
+        # Ver 108: the instrument the user picked for replay OUT ("auto" =
+        # follow the board's panel voice), so the voices card can show it
+        # without the picker's DOM being the only copy.
+        self.replay_voice = "auto"
         # Time signature (numerator/denominator beats per measure). User-set via
         # set_time_signature; drives measure (bar-line) rendering on the stave
         # and the metronome's accent grouping (accent every `numer` beats).
@@ -1873,6 +1884,9 @@ class State:
             self.bank = event.get("bank", 0)
             self.receive_program = event["program"]
             self.receive_bank = self.bank
+            # Ver 108: this is the ONLY writer of the board's own voice.
+            self.panel_program = event["program"]
+            self.panel_bank = self.bank
             self.recent.append(
                 {"type": "program_change", "program": event["program"],
                  "bank": self.bank, "channel": event.get("channel", 0), "time": event["time"]}
@@ -2250,6 +2264,13 @@ class State:
             "local_control": self.local_control,
             "echo_enabled": self.echo_enabled,
             "echo_voice": self.echo_voice,
+            # Ver 108: the voices card's single source of truth for
+            # "which instrument is where". panel_* is the BOARD's own voice
+            # (capture only); replay_voice is the user's pick for OUT ("auto"
+            # = follow the panel voice).
+            "panel_voice": {"bank": self.panel_bank,
+                            "program": self.panel_program},
+            "replay_voice": self.replay_voice,
             "seq_outs": list(self.seq_outs),
             "raw_outs": list(self.raw_outs),
             "midi_channel": self.midi_channel,

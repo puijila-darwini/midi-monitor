@@ -19,6 +19,28 @@
     "127:0":"Standard Kit","127:27":"Dance Kit","0:11":"Vibraphone","0:12":"Marimba"
   };
 
+  // Ver 108: the voices card owns the keyboard-side instrument lists. Both of
+  // its pickers are filled from PSSA50_VOICES — the one list — so the app·replay
+  // row, the keyboard·received row and the arranger slots' clone can never
+  // drift apart. "auto" leads: for replay it means "follow the board's panel
+  // voice", for the RX row "leave the board on whatever it already has".
+  function fillKeyboardVoicePicker(sel) {
+    if (!sel) return null;
+    if (sel.options.length) return sel;      // filled already
+    sel.innerHTML = "";
+    var auto = document.createElement("option");
+    auto.value = "auto";
+    auto.textContent = "auto (follow the board's panel voice)";
+    sel.appendChild(auto);
+    Object.keys(PSSA50_VOICES).forEach(function (k) {
+      var o = document.createElement("option");
+      o.value = PSSA50_VOICES[k];
+      o.textContent = PSSA50_VOICES[k];
+      sel.appendChild(o);
+    });
+    return sel;
+  }
+
   var keyEls = {};
   var held = new Set();
   // ---- Transport store: single source of truth for replay/loop state. ----
@@ -1120,6 +1142,14 @@ function buildCatchTooltip() {
       case "program_change":
         setInstrument(ev.program, ev.name);
         updateReplayVoiceDefault(ev.name);
+        // Ver 108: the voices card's keyboard·panel row is a live read-out of
+        // the board's own voice (this is the only writer of it server-side).
+        var panelRow = document.getElementById("voice-panel");
+        if (panelRow) {
+          panelRow.textContent = (ev.name && ev.name !== "Unknown")
+            ? (ev.name + "  " + (ev.bank || 0) + ":" + ev.program) : "\u2014";
+          panelRow.classList.toggle("voice-readout-unknown", !ev.name || ev.name === "Unknown");
+        }
         addFeed('<span class="time">' + fmtTime(ev.time) +
           '</span>  PGM CHANGE  ' + ev.name + " (prog " + ev.program + ", ch " + ev.channel + ")", "program_change");
         break;
@@ -1493,14 +1523,8 @@ case "replay":
       startReplay();
     });
 
-    // Pinning: a hand-picked non-auto voice stops the default from following
-    // the keyboard; choosing "auto" again resumes tracking.
-    var voiceSel = document.getElementById("replay-voice");
-    if (voiceSel) {
-      voiceSel.addEventListener("change", function () {
-        replayVoicePinned = voiceSel.value !== "auto";
-      });
-    }
+    // Ver 108: the replay voice is chosen in the voices card (it posts
+    // /api/voice), so this IIFE no longer owns a voice picker.
 
     render();
   })();
@@ -1825,6 +1849,8 @@ case "replay":
     // State comes from the same /api/sinks feed the out-box buttons use
     // (refreshApps drives synthRender every 10s + on every toggle action).
     var synthCard = document.getElementById("synth-card");
+    // Ver 108: the AboraSynth instrument row lives in the voices card now.
+    var voiceCard = document.getElementById("voices-card");
     var synthEl = synthCard ? {
       toggle: document.getElementById("synth-toggle"),
       glyph: document.getElementById("synth-toggle-glyph"),
@@ -1837,6 +1863,7 @@ case "replay":
       font: document.getElementById("synth-font"),
       volume: document.getElementById("synth-volume"),
       vval: document.getElementById("synth-volume-val"),
+      voiceNote: document.getElementById("synth-voice-note"),
       panic: document.getElementById("synth-panic"),
       port: document.getElementById("synth-port")
     } : null;
@@ -1867,6 +1894,7 @@ case "replay":
       // While latched the followed voice needs re-highlighting against the
       // new list (it may or may not exist in this font).
       if (synthLatch) showSynthFollowedVoice();
+      renderSynthVoiceNote();
     }
     (function () {
       if (!synthEl) return;
@@ -1915,6 +1943,7 @@ case "replay":
       synthEl.port.textContent = synthRunning
         ? "seq out \u2192 " + port
         : "no synth yet";
+      renderSynthVoiceNote();
       // Ver 102: if the engine comes up while latched, apply the keyboard's
       // current voice right away (the snap shouldn't wait for the next PC).
       if (synthRunning && !wasRunning && synthLatch) {
@@ -1928,12 +1957,26 @@ case "replay":
     // show the followed voice. Unlatching restores full list access.
     function synthLatchRender(on) {
       synthLatch = !!on;
-      if (!synthEl || !synthCard) return;
-      synthCard.classList.toggle("synth-latched", synthLatch);
+      if (!synthEl) return;
+      // Ver 108: the instrument picker moved into the voices card, so THAT is
+      // the card the latched class has to land on for the grey-out rules
+      // (and the latch chip's own highlight) to bite.
+      if (voiceCard) voiceCard.classList.toggle("latched", synthLatch);
       if (synthEl.latch) synthEl.latch.checked = synthLatch;
       synthEl.voice.disabled = !synthRunning || synthLatch;
       if (synthEl.followed) synthEl.followed.hidden = !synthLatch;
-      showSynthFollowedVoice();
+      // Ver 108 fix: showSynthFollowedVoice() REPOINTS the picker at the
+      // keyboard's voice (and blanks it if the font has no such preset), so
+      // calling it while UNLATCHED made the closed picker show the board's
+      // voice instead of the synth's own pick — the opposite of what unlatching
+      // is for. Only follow while actually latched; on unlatch, restore a real
+      // selection if the picker was left blank.
+      if (synthLatch) {
+        showSynthFollowedVoice();
+      } else if (synthEl.voice && synthEl.voice.selectedIndex === -1 && synthEl.voice.options.length) {
+        synthEl.voice.selectedIndex = 0;
+      }
+      renderSynthVoiceNote();
     }
 
     // Point the (closed) picker + readout at the voice the keyboard is on.
@@ -1963,6 +2006,40 @@ case "replay":
       if (!val && synthEl.voice.selectedIndex !== -1) {
         synthEl.voice.selectedIndex = -1;  // not in this font: blank
       }
+      renderSynthVoiceNote();
+    }
+
+    // Ver 108: the instrument picker moved to the voices card, so the synth
+    // card keeps a read-out of what it is playing (next to the power button).
+    // While latched the source of truth is the badge, not the closed picker.
+    function renderSynthVoiceNote() {
+      if (!synthEl || !synthEl.voiceNote) return;
+      var text = "instrument \u2014";
+      if (synthLatch) {
+        text = synthFollowedVoice
+          ? ("instrument " + synthFollowedVoice + " (latched)")
+          : "instrument \u2014 (latched to the board)";
+      } else {
+        var v = synthEl.voice.value;
+        if (v) {
+          var label = v;
+          for (var i = 0; i < synthPresets.length; i++) {
+            if (synthPresets[i].value === v) { label = synthPresets[i].name; break; }
+          }
+          text = "instrument " + label + "  " + v;
+        }
+      }
+      if (synthFontCurrent) {
+        // The picker's own option text is the font's label (basename); fall
+        // back to the path's tail if the picker isn't populated yet.
+        var fl = "";
+        if (synthEl.font && synthEl.font.selectedIndex >= 0 && synthEl.font.options[synthEl.font.selectedIndex]) {
+          fl = synthEl.font.options[synthEl.font.selectedIndex].textContent;
+        }
+        if (!fl) fl = synthFontCurrent.split("/").pop().replace(/\.(sf2|sf3)$/i, "");
+        text += "  \u00b7  font " + fl;
+      }
+      synthEl.voiceNote.textContent = text;
     }
 
     function synthFeed(msg) {
@@ -2020,6 +2097,7 @@ case "replay":
       synthPost("/api/sinks/synth/voice",
                 { program: program, bank: bank },
                 "voice " + label.toLowerCase());
+      renderSynthVoiceNote();
     }
 
     function synthVolumeChange(commit) {
@@ -2069,6 +2147,7 @@ case "replay":
             reloadOuts();
             synthFeed("voice + volume re-applied");
           }
+          renderSynthVoiceNote();
         });
     }
 
@@ -2768,7 +2847,9 @@ case "replay":
     var keysMode = "keys";
 
     function echoVoiceValue() {
-      var sel = document.getElementById("replay-voice");
+      // Ver 108: the echo/RX voice has its own row in the voices card (it used
+      // to silently borrow the replay picker, so the two could never differ).
+      var sel = document.getElementById("voice-echo");
       return sel ? sel.value : "auto";
     }
     function setKeysSeg(mode) {
@@ -3271,37 +3352,89 @@ case "replay":
     });
   })();
 
-  // Keep the replay voice default tracking the keyboard's receive voice
-  // (same source as the title-bar instrument label), but never stomp an
-  // explicit user pick: once the user hand-selects a non-auto voice the
-  // default stops following until they choose "auto" again.
-  var replayVoicePinned = false;
+  // Ver 108: a program change off the board just re-ranks the pickers (the
+  // board's panel voice floats to the top). It no longer changes the saved
+  // value — the voices card's choices live on the server, so "pin vs follow"
+  // is a server-side question now ("auto" vs a named voice) and this
+  // function's only job left is the ordering.
   function updateReplayVoiceDefault(voiceName) {
-    if (replayVoicePinned) return;
-    orderReplayVoices(voiceName);
+    orderKeyboardVoicePickers(voiceName, null, null);
   }
 
-  // Reorder the replay voice selector so the current receive voice is first,
-  // then "auto", then the remaining voices.
-  function orderReplayVoices(currentVoice) {
-    var sel = document.getElementById("replay-voice");
-    if (!sel || !currentVoice || currentVoice === "Unknown") return;
-    var opts = Array.prototype.slice.call(sel.options);
-    var current = null;
-    var auto = null;
-    for (var i = 0; i < opts.length; i++) {
-      if (opts[i].value === currentVoice) current = opts[i];
-      if (opts[i].value === "auto") auto = opts[i];
-    }
-    if (!current || !auto) return;
-    // Rebuild in correct order: current voice, then auto, then rest
-    var remaining = opts.filter(function (opt) { return opt !== current && opt !== auto; });
-    sel.innerHTML = "";
-    sel.appendChild(current);
-    sel.appendChild(auto);
-    remaining.forEach(function (opt) { sel.appendChild(opt); });
-    sel.value = currentVoice;
+  // Reorder the keyboard-side voice pickers so the board's PANEL voice is
+  // first, then "auto", then the remaining voices, and point each at its own
+  // saved value. Ver 108: this used to be the replay picker alone and it also
+  // FORCED its value to the board's voice, which is why the choice could
+  // never stick; now the order is a convenience and the value comes from the
+  // server (echo_voice / replay_voice). The panel voice is the board's own
+  // (capture only) — receive_voice is written by these very choices.
+  function orderKeyboardVoicePickers(panelVoiceName, echoVoice, replayVoice) {
+    [[document.getElementById("voice-echo"), echoVoice],
+     [document.getElementById("replay-voice"), replayVoice]].forEach(function (pair) {
+      var sel = pair[0];
+      if (!sel) return;
+      if (panelVoiceName && panelVoiceName !== "Unknown" && !sel._ordered) {
+        // Emptying a <select> drops its selection, and a browser auto-selects
+        // whatever is appended first — so the ranking would silently become a
+        // choice. Remember it and put it back.
+        var keep = sel.value;
+        var opts = Array.prototype.slice.call(sel.options);
+        var current = null, auto = null;
+        for (var i = 0; i < opts.length; i++) {
+          if (opts[i].value === panelVoiceName) current = opts[i];
+          if (opts[i].value === "auto") auto = opts[i];
+        }
+        if (current && auto) {
+          var remaining = opts.filter(function (o) { return o !== current && o !== auto; });
+          sel.innerHTML = "";
+          sel.appendChild(current);
+          sel.appendChild(auto);
+          remaining.forEach(function (o) { sel.appendChild(o); });
+          if (keep) sel.value = keep;
+        }
+        sel._ordered = true;   // order once; later panel changes don't reshuffle
+      }
+      var want = pair[1];
+      if (want && document.activeElement !== sel) {
+        for (var j = 0; j < sel.options.length; j++) {
+          if (sel.options[j].value === want) { sel.value = want; break; }
+        }
+      }
+    });
   }
+
+  // Ver 108: the voices card — one row per destination. The keyboard rows post
+  // /api/voice; the AboraSynth row is the synth card's own picker + font,
+  // moved here (same ids, so its wiring is unchanged) because the instrument
+  // list IS the font's presets.
+  (function () {
+    var echoSel = fillKeyboardVoicePicker(document.getElementById("voice-echo"));
+    var replaySel = fillKeyboardVoicePicker(document.getElementById("replay-voice"));
+
+    function postVoice(target, value) {
+      fetch("/api/voice", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target: target, voice: value })
+      }).then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (!res || !res.ok) {
+            addFeed("VOICE  " + (res && res.error ? res.error : "failed"), "ctrl_out");
+            return;
+          }
+          addFeed("VOICE  " + target + " \u2192 " + res.voice +
+                  (res.device === false ? " (board offline, remembered)" : ""),
+                  "ctrl_out");
+        })
+        .catch(function () { /* transient */ });
+    }
+    if (echoSel) {
+      echoSel.addEventListener("change", function () { postVoice("echo", echoSel.value); });
+    }
+    if (replaySel) {
+      replaySel.addEventListener("change", function () { postVoice("replay", replaySel.value); });
+    }
+  })();
 
   // initial state — also re-runnable as an in-place resync (e.g. after a
   // pattern load), so loading a pattern never needs a full page reload.
@@ -3310,7 +3443,22 @@ case "replay":
     .then(function (r) { return r.json(); })
     .then(function (s) {
       setStatus(s.online, s.device);
-      orderReplayVoices(s.receive_voice);
+      // Ver 108: the voices card is the single place instruments are chosen, so
+      // it is synced from the server's own record of them: the board's panel
+      // voice (capture only) for the read-out + the pickers' ranking, and each
+      // row's saved choice. receive_voice is NOT used here — the app writes it
+      // whenever a voice is applied, so it would echo the app's own last pick.
+      var panelName = (s.panel_voice)
+        ? (PSSA50_VOICES[(s.panel_voice.bank || 0) + ":" + s.panel_voice.program] || "Unknown")
+        : null;
+      orderKeyboardVoicePickers(panelName, s.echo_voice, s.replay_voice);
+      var panelEl = document.getElementById("voice-panel");
+      if (panelEl) {
+        panelEl.textContent = (s.panel_voice && panelName !== "Unknown")
+          ? (panelName + "  " + s.panel_voice.bank + ":" + s.panel_voice.program)
+          : "\u2014 no voice reported yet";
+        panelEl.classList.toggle("voice-readout-unknown", !panelName || panelName === "Unknown");
+      }
       if (typeof s.program !== "undefined") {
         var pname = PSSA50_VOICES[(s.bank || 0) + ":" + s.program] || "Unknown";
         setInstrument(s.program, pname);

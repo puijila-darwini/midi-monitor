@@ -473,54 +473,6 @@
                 <span id="replay-loop-glyph">&#9851;</span><span id="replay-loop-label">loop</span>
               </button>
             </div>
-            <label class="replay-voice-label">
-              <span>voice</span>
-              <select id="replay-voice" title="Voice to use for playback (sends program change before replay; 'auto' uses current receive voice)">
-                <option value="auto">auto (current receive voice)</option>
-                <option value="Grand Piano">Grand Piano</option>
-                <option value="Electric Piano 1">Electric Piano 1</option>
-                <option value="Electric Piano 2">Electric Piano 2</option>
-                <option value="Electric Grand Piano">Electric Grand Piano</option>
-                <option value="Drawbar Organ">Drawbar Organ</option>
-                <option value="Rock Organ">Rock Organ</option>
-                <option value="Accordion">Accordion</option>
-                <option value="Harmonica">Harmonica</option>
-                <option value="Nylon Guitar">Nylon Guitar</option>
-                <option value="Steel Guitar">Steel Guitar</option>
-                <option value="Jazz Guitar">Jazz Guitar</option>
-                <option value="Clean Guitar">Clean Guitar</option>
-                <option value="Overdriven Guitar">Overdriven Guitar</option>
-                <option value="Acoustic Bass">Acoustic Bass</option>
-                <option value="Finger Bass">Finger Bass</option>
-                <option value="Slap Bass">Slap Bass</option>
-                <option value="Synth Bass">Synth Bass</option>
-                <option value="Strings">Strings</option>
-                <option value="Pizzicato Strings">Pizzicato Strings</option>
-                <option value="Violin">Violin</option>
-                <option value="Cello">Cello</option>
-                <option value="Orchestral Harp">Orchestral Harp</option>
-                <option value="Oboe">Oboe</option>
-                <option value="Clarinet">Clarinet</option>
-                <option value="Flute">Flute</option>
-                <option value="Tenor Sax">Tenor Sax</option>
-                <option value="Brass Section">Brass Section</option>
-                <option value="Trumpet">Trumpet</option>
-                <option value="Trombone">Trombone</option>
-                <option value="French Horn">French Horn</option>
-                <option value="Synth Brass">Synth Brass</option>
-                <option value="Gemini">Gemini</option>
-                <option value="Punchy Chordz">Punchy Chordz</option>
-                <option value="Square Lead">Square Lead</option>
-                <option value="Sawtooth Lead">Sawtooth Lead</option>
-                <option value="New Age Pad">New Age Pad</option>
-                <option value="Warm Pad">Warm Pad</option>
-                <option value="Brightness">Brightness</option>
-                <option value="Standard Kit">Standard Kit</option>
-                <option value="Dance Kit">Dance Kit</option>
-                <option value="Vibraphone">Vibraphone</option>
-                <option value="Marimba">Marimba</option>
-              </select>
-            </label>
             <div class="out-routing" id="out-routing">
               <div class="routing-title">route to</div>
               <div id="launchable-apps" class="launchable-apps"><span class="routing-pending">loading apps&hellip;</span></div>
@@ -661,6 +613,74 @@
           </div>
         </section>
       </div>
+      <!-- Ver 108: the one place instruments are chosen. One row per
+           destination, so "which instrument goes where" is a single glance
+           instead of three pickers in three cards. The other cards read from
+           here: replay/OUT and the arranger slots use the app row, echo/layer
+           uses the keyboard-received row, AboraSynth uses its own font's
+           presets. -->
+      <section id="voices-card" class="card voices-card">
+        <div class="cartouche">
+          <span class="cartouche-title">voices</span>
+          <div class="cartouche-end">
+            <span class="voices-hint">one place &mdash; every destination's instrument</span>
+            <span class="corner" aria-hidden="true"><svg class="corner-ic"><use href="#ic-sliders"/></svg></span>
+          </div>
+        </div>
+        <div class="voice-rows">
+          <div class="voice-row">
+            <span class="voice-where">
+              <span class="voice-dest">keyboard &middot; panel</span>
+              <span class="voice-note">what the keys sound as you play them. Changed on the board itself, read back over MIDI</span>
+            </span>
+            <span id="voice-panel" class="voice-readout">&mdash;</span>
+          </div>
+          <div class="voice-row">
+            <span class="voice-where">
+              <span class="voice-dest">keyboard &middot; received</span>
+              <span class="voice-note">the board's RX voice &mdash; what echo and layer play. Only RECEIVED notes obey program change, so this one needs echo/layer routing to hear it</span>
+            </span>
+            <label class="voice-picker">
+              <select id="voice-echo"
+                      title="The keyboard's RECEIVED voice &mdash; the instrument echo and layer play on the board (and, mirrored, on any routed sink). 'auto' leaves the board on whatever voice it already has."></select>
+            </label>
+          </div>
+          <div class="voice-row">
+            <span class="voice-where">
+              <span class="voice-dest">app &middot; replay OUT</span>
+              <span class="voice-note">the instrument the app plays a take / pattern / arrangement back on. Also the arranger slots' default (a slot can override it)</span>
+            </span>
+            <label class="voice-picker">
+              <select id="replay-voice"
+                      title="Instrument the app plays the transformed take on. 'auto' follows the keyboard's panel voice. Sent as a program change before playback, and mirrored to a latched AboraSynth."></select>
+            </label>
+          </div>
+          <div class="voice-row voice-row-synth">
+            <span class="voice-where">
+              <span class="voice-dest">AboraSynth</span>
+              <span class="voice-note">the local synth. Its instrument list is the ACTIVE SOUNDFONT's own presets, so the font picks the list</span>
+            </span>
+            <span class="voice-pickers">
+              <label class="voice-picker voice-picker-font">
+                <span class="voice-plabel">font</span>
+                <select id="synth-font" disabled
+                        title="SoundFont the AboraSynth engine plays &mdash; every .sf2/.sf3 in the midi/soundfonts folder (the app scans the folder, no paths are hardcoded). Changing it while the engine is up restarts the synth under the new font &mdash; a moment of silence &mdash; then re-applies the instrument + volume; pick before launch to choose the startup font"></select>
+              </label>
+              <label class="voice-picker">
+                <span class="voice-plabel">instrument</span>
+                <select id="synth-voice" disabled
+                        title="Instrument the synth plays &mdash; every bank/program the CURRENT soundfont defines (parsed straight out of the .sf2/.sf3, so the list changes with the font). Sends a program change straight to AboraSynth"></select>
+              </label>
+              <label class="synth-latch"
+                     title="Latch the synth instrument to the keyboard's panel voice: the picker closes and greys out, and AboraSynth copies whatever voice the board is put on, live. Unlatch for the full instrument list.">
+                <input type="checkbox" id="synth-latch"><span>latch</span>
+              </label>
+              <span id="synth-followed" class="synth-followed" hidden></span>
+            </span>
+          </div>
+        </div>
+      </section>
+
 
       <section id="roll-wrap" class="roll-wrap card">
         <div class="cartouche roll-head">
@@ -840,21 +860,6 @@
                       title="All Sound Off + All Notes Off on the synth (kills stuck notes)">panic</button>
             </div>
             <div class="synth-fields">
-              <div class="synth-field">
-                <span class="synth-label">voice</span>
-                <select id="synth-voice" disabled
-                        title="Instrument the synth plays — every bank/program the CURRENT soundfont defines (parsed straight from the .sf2/.sf3, so it changes with the font). Sends a program change straight to AboraSynth; the out-card voice picker is for replay, this one is the synth's own"></select>
-                <label class="synth-latch"
-                       title="Latch the synth voice to the keyboard's: the picker closes and greys out, and AboraSynth copies whatever voice is sent to the board, live. Unlatch for the full instrument list.">
-                  <input type="checkbox" id="synth-latch"><span>latch</span>
-                </label>
-                <span id="synth-followed" class="synth-followed" hidden></span>
-              </div>
-              <div class="synth-field">
-                <span class="synth-label">font</span>
-                <select id="synth-font" disabled
-                        title="SoundFont the AboraSynth engine plays — every .sf2/.sf3 in the midi/soundfonts folder (the app scans the folder, no paths are hardcoded). Changing it while the engine is up restarts the synth under the new font — a moment of silence — then re-applies the voice + volume; pick before launch to choose the startup font"></select>
-              </div>
               <label class="synth-field synth-vol">
                 <span class="synth-label">volume</span>
                 <input id="synth-volume" type="range" min="0" max="127" step="1" value="100" disabled
@@ -863,6 +868,10 @@
               </label>
             </div>
             <div class="synth-foot">
+              <!-- Ver 108: the picker moved to the voices card; this read-out
+                   keeps "what is it playing" next to the power button. -->
+              <span id="synth-voice-note" class="synth-voice-note"
+                    title="What AboraSynth is currently set to play \u2014 chosen in the voices card">instrument \u2014</span>
               <span id="synth-port" class="synth-port">no synth yet</span>
             </div>
           </div>

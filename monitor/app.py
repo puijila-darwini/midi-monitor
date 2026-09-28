@@ -503,8 +503,11 @@ def _run_capture(cap):
                          "time": t})
             # Ver 102 latch: the AboraSynth copies the keyboard's voice,
             # unconditionally (independent of echo mode / "auto" follow).
+            # Ver 108: from the BOARD's own voice (capture only) — receive_*
+            # is also written by the replay/echo voice choices, so it could
+            # report a voice the board is not on.
             if state.synth_voice_latch:
-                _synth_follow_voice(state.receive_bank, state.receive_program)
+                _synth_follow_voice(state.panel_bank, state.panel_program)
             # Echo follow: with the echo voice on "auto" the echo stream is
             # meant to mirror the panel, but the RX voice is independent of the
             # panel voice - a panel voice change leaves the echoed sound stuck
@@ -1129,6 +1132,55 @@ def api_echo():
     return jsonify(resp)
 
 
+@app.route("/api/voice", methods=["POST"])
+def api_voice():
+    """Ver 108: set the instrument for one destination, from the voices card.
+
+    The card is the one place instruments are chosen, so this is the one
+    endpoint behind it. `target`:
+      "replay" - the voice replay/OUT plays on (and the arranger slots'
+                 default). "auto" = follow the board's panel voice. Recorded
+                 in state so it survives a reload and applies to a replay
+                 posted without a voice.
+      "echo"   - the board's RECEIVED voice, i.e. what echo/layer plays. Takes
+                 effect on the board immediately when echo is live (same pipe
+                 /api/echo uses: raw leg + every routed seq sink + the latch).
+    Returns {ok, target, voice, device}; `device` false = the board is offline
+    (the choice is still recorded)."""
+    body = request.get_json(silent=True) or {}
+    target = str(body.get("target", "")).strip().lower()
+    voice = str(body.get("voice", "auto")).strip()
+    if target not in ("replay", "echo"):
+        return jsonify({"ok": False, "error": "target must be replay|echo"}), 400
+    if target == "replay":
+        if voice != "auto" and _voice_to_bank_pc(voice) is None:
+            return jsonify({"ok": False, "error": "unknown voice"}), 400
+        state.replay_voice = voice
+        return jsonify({"ok": True, "target": target, "voice": voice,
+                        "device": True})
+    # echo / board RX voice
+    state.echo_voice = voice
+    bank_pc = None if voice == "auto" else _voice_to_bank_pc(voice)
+    if bank_pc is None and voice != "auto":
+        return jsonify({"ok": False, "error": "unknown voice"}), 400
+    device = True
+    if bank_pc is not None:
+        bank, pc = bank_pc
+        state.receive_program = pc
+        state.receive_bank = bank
+        if state.echo_enabled:
+            # Live: push it to the board now so the change is audible at once.
+            device = program_change(bank, pc)
+            for t in list(state.seq_outs):
+                _seq_send(lambda sq, t=t: sq.send_program_change(
+                    t, bank, pc, channel=0))
+            _synth_follow_voice(bank, pc)
+    resp = {"ok": True, "target": target, "voice": voice, "device": bool(device)}
+    if not device:
+        resp["warning"] = "keyboard offline - voice recorded, not sent"
+    return jsonify(resp)
+
+
 @app.route("/api/record", methods=["POST"])
 def api_record():
     """Start or stop a recording take. Stopping flushes the trailing pending
@@ -1548,7 +1600,10 @@ def _play_events(events, body, loop, extra=None):
         return jsonify({"ok": False, "error": "speed must be > 0"}), 400
     # Optional voice selection: send a program change before playback so the
     # keyboard uses the chosen voice instead of whatever it was last on.
-    voice = _voice_to_bank_pc(body.get("voice", "auto"))
+    # Ver 108: when the caller doesn't name one, the voices card's replay OUT
+    # choice applies — the picker's value used to live only in the DOM.
+    wanted = body.get("voice", state.replay_voice)
+    voice = _voice_to_bank_pc(wanted)
     # If a specific voice is selected, update the receive voice state.
     if voice is not None:
         state.receive_program = voice[1]
@@ -1562,7 +1617,7 @@ def _play_events(events, body, loop, extra=None):
                   tuning=tuning_fn)
     count = sum(1 for e in events if e.get("type") == "note_on")
     resp = {"ok": True, "notes": count, "speed": speed,
-            "voice": body.get("voice", "auto"), "loop": loop}
+            "voice": wanted, "loop": loop}
     if extra:
         resp.update(extra)
     return jsonify(resp)

@@ -2051,3 +2051,85 @@ Ver 105 (out·ctrl → synth mirror — "as many of the out·ctrl controls to
   app's own HTTP path since the fix (the /api/ctrl/mirror toggle answered
   enabled:false after a restart, so that run recorded silence — the mirror
   flag is in-memory and resets on restart, which is a UX wart of its own).
+
+Ver 108: THE VOICES CARD — every instrument in one place
+  Instruments were chosen in three pickers across three cards, drawn from
+  two different universes (the board's 42 GM voices vs whatever presets the
+  loaded soundfont defines), and the echo voice had no control of its own at
+  all — it silently read the out card's replay picker, so the two could
+  never differ. Worse, "what voice is the keyboard actually on" was
+  unanswerable: state.receive_program/receive_bank is written by FOUR
+  different things (capture program changes, the echo "auto" follow, the
+  echo voice choice, the replay voice choice, and mid-stream arrangement
+  program changes), so it could report a voice the board is not on.
+
+  New full-width "voices" card (after the out·ctrl row, before the piano
+  roll), one row per DESTINATION, so the whole rig's instrument map is one
+  glance:
+    keyboard · panel    read-only live read-out of the BOARD's own voice
+    keyboard · received the board's RX voice (what echo/layer play) — its
+                        own picker now, posting the new POST /api/voice
+                        {target:"echo"}; applies to the board immediately
+                        when echo is live (same pipe /api/echo uses: raw
+                        leg + every routed seq sink + the latch)
+    app · replay OUT    the instrument a take/pattern/arrangement plays on,
+                        posting {target:"replay"}
+    AboraSynth          the font picker + the instrument picker + the latch,
+                        MOVED here from the synth card (same element ids, so
+                        the existing wiring is untouched) because the
+                        instrument list IS the font's presets
+  The keyboard-side lists are no longer hardcoded in the HTML: both pickers
+  are filled from the one PSSA50_VOICES map in app.js (the arranger's
+  per-slot clone still mirrors #replay-voice, as before, and per the
+  decision slot voices stay a per-slot override in the arranger).
+
+  Server-side truth, so a choice survives a reload and stops depending on
+  a DOM node: state.panel_bank/panel_program (written ONLY by state.handle
+  on a capture program change) and state.replay_voice. Both ride /api/state
+  as panel_voice + replay_voice. _play_events now defaults to
+  state.replay_voice, so a pattern/arrangement play uses the card's
+  instrument even though nothing sent a voice in the request.
+  The voice latch follows the board's REAL voice (panel_*) instead of
+  receive_*.
+
+  Fixed along the way:
+  - the replay picker could never keep a choice: orderReplayVoices() ranked
+    the board's voice first AND set the picker's value to it, overwriting
+    the user's pick on every refresh ("auto" was the only way out, and the
+    separate pin flag was a DOM-local shadow of the same fight). Replaced by
+    orderKeyboardVoicePickers(panelName, echoVoice, replayVoice): ranking
+    is a convenience, the value comes from the server, and the rank step is
+    selection-neutral (remember the selection across the innerHTML rebuild —
+    emptying a <select> drops the selection and the browser auto-selects
+    whatever is appended first, which would have made the ranking a silent
+    choice).
+  - UNLATCHING the synth left its instrument picker showing the KEYBOARD's
+    voice (or blank if the font has no such preset): synthLatchRender()
+    called showSynthFollowedVoice() unconditionally, so a refreshState with
+    the latch off repointed the free picker at the board. Now it only
+    follows while latched, and restores a real selection on unlatch. Found
+    by the Ver 106 synth harness once its fake <select> was made faithful
+    (value/options/selectedIndex linked, as in a browser).
+  - the voices card's synth row greys out via .voices-card.latched (the
+    picker is no longer inside .synth-card, so the old ancestor selector
+    could not match).
+  The synth card keeps power/beacon/port/panic/volume and gains a read-out
+  of what it is actually playing, so moving the picker there cost no
+  information.
+
+  NOT done: no cross-restart persistence for any of this (replay_voice,
+  echo_voice, the ctrl mirror flag) — state is in-memory like the rest of
+  the app's control state, so they reset to auto/off on a restart.
+
+  Harnesses: tmp/fstest/voices_picker_test.js (15 checks, drives the REAL
+  fill + ranking functions out of app.js against a faithful fake <select>),
+  tmp/fstest/voices_server_test.py (4 checks: a body with no voice uses the
+  stored choice, an explicit voice still wins, auto sends no program
+  change), tmp/fstest/id_crosscheck.py (NEW — every getElementById target in
+  app.js/roll.js/stave.js exists in the template, no duplicate ids; the
+  trap that a moved control falls into silently), plus the Ver 106
+  harnesses re-run green (seqheal ALL OK, midi-synth 70/70 with the latch
+  assertions retargeted to the voices card). HTML balance-checked with
+  html.parser. No browser was attached this session, so the card was not
+  eyeballed in a live page — the DOM contract is covered by the id
+  crosscheck and the JS by the harnesses above.
